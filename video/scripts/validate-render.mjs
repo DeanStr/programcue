@@ -6,6 +6,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { validateDescriptions } from "./validate-descriptions.mjs";
+
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDirectory, "../..");
 const artifactsDirectory = path.join(repoRoot, ".artifacts");
@@ -14,21 +16,18 @@ const defaultOutput = path.join(
   ".artifacts",
   "program-cue-launch.mp4",
 );
-const defaultScorePath = path.join(
+const releaseManifestPath = path.join(
   repoRoot,
-  "video",
+  "site",
   "public",
-  "video",
-  "program-cue-score.wav",
+  "product-film-release.json",
 );
 const outputPath = path.resolve(
   repoRoot,
   process.argv[2] ?? path.relative(repoRoot, defaultOutput),
 );
-const scorePath = path.resolve(
-  repoRoot,
-  process.argv[3] ?? path.relative(repoRoot, defaultScorePath),
-);
+let audioReferencePath;
+let expectedAudioStreamSha256;
 const outputParts = path.parse(outputPath);
 const descriptionSidecarPath = path.join(
   outputParts.dir,
@@ -74,8 +73,6 @@ const target = {
   minimumAudioSyncCorrelation: 0.99,
   minimumFullFileSiSdr: 30,
   maximumFrameIntervalErrorSeconds: 0.000002,
-  maximumDescriptionCharactersPerSecond: 17,
-  descriptionTimingToleranceSeconds: 0.001,
 };
 
 const checks = [];
@@ -120,64 +117,63 @@ const formatNumber = (value, digits = 3) =>
 
 const sha256 = (buffer) => createHash("sha256").update(buffer).digest("hex");
 
-const parseDescriptionTimestamp = (value) => {
-  const match = value.match(/^(\d{2}):(\d{2}):(\d{2})\.(\d{3})$/);
-  if (!match) return null;
-  const [, hours, minutes, seconds, milliseconds] = match;
-  if (Number(minutes) > 59 || Number(seconds) > 59) return null;
-  return (
-    Number(hours) * 3_600 +
-    Number(minutes) * 60 +
-    Number(seconds) +
-    Number(milliseconds) / 1_000
+const resolveAudioReferencePath = () => {
+  let release;
+  try {
+    release = JSON.parse(fs.readFileSync(releaseManifestPath, "utf8"));
+  } catch (error) {
+    throw new Error(
+      `Could not read the product-film release manifest: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  if (
+    release?.audioSource !== "eleven_music_v2" ||
+    typeof release.videoUrl !== "string" ||
+    typeof release.audioStreamSha256 !== "string" ||
+    !/^[a-f0-9]{64}$/u.test(release.audioStreamSha256)
+  ) {
+    throw new Error(
+      "The product-film release manifest does not select an Eleven audio reference.",
+    );
+  }
+  expectedAudioStreamSha256 = release.audioStreamSha256;
+  if (process.argv[3]) return path.resolve(repoRoot, process.argv[3]);
+  return path.join(
+    artifactsDirectory,
+    "video-releases",
+    path.basename(new URL(release.videoUrl).pathname),
   );
 };
 
-const parseDescriptionTrack = (buffer) => {
-  const source = buffer
-    .toString("utf8")
-    .replace(/^\uFEFF/, "")
-    .replace(/\r\n?/g, "\n")
-    .trimEnd();
-  if (!source.startsWith("WEBVTT\n")) {
-    throw new Error("file must begin with a WEBVTT header");
+const validatePinnedAudioStream = () => {
+  const result = command(ffmpegBinary, [
+    "-v",
+    "error",
+    "-nostdin",
+    "-i",
+    outputPath,
+    "-map",
+    "0:a:0",
+    "-c:a",
+    "copy",
+    "-f",
+    "hash",
+    "-hash",
+    "sha256",
+    "-",
+  ]);
+  if (result.error || result.status !== 0) {
+    throw new Error(
+      `Encoded audio hash failed: ${result.error?.message ?? result.stderr?.trim() ?? `exit ${result.status}`}`,
+    );
   }
-  const cues = [];
-  for (const [blockIndex, block] of source
-    .split(/\n{2,}/)
-    .slice(1)
-    .entries()) {
-    const lines = block.split("\n").filter((line) => line.trim().length > 0);
-    if (lines.length === 0 || lines[0].startsWith("NOTE")) continue;
-    const timingIndex = lines.findIndex((line) => line.includes("-->"));
-    const timing =
-      timingIndex >= 0 && timingIndex <= 1
-        ? lines[timingIndex].match(
-            /^(\d{2}:\d{2}:\d{2}\.\d{3}) --> (\d{2}:\d{2}:\d{2}\.\d{3})$/,
-          )
-        : null;
-    const start = timing ? parseDescriptionTimestamp(timing[1]) : null;
-    const end = timing ? parseDescriptionTimestamp(timing[2]) : null;
-    const text =
-      timingIndex >= 0
-        ? lines
-            .slice(timingIndex + 1)
-            .join(" ")
-            .replace(/<[^>]*>/g, "")
-            .replace(/\s+/g, " ")
-            .trim()
-        : "";
-    if (start === null || end === null || end <= start || text.length === 0) {
-      throw new Error(`cue ${blockIndex + 1} is malformed or empty`);
-    }
-    cues.push({
-      start,
-      end,
-      charactersPerSecond: [...text].length / (end - start),
-    });
+  const digest = result.stdout.trim().match(/^SHA256=([a-f0-9]{64})$/u)?.[1];
+  if (digest !== expectedAudioStreamSha256) {
+    throw new Error(
+      `Encoded AAC stream does not match the pinned release: expected ${expectedAudioStreamSha256}, received ${digest ?? "invalid hash output"}.`,
+    );
   }
-  if (cues.length === 0) throw new Error("file contains no cues");
-  return cues;
+  record("encoded AAC stream matches pinned release", true, digest);
 };
 
 const validateDescriptionSidecar = () => {
@@ -217,51 +213,23 @@ const validateDescriptionSidecar = () => {
     );
   }
 
-  let cues;
   try {
-    cues = parseDescriptionTrack(sidecar);
-    record("valid WEBVTT description syntax", true, `${cues.length} cues`);
+    const descriptions = validateDescriptions(
+      descriptionSidecarPath,
+      target.durationSeconds,
+    );
+    record(
+      "valid picture-locked WEBVTT descriptions",
+      true,
+      `${descriptions.cueCount} contiguous cues, 0–${target.durationSeconds}s, maximum ${formatNumber(descriptions.maximumCps, 1)} characters/s`,
+    );
   } catch (error) {
     record(
-      "valid WEBVTT description syntax",
+      "valid picture-locked WEBVTT descriptions",
       false,
       error instanceof Error ? error.message : String(error),
     );
-    return;
   }
-  const tolerance = target.descriptionTimingToleranceSeconds;
-  const timingIssues = [];
-  if (Math.abs(cues[0].start) > tolerance) {
-    timingIssues.push(`first cue starts at ${cues[0].start}s`);
-  }
-  for (let index = 1; index < cues.length; index += 1) {
-    const gap = cues[index].start - cues[index - 1].end;
-    if (Math.abs(gap) > tolerance) {
-      timingIssues.push(
-        `cues ${index}–${index + 1} have ${gap.toFixed(3)}s gap/overlap`,
-      );
-    }
-  }
-  const finalEnd = cues.at(-1).end;
-  if (Math.abs(finalEnd - target.durationSeconds) > tolerance) {
-    timingIssues.push(`final cue ends at ${finalEnd}s`);
-  }
-  record(
-    "description timing covers full master",
-    timingIssues.length === 0,
-    timingIssues.length === 0
-      ? `contiguous 0–${target.durationSeconds}s`
-      : timingIssues.slice(0, 4).join("; "),
-  );
-  const fastest = cues.reduce(
-    (maximum, cue) => Math.max(maximum, cue.charactersPerSecond),
-    0,
-  );
-  record(
-    "description reading speed",
-    fastest <= target.maximumDescriptionCharactersPerSecond,
-    `maximum ${formatNumber(fastest, 1)} characters/s (limit ${target.maximumDescriptionCharactersPerSecond})`,
-  );
 };
 
 const readProbe = () => {
@@ -541,15 +509,15 @@ const decodeSyncWindow = (inputPath) =>
   ]);
 
 const validateAudioSync = () => {
-  if (!fs.existsSync(scorePath)) {
+  if (!fs.existsSync(audioReferencePath)) {
     record(
       "audio sync reference",
       false,
-      `${path.relative(repoRoot, scorePath)} does not exist`,
+      `${path.relative(repoRoot, audioReferencePath)} does not exist`,
     );
     return;
   }
-  const referenceResult = decodeSyncWindow(scorePath);
+  const referenceResult = decodeSyncWindow(audioReferencePath);
   const candidateResult = decodeSyncWindow(outputPath);
   if (
     referenceResult.error ||
@@ -586,7 +554,7 @@ const validateAudioSync = () => {
   record(
     "encoded audio matches reference window",
     correlation >= target.minimumAudioSyncCorrelation,
-    `peak correlation ${formatNumber(correlation, 6)} (minimum ${target.minimumAudioSyncCorrelation}; reference ${path.relative(repoRoot, scorePath)})`,
+    `peak correlation ${formatNumber(correlation, 6)} (minimum ${target.minimumAudioSyncCorrelation}; reference ${path.relative(repoRoot, audioReferencePath)})`,
   );
   record(
     "sample-aligned picture-lock audio",
@@ -703,11 +671,11 @@ const calculateChannelSiSdr = (referencePath, candidatePath) => {
 };
 
 const validateFullAudioSimilarity = () => {
-  if (!fs.existsSync(scorePath)) {
+  if (!fs.existsSync(audioReferencePath)) {
     record(
       "full-file decoded audio SI-SDR",
       false,
-      `${path.relative(repoRoot, scorePath)} does not exist`,
+      `${path.relative(repoRoot, audioReferencePath)} does not exist`,
     );
     return;
   }
@@ -718,7 +686,7 @@ const validateFullAudioSimilarity = () => {
   try {
     const referenceRaw = path.join(temporaryDirectory, "reference.s16le");
     const candidateRaw = path.join(temporaryDirectory, "candidate.s16le");
-    const referenceDecode = decodeFullAudio(scorePath, referenceRaw);
+    const referenceDecode = decodeFullAudio(audioReferencePath, referenceRaw);
     const candidateDecode = decodeFullAudio(outputPath, candidateRaw);
     if (
       referenceDecode.error ||
@@ -762,7 +730,7 @@ const validateFullAudioSimilarity = () => {
         )
         .join(
           ", ",
-        )} (minimum ${target.minimumFullFileSiSdr}dB; reference ${path.relative(repoRoot, scorePath)})`,
+        )} (minimum ${target.minimumFullFileSiSdr}dB; reference ${path.relative(repoRoot, audioReferencePath)})`,
     );
   } catch (error) {
     record(
@@ -1161,10 +1129,12 @@ const printSummary = () => {
 };
 
 const main = () => {
+  audioReferencePath = resolveAudioReferencePath();
   const probe = readProbe();
   validateStreams(probe);
   const basicMediaPassed = probe && checks.every((check) => check.passed);
   if (basicMediaPassed) {
+    validatePinnedAudioStream();
     validateDecodedMedia();
     validateAudioSync();
     validateFullAudioSimilarity();

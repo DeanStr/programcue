@@ -217,12 +217,12 @@ function PublishSurfaceLayer({
 function PublishMap({ progress }: { progress: number }) {
   const surfacePosition = interpolate(progress, [0, 1], [0, 6]);
   const surfaces = [
-    "Programme",
+    "Published program",
     "Timetable",
     "Day by day",
-    "Speakers",
+    "Speaker gallery",
     "Itinerary",
-    "Embeds",
+    "Embed",
     "Event site",
   ];
   return (
@@ -249,14 +249,14 @@ function PublishMap({ progress }: { progress: number }) {
           <div
             style={{ fontSize: 21, fontWeight: 850, letterSpacing: "-0.04em" }}
           >
-            Published programme data
+            One published source
           </div>
           <div style={{ color: muted, fontSize: 11, marginTop: 4 }}>
-            Seven public views draw on the published programme; the event site
-            adds separately published content.
+            A selected sequence spanning published program, itinerary, embed and
+            event-site surfaces.
           </div>
         </div>
-        <Chip tone="good">7 PUBLIC VIEWS</Chip>
+        <Chip tone="good">7 EXAMPLES</Chip>
       </div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 9 }}>
         {surfaces.map((surface, index) => (
@@ -363,7 +363,7 @@ function PublishMap({ progress }: { progress: number }) {
             letterSpacing: "0.12em",
           }}
         >
-          PUBLISHED PROGRAMME DATA
+          PUBLISHED PROGRAM DATA
         </div>
         <div
           style={{
@@ -376,7 +376,7 @@ function PublishMap({ progress }: { progress: number }) {
             letterSpacing: "0.1em",
           }}
         >
-          PUBLIC VIEWS FROM PUBLISHED DATA ↗
+          SELECTED SURFACE EXAMPLES ↗
         </div>
       </div>
     </div>
@@ -402,9 +402,9 @@ function PublishHero({ progress }: { progress: number }) {
             marginTop: 20,
           }}
         >
-          One programme.
+          One program.
           <br />
-          <span style={{ color: copper }}>Every public view.</span>
+          <span style={{ color: copper }}>Everywhere it matters.</span>
         </div>
         <div
           style={{
@@ -415,13 +415,13 @@ function PublishHero({ progress }: { progress: number }) {
             marginTop: 25,
           }}
         >
-          Programme, timetable, speakers, itineraries and embeds share one
-          connected published source.
+          Give attendees, speakers and organisers one current program across the
+          surfaces they use.
         </div>
         <div style={{ display: "flex", gap: 28, marginTop: 34 }}>
-          <Metric value="07" label="surfaces shown" tone="copper" />
+          <Metric value="07" label="connected examples" tone="copper" />
           <Metric value="01" label="published revision" />
-          <Metric value="VERSIONED" label="public views" tone="sage" />
+          <Metric value="SELECTED" label="surface set" tone="sage" />
         </div>
       </div>
       <div
@@ -438,8 +438,8 @@ function PublishHero({ progress }: { progress: number }) {
         >
           <AssetWindow
             src={ASSETS.programmeAdmin}
-            label="PROGRAMME ADMIN"
-            caption="programme data"
+            label="PROGRAM ADMIN"
+            caption="program data"
             width={710}
             height={520}
             objectPosition={`center ${interpolate(progress, [0, 1], [0, 9])}%`}
@@ -468,7 +468,7 @@ function ProgrammeSurface({ progress }: { progress: number }) {
       style={{ width: 1640, display: "flex", alignItems: "center", gap: 34 }}
     >
       <div style={{ width: 366 }}>
-        <Eyebrow tone="copper">01 · Programme + timetable</Eyebrow>
+        <Eyebrow tone="copper">01 · Program + timetable</Eyebrow>
         <div
           style={{
             color: ink,
@@ -488,7 +488,7 @@ function ProgrammeSurface({ progress }: { progress: number }) {
         <div
           style={{ color: muted, fontSize: 14, lineHeight: 1.5, marginTop: 19 }}
         >
-          The public programme supports session discovery and provides direct
+          The public program supports session discovery and provides direct
           timetable access.
         </div>
         <div
@@ -514,7 +514,7 @@ function ProgrammeSurface({ progress }: { progress: number }) {
       >
         <AssetWindow
           src={ASSETS.publicProgramme}
-          label="PUBLIC PROGRAMME"
+          label="PUBLIC PROGRAM"
           caption="/programme"
           width={1240}
           height={650}
@@ -617,8 +617,8 @@ function DayByDaySurface({ progress }: { progress: number }) {
         <div
           style={{ color: muted, fontSize: 15, lineHeight: 1.5, marginTop: 20 }}
         >
-          The day view filters the published programme by date while retaining
-          the full timetable.
+          The day view filters the published program by date while retaining the
+          full timetable.
         </div>
         <div style={{ display: "flex", gap: 8, marginTop: 26 }}>
           {days.map((day, index) => (
@@ -747,7 +747,7 @@ function SpeakersSurface({ progress }: { progress: number }) {
           <AssetWindow
             src={ASSETS.speakerGalleryMobile}
             label="SPEAKER GALLERY"
-            caption="/speakers"
+            caption="/gallery"
             width={270}
             height={600}
             objectPosition={`center ${interpolate(progress, [0, 1], [0, 100])}%`}
@@ -984,7 +984,7 @@ function EmbedsSurface({ progress }: { progress: number }) {
         <div
           style={{ color: muted, fontSize: 15, lineHeight: 1.5, marginTop: 20 }}
         >
-          Managed embeds display the current published programme without manual
+          Managed embeds display the current published program without manual
           exports.
         </div>
         <div
@@ -1023,7 +1023,7 @@ function EmbedsSurface({ progress }: { progress: number }) {
             gap: 10,
           }}
         >
-          <Chip tone="copper">Published programme</Chip>
+          <Chip tone="copper">Published program</Chip>
           <Chip tone="good">One published source</Chip>
         </div>
         <div
@@ -1034,7 +1034,7 @@ function EmbedsSurface({ progress }: { progress: number }) {
         >
           <AssetWindow
             src={ASSETS.publicProgramme}
-            label="PUBLISHED PROGRAMME"
+            label="PUBLISHED PROGRAM"
             caption="source view"
             width={1158}
             height={668}
@@ -1112,7 +1112,7 @@ function EmbedsSurface({ progress }: { progress: number }) {
                 fontWeight: 750,
               }}
             >
-              <span>published programme</span>
+              <span>published program</span>
               <span>linked profiles</span>
               <span>managed embed</span>
             </div>
@@ -1177,7 +1177,7 @@ function EmbedsSurface({ progress }: { progress: number }) {
               letterSpacing: "0.13em",
             }}
           >
-            PUBLISHED PROGRAMME EMBED
+            PUBLISHED PROGRAM EMBED
           </div>
           <div
             style={{
@@ -1189,7 +1189,7 @@ function EmbedsSurface({ progress }: { progress: number }) {
               letterSpacing: 0,
             }}
           >
-            The preview references the published programme source.
+            The preview references the published program source.
           </div>
         </div>
       </div>
@@ -1440,7 +1440,7 @@ function PublishedOutcomeMoment({ progress }: { progress: number }) {
         }}
       >
         <Chip tone="copper" dark>
-          Published programme
+          Published program
         </Chip>
         <Chip tone="good" dark>
           Ready for attendees
@@ -1460,7 +1460,7 @@ function PublishedOutcomeMoment({ progress }: { progress: number }) {
             marginTop: 18,
           }}
         >
-          Put the programme
+          Put the program
           <br />
           in attendees’ hands
           <br />
@@ -1552,7 +1552,7 @@ export function PublishScene({ duration }: SceneProps) {
   const frame = useCurrentFrame();
   const progress = frameProgress(frame, duration);
   const hero = cut(progress, 0, 0.14);
-  const programme = cut(progress, 0.14, 0.28);
+  const program = cut(progress, 0.14, 0.28);
   const day = cut(progress, 0.28, 0.42);
   const speakers = cut(progress, 0.42, 0.56);
   const itinerary = cut(progress, 0.56, 0.69);
@@ -1616,7 +1616,7 @@ export function PublishScene({ duration }: SceneProps) {
         }}
       >
         <SceneHeader
-          chapter="PUBLISHED PROGRAMME"
+          chapter="PUBLISHED PROGRAM"
           index="11 / 13 · PUBLISH"
           progress={progress}
           dark={false}
@@ -1632,7 +1632,7 @@ export function PublishScene({ duration }: SceneProps) {
         }}
       >
         <SceneHeader
-          chapter="PUBLISHED PROGRAMME"
+          chapter="PUBLISHED PROGRAM"
           index="11 / 13 · PUBLISH"
           progress={progress}
         />
@@ -1647,7 +1647,7 @@ export function PublishScene({ duration }: SceneProps) {
         <PublishHero progress={heroProgress} />
       </PublishSurfaceLayer>
       <PublishSurfaceLayer
-        active={programme === 1}
+        active={program === 1}
         left={140}
         progress={programmeProgress}
         top={140}

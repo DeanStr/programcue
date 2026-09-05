@@ -747,7 +747,7 @@ export function EndCard({
           >
             <Line width={42} color={collect ? PALETTE.copper : PALETTE.sage} />
             <span>
-              {collect ? "Ready for review" : "Your programme, your call"}
+              {collect ? "Ready for review" : "Your program, your call"}
             </span>
             <Line width={42} color={collect ? PALETTE.copper : PALETTE.sage} />
           </div>

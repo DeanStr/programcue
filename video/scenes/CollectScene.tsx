@@ -314,7 +314,7 @@ function CollectOpening({ start, end, visibleUntil }: TimedStageProps) {
   return (
     <Stage start={start} end={end} visibleUntil={visibleUntil}>
       <div style={{ position: "absolute", left: 110, top: 265, ...baseText }}>
-        <RolePill label="Programme operations" />
+        <RolePill label="Program operations" />
         <div
           style={{
             marginTop: 27,
@@ -335,7 +335,7 @@ function CollectOpening({ start, end, visibleUntil }: TimedStageProps) {
           >
             From application form
             <br />
-            to <span style={{ color: PALETTE.copperSoft }}>programme</span>{" "}
+            to <span style={{ color: PALETTE.copperSoft }}>program</span>{" "}
             decision.
           </h1>
         </div>

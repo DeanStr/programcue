@@ -2,13 +2,15 @@ import { loadFont } from "@remotion/fonts";
 import {
   AbsoluteFill,
   Audio,
+  Easing,
   interpolate,
   Sequence,
   staticFile,
   useCurrentFrame,
 } from "remotion";
 
-import { SCENE_DURATIONS, SCENE_KEYS } from "./constants";
+import { ProgramCueMark } from "./components/ProgramCueBrand";
+import { PALETTE, SCENE_DURATIONS, SCENE_KEYS } from "./constants";
 import { AssistScene } from "./scenes/AssistScene";
 import { ClosingScene, OpeningScene, RevealScene } from "./scenes/BrandScenes";
 import { CollectScene, DecideScene } from "./scenes/CollectDecideScenes";
@@ -82,124 +84,255 @@ if (
   );
 }
 
-const TRANSITION_HALF = 18;
-const TRANSITION_DURATION = TRANSITION_HALF * 2;
+// Keep the title still for 1.2 seconds between the two 0.6-second wipes.
+// The closing wipe keeps its original lead; the hold uses the next scene’s
+// establishing beat so outgoing results retain their reading time.
+const TRANSITION_WIPE = 18;
+const TRANSITION_HOLD = 36;
+const TRANSITION_DURATION = TRANSITION_WIPE * 2 + TRANSITION_HOLD;
+
+type ApertureDirection = "bottom" | "left" | "right" | "top";
 
 const sceneSignals: Record<
   SceneKey,
-  { accent: string; eyebrow: string; label: string }
+  {
+    accent: string;
+    direction: ApertureDirection;
+    energy: number;
+    eyebrow: string;
+    label: string;
+  }
 > = {
   opening: {
     accent: "#f6c5a9",
+    direction: "left",
+    energy: 0.74,
     eyebrow: "MEET",
     label: "Program Cue",
   },
   reveal: {
     accent: "#f6c5a9",
+    direction: "right",
+    energy: 0.72,
     eyebrow: "CONNECT",
-    label: "The whole programme, together",
+    label: "The whole program, together",
   },
   command: {
     accent: "#8fbf9a",
+    direction: "left",
+    energy: 0.9,
     eyebrow: "SEE",
     label: "Know what needs attention",
   },
   assist: {
     accent: "#8fbf9a",
+    direction: "right",
+    energy: 0.92,
     eyebrow: "ASSIST",
     label: "Turn gaps into action",
   },
   setup: {
     accent: "#d4a72c",
+    direction: "bottom",
+    energy: 0.68,
     eyebrow: "SHAPE",
     label: "Set the event once",
   },
   collect: {
     accent: "#f6c5a9",
+    direction: "right",
+    energy: 0.84,
     eyebrow: "COLLECT",
     label: "Collect the ideas that matter",
   },
   decide: {
     accent: "#8fbf9a",
+    direction: "left",
+    energy: 1,
     eyebrow: "DECIDE",
     label: "Choose with confidence",
   },
   prepare: {
     accent: "#d4a72c",
+    direction: "top",
+    energy: 0.7,
     eyebrow: "PREPARE",
-    label: "Turn yes into ready",
+    label: "Turn yes into momentum",
   },
   communicate: {
     accent: "#f6c5a9",
+    direction: "left",
+    energy: 0.78,
     eyebrow: "REACH",
     label: "Every message, connected",
   },
   place: {
     accent: "#8fbf9a",
+    direction: "bottom",
+    energy: 1.04,
     eyebrow: "PLACE",
     label: "Build a schedule that works",
   },
   publish: {
     accent: "#d4a72c",
+    direction: "left",
+    energy: 1.18,
     eyebrow: "SHARE",
-    label: "One programme, every public view",
+    label: "One program. Everywhere it matters.",
   },
   operate: {
     accent: "#8fbf9a",
+    direction: "right",
+    energy: 0.76,
     eyebrow: "OPERATE",
     label: "Stay in control",
   },
   closing: {
     accent: "#f6c5a9",
+    direction: "top",
+    energy: 0.64,
     eyebrow: "PROGRAM CUE",
-    label: "Make the programme happen",
+    label: "Make the program happen",
   },
 };
 
+const clamp = {
+  extrapolateLeft: "clamp" as const,
+  extrapolateRight: "clamp" as const,
+};
+
+const apertureEase = Easing.bezier(0.76, 0, 0.24, 1);
+const cueEase = Easing.bezier(0.22, 1, 0.36, 1);
+
+const matteClipPath = (
+  direction: ApertureDirection,
+  coverage: number,
+  revealing: boolean,
+) => {
+  const open = `${Math.max(0, Math.min(100, (1 - coverage) * 100))}%`;
+
+  if (revealing) {
+    switch (direction) {
+      case "right":
+        return `inset(0 ${open} 0 0)`;
+      case "top":
+        return `inset(${open} 0 0 0)`;
+      case "bottom":
+        return `inset(0 0 ${open} 0)`;
+      default:
+        return `inset(0 0 0 ${open})`;
+    }
+  }
+
+  switch (direction) {
+    case "right":
+      return `inset(0 0 0 ${open})`;
+    case "top":
+      return `inset(0 0 ${open} 0)`;
+    case "bottom":
+      return `inset(${open} 0 0 0)`;
+    default:
+      return `inset(0 ${open} 0 0)`;
+  }
+};
+
+const ApertureCorners = ({
+  accent,
+  opacity,
+  spread,
+}: {
+  accent: string;
+  opacity: number;
+  spread: number;
+}) => (
+  <div
+    style={{
+      inset: spread,
+      opacity,
+      position: "absolute",
+      transform: `scale(${interpolate(spread, [66, 92], [1, 1.025], clamp)})`,
+    }}
+  >
+    {[0, 1, 2, 3].map((corner) => {
+      const onTop = corner < 2;
+      const onLeft = corner % 2 === 0;
+      return (
+        <div
+          key={corner}
+          style={{
+            borderBottom: onTop ? undefined : `2px solid ${accent}`,
+            borderLeft: onLeft ? `2px solid ${accent}` : undefined,
+            borderRight: onLeft ? undefined : `2px solid ${accent}`,
+            borderTop: onTop ? `2px solid ${accent}` : undefined,
+            bottom: onTop ? undefined : 0,
+            height: 54,
+            left: onLeft ? 0 : undefined,
+            position: "absolute",
+            right: onLeft ? undefined : 0,
+            top: onTop ? 0 : undefined,
+            width: 54,
+          }}
+        />
+      );
+    })}
+  </div>
+);
+
 const TransitionBridge = ({ toScene }: { toScene: SceneKey }) => {
   const frame = useCurrentFrame();
-  const duration = TRANSITION_DURATION;
   const next = sceneSignals[toScene];
-  const washOpacity = interpolate(
-    frame,
-    [0, 6, TRANSITION_HALF, duration - 7, duration - 1],
-    [0, 0.22, 0.46, 0.18, 0],
-    {
-      extrapolateLeft: "clamp",
-      extrapolateRight: "clamp",
-    },
+  const revealStart = TRANSITION_WIPE + TRANSITION_HOLD;
+  const revealing = frame > revealStart;
+  const rawProgress = revealing
+    ? interpolate(frame, [revealStart, TRANSITION_DURATION - 1], [0, 1], clamp)
+    : interpolate(frame, [0, TRANSITION_WIPE], [0, 1], clamp);
+  const energyExponent = interpolate(
+    next.energy,
+    [0.64, 1.18],
+    [1.08, 0.84],
+    clamp,
   );
-  const seam = interpolate(frame, [0, duration - 1], [-24, 124], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
-  const gleam = interpolate(
+  const apertureProgress = apertureEase(rawProgress) ** energyExponent;
+  const coverage = revealing ? 1 - apertureProgress : apertureProgress;
+  const temporalCueOpacity = interpolate(
     frame,
-    [0, TRANSITION_HALF, duration - 1],
-    [0, 1, 0],
-    {
-      extrapolateLeft: "clamp",
-      extrapolateRight: "clamp",
-    },
+    [0, 8, 14, revealStart, revealStart + 13, TRANSITION_DURATION - 1],
+    [0, 0, 0.92, 1, 0.56, 0],
+    { ...clamp, easing: cueEase },
   );
-  const cueOpacity = interpolate(
+  const cueOpacity =
+    temporalCueOpacity * interpolate(coverage, [0.62, 0.74], [0, 1], clamp);
+  const directionSign =
+    next.direction === "right" || next.direction === "bottom" ? 1 : -1;
+  const cueOffset = interpolate(
     frame,
-    [0, 5, TRANSITION_HALF, duration - 7, duration - 1],
-    [0, 0.84, 1, 0.72, 0],
-    {
-      extrapolateLeft: "clamp",
-      extrapolateRight: "clamp",
-    },
+    [0, 12, TRANSITION_WIPE, revealStart + 9, TRANSITION_DURATION - 1],
+    [directionSign * 12, 0, 0, 0, directionSign * -8],
+    clamp,
   );
   const cueScale = interpolate(
     frame,
-    [0, TRANSITION_HALF, duration - 1],
-    [0.96, 1, 0.98],
-    {
-      extrapolateLeft: "clamp",
-      extrapolateRight: "clamp",
-    },
+    [0, TRANSITION_WIPE, revealStart, TRANSITION_DURATION - 1],
+    [0.985, 1, 1, 0.995],
+    { ...clamp, easing: cueEase },
   );
+  const edgeOpacity =
+    Math.sin(apertureProgress * Math.PI) * (0.42 + next.energy * 0.26);
+  const edgePosition =
+    (next.direction === "right" || next.direction === "bottom"
+      ? 1 - apertureProgress
+      : apertureProgress) * 100;
+  const verticalEdge = next.direction === "left" || next.direction === "right";
+  const cornerSpread = interpolate(coverage, [0, 1], [92, 66], clamp);
+  const chapter = `${String(SCENE_KEYS.indexOf(toScene) + 1).padStart(2, "0")} / ${String(
+    SCENE_KEYS.length,
+  ).padStart(2, "0")}`;
+  const glowPosition: Record<ApertureDirection, string> = {
+    bottom: "50% 105%",
+    left: "-5% 50%",
+    right: "105% 50%",
+    top: "50% -5%",
+  };
 
   return (
     <AbsoluteFill
@@ -210,109 +343,130 @@ const TransitionBridge = ({ toScene }: { toScene: SceneKey }) => {
         zIndex: 200,
       }}
     >
-      <div
+      <AbsoluteFill
         style={{
-          background:
-            "linear-gradient(112deg, rgba(11,20,19,0), rgba(11,20,19,.82) 34%, rgba(11,20,19,.66) 62%, rgba(11,20,19,0))",
-          filter: "blur(0.4px)",
-          inset: "-8% -18%",
-          opacity: washOpacity,
-          position: "absolute",
-          transform: `translateX(${seam - 54}%) skewX(-10deg)`,
-          width: "46%",
+          backgroundColor: PALETTE.ink,
+          opacity: frame === TRANSITION_WIPE ? 1 : 0,
         }}
       />
+
       <div
         style={{
-          background:
-            "linear-gradient(90deg, rgba(7,15,14,.22), rgba(7,15,14,.04) 58%, rgba(7,15,14,0))",
-          inset: 0,
-          opacity: washOpacity,
+          backgroundColor: PALETTE.ink,
+          backgroundImage: `radial-gradient(circle at ${glowPosition[next.direction]}, ${next.accent}24 0, transparent ${
+            42 - next.energy * 7
+          }%), linear-gradient(135deg, rgba(255,253,248,.026), transparent 44%, ${PALETTE.copper}12)`,
+          clipPath: matteClipPath(next.direction, coverage, revealing),
+          inset: -2,
+          overflow: "hidden",
           position: "absolute",
-        }}
-      />
-      <div
-        style={{
-          alignItems: "center",
-          backdropFilter: "blur(14px)",
-          background: "rgba(7, 15, 14, 0.88)",
-          border: `1px solid ${next.accent}66`,
-          borderRadius: 999,
-          boxShadow: "0 18px 54px rgba(0,0,0,.26)",
-          display: "flex",
-          gap: 13,
-          left: `${seam}%`,
-          minHeight: 44,
-          opacity: cueOpacity,
-          padding: "0 18px 0 14px",
-          position: "absolute",
-          top: "50%",
-          transform: `translate3d(-50%, -50%, 0) scale(${cueScale})`,
-          whiteSpace: "nowrap",
+          willChange: "clip-path",
         }}
       >
         <div
           style={{
-            border: `1px solid ${next.accent}88`,
-            borderRadius: 999,
-            height: 10,
-            position: "relative",
-            width: 10,
-          }}
-        >
-          <div
-            style={{
-              background: next.accent,
-              borderRadius: 999,
-              height: 4,
-              left: 2,
-              position: "absolute",
-              top: 2,
-              width: 4,
-            }}
-          />
-        </div>
-        <span
-          style={{
-            color: next.accent,
-            fontSize: 10,
-            fontWeight: 820,
-            letterSpacing: ".18em",
-            textTransform: "uppercase",
-          }}
-        >
-          {next.eyebrow}
-        </span>
-        <div
-          style={{
-            background: "rgba(255,253,248,.24)",
-            height: 14,
-            width: 1,
+            backgroundImage:
+              "linear-gradient(rgba(255,253,248,.022) 1px, transparent 1px), linear-gradient(90deg, rgba(255,253,248,.022) 1px, transparent 1px)",
+            backgroundPosition: "center",
+            backgroundSize: "72px 72px",
+            inset: 0,
+            opacity: 0.54 + next.energy * 0.12,
+            position: "absolute",
           }}
         />
-        <span
+
+        <ApertureCorners
+          accent={`${next.accent}94`}
+          opacity={cueOpacity * (0.72 + next.energy * 0.14)}
+          spread={cornerSpread}
+        />
+
+        <div
           style={{
-            color: "#fffdf8",
-            fontSize: 16,
-            fontWeight: 720,
-            letterSpacing: "-.01em",
+            alignItems: "center",
+            display: "flex",
+            gap: 24,
+            left: "50%",
+            opacity: cueOpacity,
+            position: "absolute",
+            top: "50%",
+            transform: `translate3d(-50%, -50%, 0) ${
+              verticalEdge
+                ? `translateX(${cueOffset}px)`
+                : `translateY(${cueOffset}px)`
+            } scale(${cueScale})`,
+            transformOrigin: "center",
+            whiteSpace: "nowrap",
           }}
         >
-          {next.label}
-        </span>
+          <ProgramCueMark accent={next.accent} ink={PALETTE.paper} size={64} />
+          <div
+            style={{
+              background: `linear-gradient(90deg, ${PALETTE.copper}, ${next.accent})`,
+              boxShadow: `0 0 ${12 + next.energy * 9}px ${next.accent}38`,
+              height: 2,
+              width: 66 + next.energy * 22,
+            }}
+          />
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <div
+              style={{
+                alignItems: "center",
+                display: "flex",
+                gap: 12,
+              }}
+            >
+              <span
+                style={{
+                  color: next.accent,
+                  fontSize: 11,
+                  fontWeight: 820,
+                  letterSpacing: ".2em",
+                  textTransform: "uppercase",
+                }}
+              >
+                {next.eyebrow}
+              </span>
+              <span
+                style={{
+                  color: "rgba(255,253,248,.42)",
+                  fontSize: 10,
+                  fontVariantNumeric: "tabular-nums",
+                  fontWeight: 650,
+                  letterSpacing: ".12em",
+                }}
+              >
+                {chapter}
+              </span>
+            </div>
+            <span
+              style={{
+                color: PALETTE.paper,
+                fontSize: 42,
+                fontWeight: 690,
+                letterSpacing: "-.025em",
+                lineHeight: 1.05,
+                textShadow: "0 7px 26px rgba(0,0,0,.28)",
+              }}
+            >
+              {next.label}
+            </span>
+          </div>
+        </div>
       </div>
+
       <div
         style={{
-          background:
-            "linear-gradient(180deg, transparent, rgba(246,197,169,.78), rgba(190,98,66,.52), transparent)",
-          boxShadow: "0 0 24px rgba(246,197,169,.28)",
-          height: "118%",
-          left: `${seam}%`,
-          opacity: gleam * 0.62,
+          background: verticalEdge
+            ? `linear-gradient(180deg, transparent, ${next.accent}, ${PALETTE.copper}, transparent)`
+            : `linear-gradient(90deg, transparent, ${next.accent}, ${PALETTE.copper}, transparent)`,
+          boxShadow: `0 0 ${18 + next.energy * 14}px ${next.accent}55`,
+          height: verticalEdge ? "116%" : 2,
+          left: verticalEdge ? `${edgePosition}%` : "-8%",
+          opacity: edgeOpacity,
           position: "absolute",
-          top: "-9%",
-          transform: "skewX(-10deg)",
-          width: 2,
+          top: verticalEdge ? "-8%" : `${edgePosition}%`,
+          width: verticalEdge ? 2 : "116%",
         }}
       />
     </AbsoluteFill>
@@ -332,8 +486,8 @@ export const LaunchFilm = ({ title: _title }: LaunchFilmProps) => {
     <AbsoluteFill style={{ backgroundColor: "#0b1413" }}>
       <Audio
         src={staticFile("video/program-cue-score.wav")}
-        // The deterministic WAV owns its mastering and its short fades. Keep
-        // Remotion at unity so the music-only film does not lose 2.9 dB.
+        // `video:score` recovers the selected, released Eleven soundtrack as a
+        // picture-locked WAV for Studio and Remotion. Keep it at unity.
         volume={1}
       />
 
@@ -351,7 +505,7 @@ export const LaunchFilm = ({ title: _title }: LaunchFilmProps) => {
       {scenes.slice(1).map(({ from: boundary, key }) => (
         <Sequence
           key={`bridge-${boundary}`}
-          from={boundary - TRANSITION_HALF}
+          from={boundary - TRANSITION_WIPE}
           durationInFrames={TRANSITION_DURATION}
           premountFor={12}
         >

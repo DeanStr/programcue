@@ -82,6 +82,7 @@ The repository includes a six-minute Remotion product film built from reviewed
 seeded-product states, Playwright captures, product-faithful code-native motion
 and editorial event-context imagery. Run
 `npm run video:studio` to preview it,
+`npm run video:check` for story freshness, captions and generated types,
 `npm run video:frames` for the curated visual-review sheet, and
 `npm run video:render && npm run video:validate && npm run video:compare` for
 the BT.709 H.264/AAC master and decoded-canary gate. Audience-facing copy leads

@@ -1,0 +1,745 @@
+{
+  "schemaVersion": 1,
+  "synchronizedFiles": [],
+  "binaryAnchors": [
+    {
+      "path": "e2e/public-site.spec.ts-snapshots/public-site-home-desktop-dark-desktop-chromium-linux.png",
+      "sha256": "cf2d4edc768a22e2d9b3afa8a1df6672d06495d12b6059618314cd73091fd789"
+    },
+    {
+      "path": "e2e/public-site.spec.ts-snapshots/public-site-home-desktop-desktop-chromium-linux.png",
+      "sha256": "ce01c5d4bec106ff64122b9d369d6e7c35be97be17badf522a82a3f559618dda"
+    },
+    {
+      "path": "e2e/public-site.spec.ts-snapshots/published-public-site-mobile-desktop-chromium-linux.png",
+      "sha256": "d6a6097c1791da8296bc7ae59cf046eb393e7d412045a97ceefc12eeb7d37593"
+    },
+    {
+      "path": "e2e/visual.spec.ts-snapshots/branding-desktop-chromium-linux.png",
+      "sha256": "2e7489dea168bf0eb64631a976402d48dc3754e797cbfb4f541370b0ef98e7a2"
+    },
+    {
+      "path": "e2e/visual.spec.ts-snapshots/branding-preview-mobile-chromium-linux.png",
+      "sha256": "80aee4df3cd14ba140bdfad83535420124aa57a9447a383e1fbc39ff0b5039d7"
+    },
+    {
+      "path": "e2e/visual.spec.ts-snapshots/command-centre-desktop-chromium-linux.png",
+      "sha256": "cff700539faf0616548cb94eee03924615175b5e348fcee7c382fbfd662e7172"
+    },
+    {
+      "path": "e2e/visual.spec.ts-snapshots/communications-desktop-chromium-linux.png",
+      "sha256": "34798a5ceca09fede9f34484734dfb5fb96ee6e205b86573730091887fbb5441"
+    },
+    {
+      "path": "e2e/visual.spec.ts-snapshots/communications-preview-laptop-chromium-linux.png",
+      "sha256": "8668e5036dbb5d485c2f3b09714e61583fbd7554d7a418a206e8924082991158"
+    },
+    {
+      "path": "e2e/visual.spec.ts-snapshots/evaluation-admin-desktop-chromium-linux.png",
+      "sha256": "5379da5dc2a1d3822609ec1a59e7b9a5b2dba872eb1a7534cc6376e6595072bb"
+    },
+    {
+      "path": "e2e/visual.spec.ts-snapshots/event-setup-data-desktop-chromium-linux.png",
+      "sha256": "0b22590510606135292c627e7c257722e9e519402f2b0bee397a43c9b75399be"
+    },
+    {
+      "path": "e2e/visual.spec.ts-snapshots/event-setup-desktop-chromium-linux.png",
+      "sha256": "24c535f523bf89b1aab9cfa9c561c2a7826d14db908997f94dea7bffa8d75b11"
+    },
+    {
+      "path": "e2e/visual.spec.ts-snapshots/form-builder-desktop-chromium-linux.png",
+      "sha256": "1d123043bff1446e0b875c425c6b3c76e4e2b1615dd9b11b41e5bb879b44f5cf"
+    },
+    {
+      "path": "e2e/visual.spec.ts-snapshots/form-builder-laptop-chromium-linux.png",
+      "sha256": "dfe41078ef88b2c7e3892b5dc1c4880c63acafa5cc53f0649f35f1d6c377813f"
+    },
+    {
+      "path": "e2e/visual.spec.ts-snapshots/programme-admin-desktop-chromium-linux.png",
+      "sha256": "749f007a63f395082a1754d610ac30e64b4fb1a53c562a8ea22f5b66b749b677"
+    },
+    {
+      "path": "e2e/visual.spec.ts-snapshots/public-application-desktop-chromium-linux.png",
+      "sha256": "f84ec7ce0d27cdd13d69243ec152baf7220de6853086314cf4ba7ba65b1e114f"
+    },
+    {
+      "path": "e2e/visual.spec.ts-snapshots/public-application-mobile-chromium-linux.png",
+      "sha256": "20bf965db376697ea63afa445d398fdbe50dae606694c1c58e7b79e30617293b"
+    },
+    {
+      "path": "e2e/visual.spec.ts-snapshots/public-programme-desktop-chromium-linux.png",
+      "sha256": "683b9607988c3ba6b1fa029b54241c9c5055f67c4cd010cfdcb56799a2549862"
+    },
+    {
+      "path": "e2e/visual.spec.ts-snapshots/public-programme-mobile-chromium-linux.png",
+      "sha256": "4faa7f8b496e4d6957a755020d3950e80a99dcd64aefbdc65eb809a78fda9a20"
+    },
+    {
+      "path": "e2e/visual.spec.ts-snapshots/public-speaker-gallery-mobile-chromium-linux.png",
+      "sha256": "13420a3281a8f7da17134517db08be6263fedf56751399048cb4fe3997229c87"
+    },
+    {
+      "path": "e2e/visual.spec.ts-snapshots/review-workbench-desktop-chromium-linux.png",
+      "sha256": "f843852af004a9ae37cdfd9f336b6f7c6ca7448d70970b08748263cc7c81cdc0"
+    },
+    {
+      "path": "e2e/visual.spec.ts-snapshots/review-workbench-mobile-chromium-linux.png",
+      "sha256": "2de4420145e595d46ffd761c2c7aeb55f032f9bfb455f0872cad43bb38944ba6"
+    },
+    {
+      "path": "e2e/visual.spec.ts-snapshots/schedule-planner-laptop-chromium-linux.png",
+      "sha256": "9c0f0e9548a3a57cb6a0fca763c267aba550d4de39f7283a9384fbc416c988f3"
+    },
+    {
+      "path": "e2e/visual.spec.ts-snapshots/speaker-dashboard-desktop-chromium-linux.png",
+      "sha256": "04a4238155ad1b7f99cabd4dfa72a9bf3a38be460588f7bbee4eb511677c539c"
+    },
+    {
+      "path": "e2e/visual.spec.ts-snapshots/speaker-dashboard-mobile-chromium-linux.png",
+      "sha256": "6480e6703562116401bf4c6b315403942bb11bbbfaff850879d840f8e3b44213"
+    },
+    {
+      "path": "e2e/visual.spec.ts-snapshots/speaker-profile-mobile-chromium-linux.png",
+      "sha256": "6ac90f50eb93c1f4afaa4277716fcc83c4c92f21c65ba41a8f3ce94d3be71a71"
+    },
+    {
+      "path": "e2e/visual.spec.ts-snapshots/tasks-readiness-laptop-chromium-linux.png",
+      "sha256": "fa2f106285914d4b4b398a9981419fa830efc7d78d3fdbb61f324aa49bb78da3"
+    }
+  ],
+  "anchors": [
+    {
+      "id": "command-centre-current-state",
+      "checks": [
+        {
+          "path": "video/assets.ts",
+          "contains": [
+            "../e2e/visual.spec.ts-snapshots/command-centre-desktop-chromium-linux.png",
+            "commandCentre,"
+          ]
+        },
+        {
+          "path": "video/scenes/CommandScene.tsx",
+          "contains": [
+            "src={ASSETS.commandCentre}",
+            "phases={[\"80% readiness\", \"1 critical\", \"Do this next\"]}",
+            "label=\"Needs attention\"",
+            "status=\"1 critical condition\"",
+            "value=\"80%\""
+          ],
+          "excludes": ["75% readiness", "2 critical conditions"]
+        },
+        {
+          "path": "video/scenes/AssistScene.tsx",
+          "contains": ["Needs attention", "1 critical condition", "[0, 80]"],
+          "excludes": ["2 conditions", "On track"]
+        },
+        {
+          "path": "video/narration.md",
+          "contains": [
+            "readiness is 80",
+            "percent and one critical condition is named.",
+            "“Do this next”"
+          ],
+          "excludes": ["readiness is 75", "two critical conditions"]
+        },
+        {
+          "path": "video/voiceover-script.json",
+          "contains": [
+            "Readiness stays transparent",
+            "critical conditions stay named",
+            "“Do this next”"
+          ]
+        },
+        {
+          "path": "video/delivery/program-cue-launch-descriptions.vtt",
+          "contains": [
+            "The current snapshot reads 80 percent with one critical condition.",
+            "“Do this next” ranks the critical work."
+          ],
+          "excludes": ["75 percent", "two critical conditions"]
+        }
+      ]
+    },
+    {
+      "id": "current-admin-navigation",
+      "checks": [
+        {
+          "path": "app/components/admin-shell-navigation.ts",
+          "contains": [
+            "\"Home\"",
+            "\"Event assistant\"",
+            "\"Applications\"",
+            "\"Event speakers\"",
+            "\"Tasks & readiness\"",
+            "\"Schedule planner\"",
+            "\"Communications\"",
+            "\"Event settings\"",
+            "\"Operations\""
+          ]
+        },
+        {
+          "path": "video/scenes/AssistScene.tsx",
+          "containsInOrder": [
+            "label: \"Home\"",
+            "label: \"Event assistant\"",
+            "label: \"Applications\"",
+            "label: \"Event speakers\"",
+            "label: \"Tasks & readiness\"",
+            "label: \"Schedule planner\"",
+            "label: \"Communications\"",
+            "label: \"Event settings\"",
+            "label: \"Operations\""
+          ],
+          "contains": ["<AppShell active=\"assistant\""],
+          "excludes": ["label: \"Speakers\"", "label: \"Program\""]
+        }
+      ]
+    },
+    {
+      "id": "scenario-lab",
+      "checks": [
+        {
+          "path": "app/components/schedule-scenarios-panel.tsx",
+          "contains": [
+            "Scenario Lab",
+            "Compare before changing the draft",
+            "Scenarios never replace or publish the active schedule."
+          ]
+        },
+        {
+          "path": "video/scenes/PlaceScene.tsx",
+          "contains": [
+            "Scenario Lab",
+            "Compare before changing the draft",
+            "SAVE ≠ APPLY · APPLY ≠ PUBLISH"
+          ]
+        },
+        {
+          "path": "video/narration.md",
+          "contains": [
+            "Scenario Lab lets an organiser save a named selection of",
+            "without changing or publishing the active draft."
+          ]
+        },
+        {
+          "path": "video/voiceover-script.json",
+          "contains": [
+            "Save a named Scenario Lab selection without changing the active draft"
+          ]
+        },
+        {
+          "path": "video/delivery/program-cue-launch-descriptions.vtt",
+          "contains": [
+            "00:04:12.000 --> 00:04:18.800\nScenario Lab saves a named selection. Later application changes only the active draft."
+          ],
+          "excludes": ["Scenario Lab saves a named alternative"]
+        }
+      ]
+    },
+    {
+      "id": "publication-boundary",
+      "checks": [
+        {
+          "path": "video/scenes/PlaceScene.tsx",
+          "contains": [
+            "IN REVIEW",
+            "APPROVED",
+            "Move the exact public-content revision to Approved.",
+            "Compare additions, removals, moves, visibility and content changes",
+            "The publication boundary revalidates conflicts, public content,",
+            "confirmed participation and required public dependencies."
+          ]
+        },
+        {
+          "path": "video/narration.md",
+          "contains": [
+            "An exact public-content revision moves from In review to Approved",
+            "the full publication diff shows one moved session plus one public-content change.",
+            "Publication revalidates conflicts, public content, confirmed participation and required public dependencies before confirmation."
+          ]
+        },
+        {
+          "path": "video/voiceover-script.json",
+          "contains": [
+            "approve the exact content revision, inspect the full diff, revalidate public dependencies, publish explicitly"
+          ]
+        },
+        {
+          "path": "video/delivery/program-cue-launch-descriptions.vtt",
+          "contains": [
+            "00:04:18.800 --> 00:04:25.600\nThe exact public-content revision moves from In review to Approved.",
+            "00:04:25.600 --> 00:04:32.000\nThe full publication diff shows one moved session and one public-content change before confirmation.",
+            "00:04:32.000 --> 00:04:36.800\nPublication rechecks conflicts, content, participation and public dependencies."
+          ],
+          "excludes": [
+            "Selected moves apply only after review.",
+            "Publication revalidates every dependency."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "latest-publication-digest",
+      "checks": [
+        {
+          "path": "app/components/schedule-publication-digest-panel.tsx",
+          "contains": [
+            "Latest publication",
+            "change digest",
+            "Review affected records"
+          ]
+        },
+        {
+          "path": "video/scenes/PlaceScene.tsx",
+          "contains": [
+            "Latest publication",
+            "change digest.",
+            "2 material changes",
+            "Review affected records"
+          ],
+          "excludes": ["4 CHANGES"]
+        },
+        {
+          "path": "video/narration.md",
+          "contains": [
+            "durable latest-publication digest retains exact category counts",
+            "up to twenty affected-record highlights per category, without storing content bodies."
+          ]
+        },
+        {
+          "path": "video/voiceover-script.json",
+          "contains": ["retain the latest digest"]
+        },
+        {
+          "path": "video/delivery/program-cue-launch-descriptions.vtt",
+          "contains": [
+            "00:04:36.800 --> 00:04:40.000\nLatest digest keeps exact counts and highlights."
+          ],
+          "excludes": ["A latest-change digest is stored."]
+        }
+      ]
+    },
+    {
+      "id": "ai-result-feedback",
+      "checks": [
+        {
+          "path": "app/modules/ai/assistant-result-panel.tsx",
+          "contains": [
+            "Was this AI result useful?",
+            "Helpful",
+            "Feedback recorded."
+          ]
+        },
+        {
+          "path": "video/scenes/AssistScene.tsx",
+          "contains": [
+            "Was this AI result useful?",
+            "Helpful",
+            "Feedback recorded"
+          ]
+        },
+        {
+          "path": "video/narration.md",
+          "contains": ["focused feedback on the completed AI result."]
+        },
+        {
+          "path": "video/voiceover-script.json",
+          "contains": ["records focused feedback"]
+        },
+        {
+          "path": "video/delivery/program-cue-launch-descriptions.vtt",
+          "contains": ["The AI result receives focused feedback."]
+        }
+      ]
+    },
+    {
+      "id": "preparation-stays-visible",
+      "checks": [
+        {
+          "path": "video/LaunchFilm.tsx",
+          "contains": ["label: \"Turn yes into momentum\""],
+          "excludes": ["label: \"Turn yes into ready\""]
+        },
+        {
+          "path": "video/scenes/PrepareScene.tsx",
+          "contains": [
+            "into momentum.",
+            "Preparation in view",
+            "1 task complete · 2 outstanding",
+            "items={[\"Accepted\", \"Linked\", \"In progress\", \"In view\"]}",
+            "{ center: readyCenter, from: \"Tasks active\", to: \"In view\" }"
+          ],
+          "excludes": ["into ready.", "Preparation ready"]
+        },
+        {
+          "path": "video/delivery/program-cue-launch-descriptions.vtt",
+          "contains": [
+            "Speaker, Moderator and Chair responses remain independent.",
+            "Tasks, role responses and files stay in view."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "accelevents-preview-without-success",
+      "checks": [
+        {
+          "path": "video/scenes/OperateScene.tsx",
+          "contains": [
+            "Accelevents mapping preview",
+            "MAPPING PREVIEW",
+            "CONFIRM TO EXPORT",
+            "Ready for organiser review",
+            "Live export still requires confirmation"
+          ],
+          "excludes": [
+            "READY TO EXPORT",
+            "EXPORT PACKAGE READY",
+            "ONE CONNECTED EXPORT",
+            "Provider sync complete",
+            "Export complete"
+          ]
+        },
+        {
+          "path": "video/narration.md",
+          "contains": [
+            "Accelevents stops at its",
+            "mapping preview; no completed provider export is claimed."
+          ]
+        },
+        {
+          "path": "video/voiceover-script.json",
+          "contains": [
+            "Accelevents stops at mapping preview; an authorised organiser must still confirm export."
+          ]
+        },
+        {
+          "path": "video/delivery/program-cue-launch-descriptions.vtt",
+          "contains": ["The Accelevents mapping preview awaits confirmation."]
+        }
+      ]
+    },
+    {
+      "id": "opening-current-picture",
+      "checks": [
+        {
+          "path": "video/scenes/OpeningScene.tsx",
+          "contains": [
+            "staticFile(\"video/editorial-stage-moment.png\")",
+            "Run the program.",
+            "Not the spreadsheet."
+          ]
+        },
+        {
+          "path": "video/narration.md",
+          "contains": [
+            "An editorial stage moment opens on the people waiting for a program to work.",
+            "The current Command Centre then brings those signals into one operating picture.",
+            "Run the program, not the spreadsheet."
+          ]
+        },
+        {
+          "path": "video/voiceover-script.json",
+          "contains": [
+            "Program Cue brings those signals into one operating picture.",
+            "Run the program, not the spreadsheet."
+          ]
+        },
+        {
+          "path": "video/delivery/program-cue-launch-descriptions.vtt",
+          "contains": [
+            "00:00:00.000 --> 00:00:05.000\n[Instrumental music.] A keynote speaker faces a waiting audience.",
+            "00:00:05.000 --> 00:00:10.000\nProgram Cue appears beside the current program’s readiness picture.",
+            "00:00:10.000 --> 00:00:15.000\n“Run the program. Not the spreadsheet.” closes the opening.",
+            "“From first proposal to published program” resolves into the ProgramCue.com closing card."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "command-critical-work-truth",
+      "checks": [
+        {
+          "path": "app/modules/speakers/demo.server.ts",
+          "contains": [
+            "'Upload presentation slides', 'Upload the final PDF, PPT or PPTX deck.', 'file_upload', 'critical'",
+            "'Read the speaker handbook', 'Read and acknowledge the current handbook.', 'acknowledgement', 'medium'"
+          ]
+        },
+        {
+          "path": "video/scenes/CommandScene.tsx",
+          "contains": [
+            "phases={[\"80% readiness\", \"1 critical\", \"Do this next\"]}",
+            "title=\"Resolve critical work.\"",
+            "Open critical work"
+          ],
+          "excludes": ["Read the speaker handbook", "Open Priya Shah"]
+        },
+        {
+          "path": "video/scenes/AssistScene.tsx",
+          "contains": [
+            "Upload presentation slides",
+            "Critical session deliverable · 1 outstanding",
+            "separate, medium-impact speaker task",
+            "Read the speaker handbook"
+          ],
+          "excludes": ["Read the speaker handbook · critical"]
+        },
+        {
+          "path": "video/narration.md",
+          "contains": [
+            "links to the filtered critical-work list",
+            "After the critical session deliverable, choose a separate outstanding speaker task"
+          ]
+        },
+        {
+          "path": "video/voiceover-script.json",
+          "contains": [
+            "links to the filtered critical work",
+            "After the critical session deliverable, the assistant finds a separate handbook task."
+          ]
+        },
+        {
+          "path": "video/delivery/program-cue-launch-descriptions.vtt",
+          "contains": [
+            "The action links to the filtered critical-work list.",
+            "Authorised records identify a separate outstanding handbook task."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "assistant-draft-approval-boundary",
+      "checks": [
+        {
+          "path": "app/modules/ai/ai-proposal-executor-foundation.server.ts",
+          "contains": [
+            "versionStatus: \"draft\" as const",
+            "Approval publishes this immutable assistant-created template version, records the exact communication and queues delivery through the normal provider operation.",
+            "approvalRequired: true"
+          ]
+        },
+        {
+          "path": "app/modules/ai/ai-claimed-proposal-executor.server.ts",
+          "contains": [
+            "await communications.publishTemplate(viewer, reminder.template.id);",
+            "templateVersionId: reminder.template.id"
+          ]
+        },
+        {
+          "path": "video/scenes/AssistScene.tsx",
+          "contains": [
+            "Draft reminder · Assistant reminder v1",
+            "Exact draft preview; merge fields preserved.",
+            "Approve and queue reminder",
+            "Approved. Saved to the durable queue.",
+            "Provider acceptance",
+            "Pending"
+          ],
+          "excludes": [
+            "Approved template · Assistant reminder v1",
+            "Exact published template",
+            "One critical task"
+          ]
+        },
+        {
+          "path": "video/narration.md",
+          "contains": [
+            "prepares a draft candidate with the exact recipient.",
+            "Nothing sends until an organiser reviews and approves the action;",
+            "approval publishes the candidate and records durable queue work."
+          ]
+        },
+        {
+          "path": "video/voiceover-script.json",
+          "contains": [
+            "It prepares a draft reminder for one recipient and waits for approval.",
+            "Approval publishes the candidate, records durable queue work"
+          ]
+        },
+        {
+          "path": "video/delivery/program-cue-launch-descriptions.vtt",
+          "contains": [
+            "A draft reminder preview names one recipient.",
+            "The organiser reviews the exact recipient and action.",
+            "Approval queues the reminder.",
+            "Provider acceptance remains pending."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "reviewer-opt-in-and-return",
+      "checks": [
+        {
+          "path": "app/components/evaluation-plan-state.tsx",
+          "contains": [
+            "Event opt-in. Reviewers must request suggestions after saving an initial rubric response.",
+            "Suggestions remain advisory and cannot submit a review"
+          ]
+        },
+        {
+          "path": "app/components/review-workbench-score-panel.tsx",
+          "contains": ["Cannot review"]
+        },
+        {
+          "path": "app/components/review-workbench-dialogs.tsx",
+          "contains": [
+            "title=\"Cannot review this assignment\"",
+            "description=\"Return the assignment without submitting a review.\"",
+            "The private note is never shared with the applicant.",
+            "Return without review"
+          ]
+        },
+        {
+          "path": "app/routes/review-workbench.server.ts",
+          "contains": ["Assignment returned without a review."]
+        },
+        {
+          "path": "video/scenes/DecideScene.tsx",
+          "contains": [
+            "Administrator opt-in required",
+            "Disabled until explicit opt-in",
+            "Cannot review this assignment",
+            "Return without review",
+            "Assignment returned without a review.",
+            "No draft score or recommendation is submitted.",
+            "Main review path · authorised organiser"
+          ],
+          "excludes": ["AI suggestions ready", "Review ready"]
+        },
+        {
+          "path": "video/narration.md",
+          "contains": [
+            "advisory AI can cite source evidence",
+            "A reviewer unable to complete an assignment can return it with an explicit reason."
+          ]
+        },
+        {
+          "path": "video/voiceover-script.json",
+          "contains": [
+            "can explicitly return work they cannot review.",
+            "Advisory AI stays off until an administrator opts in"
+          ]
+        },
+        {
+          "path": "video/delivery/program-cue-launch-descriptions.vtt",
+          "contains": [
+            "00:02:09.000 --> 00:02:14.000\nOptional advisory AI remains off until an administrator opts in.",
+            "00:02:14.000 --> 00:02:19.000\nA reviewer returns an unavailable assignment without submitting a review.",
+            "00:02:19.000 --> 00:02:22.000\nThe main reviewer submits an owned recommendation."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "current-communication-template-inventory",
+      "checks": [
+        {
+          "path": "app/platform/demo/demo-reset.server.test.ts",
+          "containsInOrder": [
+            "\"Participant action reminder\"",
+            "\"Speaker welcome\"",
+            "\"Speaker task reminder\"",
+            "\"Reviewer reminder\"",
+            "\"Proposal decision\"",
+            "\"Submission confirmation\""
+          ],
+          "contains": [
+            ".filter((template) => template.versionStatus === \"published\")",
+            "versionStatus: \"published\""
+          ]
+        }
+      ]
+    },
+    {
+      "id": "selected-public-surface-examples",
+      "checks": [
+        {
+          "path": "video/LaunchFilm.tsx",
+          "contains": ["label: \"One program. Everywhere it matters.\""],
+          "excludes": ["every public view"]
+        },
+        {
+          "path": "app/modules/programme/programme-presentation.ts",
+          "containsInOrder": [
+            "\"overview\"",
+            "\"sessions\"",
+            "\"speakers\"",
+            "\"schedule\"",
+            "\"timetable\"",
+            "\"gallery\""
+          ]
+        },
+        {
+          "path": "video/scenes/PublishScene.tsx",
+          "contains": [
+            "One published source",
+            "Everywhere it matters.",
+            "7 EXAMPLES",
+            "Speaker gallery",
+            "caption=\"/gallery\"",
+            "label=\"connected examples\"",
+            "SELECTED SURFACE EXAMPLES"
+          ],
+          "excludes": [
+            "Every public view",
+            "Seven public views",
+            "caption=\"/speakers\""
+          ]
+        },
+        {
+          "path": "video/narration.md",
+          "contains": [
+            "seven connected examples",
+            "distinct speaker and gallery surfaces",
+            "examples are not an exhaustive route count"
+          ]
+        },
+        {
+          "path": "video/voiceover-script.json",
+          "contains": [
+            "Seven connected examples show the published program",
+            "including speaker and gallery surfaces"
+          ]
+        },
+        {
+          "path": "video/delivery/program-cue-launch-descriptions.vtt",
+          "contains": [
+            "Scene 11 — Seven connected examples share published program data."
+          ],
+          "excludes": ["Seven public views", "Every public view"]
+        }
+      ]
+    },
+    {
+      "id": "place-published-baseline",
+      "checks": [
+        {
+          "path": "video/scenes/PlaceScene.tsx",
+          "contains": [
+            "src={ASSETS.schedulePlanner}",
+            "label=\"SCHEDULE PLANNER\"",
+            "caption=\"published baseline\""
+          ],
+          "excludes": ["caption=\"draft workspace\""]
+        },
+        {
+          "path": "video/narration.md",
+          "contains": [
+            "without changing or publishing the active draft.",
+            "An exact public-content revision moves from In review to Approved"
+          ]
+        },
+        {
+          "path": "video/delivery/program-cue-launch-descriptions.vtt",
+          "contains": [
+            "Later application changes only the active draft.",
+            "The exact public-content revision moves from In review to Approved."
+          ]
+        }
+      ]
+    }
+  ]
+}

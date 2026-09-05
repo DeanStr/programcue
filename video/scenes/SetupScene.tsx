@@ -142,7 +142,7 @@ function PhonePreview({
         }}
       />
       <Img
-        alt="Mobile published programme preview"
+        alt="Mobile published program preview"
         src={ASSETS.brandingMobile}
         style={{
           display: "block",
@@ -527,7 +527,7 @@ export function SetupScene({ duration }: ProductSceneProps) {
           </div>
         </div>
         <BrowserWindow
-          alt="Program Cue branding editor and published programme preview"
+          alt="Program Cue branding editor and published program preview"
           height={680}
           imageTop={brandWindowY - 3}
           imageWidth={1035}
@@ -635,7 +635,7 @@ export function SetupScene({ duration }: ProductSceneProps) {
             }}
           >
             <span style={{ color: PALETTE.copper, fontSize: 16 }}>↗</span> One
-            saved identity flows from preview to the public programme.
+            saved identity flows from preview to the public program.
           </div>
         </div>
       </AbsoluteFill>
@@ -670,7 +670,7 @@ export function SetupScene({ duration }: ProductSceneProps) {
             Reuse event settings
             <br />
             <span style={{ color: PALETTE.copperSoft }}>
-              across programme workflows.
+              across program workflows.
             </span>
           </div>
           <div
@@ -683,7 +683,7 @@ export function SetupScene({ duration }: ProductSceneProps) {
             }}
           >
             Event settings apply across forms, participant workspaces and the
-            public programme.
+            public program.
           </div>
         </div>
         <div

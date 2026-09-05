@@ -7,14 +7,11 @@ import {
   LockKeyhole,
   type LucideIcon,
   Menu,
-  Minus,
   MoreHorizontal,
   MousePointer2,
   ShieldCheck,
   Sparkles,
-  Square,
   UsersRound,
-  X,
 } from "lucide-react";
 import React, { type CSSProperties, type ReactNode } from "react";
 import {
@@ -44,6 +41,8 @@ const CLAMP = {
 
 const ENTER_EASE = Easing.bezier(0.22, 0.61, 0.36, 1);
 const OUT_EASE = Easing.bezier(0.16, 1, 0.3, 1);
+const PROGRAM_CUE_SANS =
+  '"Program Cue Inter", Inter, ui-sans-serif, system-ui, sans-serif';
 
 const toneMap: Record<
   Tone,
@@ -289,8 +288,7 @@ export function BrowserFrame({
           background: chromeBackground,
           borderBottom: `1px solid ${chromeLine}`,
           color: chromeText,
-          fontFamily:
-            '"Program Cue Inter", Inter, ui-sans-serif, system-ui, sans-serif',
+          fontFamily: PROGRAM_CUE_SANS,
           fontSize: 13,
           letterSpacing: "-0.01em",
         }}
@@ -362,14 +360,11 @@ export function BrowserFrame({
           style={{
             display: "flex",
             alignItems: "center",
-            gap: 11,
             flex: "0 0 auto",
             opacity: 0.72,
           }}
         >
-          <Minus size={15} strokeWidth={1.8} />
-          <Square size={12} strokeWidth={1.8} />
-          <X size={15} strokeWidth={1.8} />
+          <MoreHorizontal size={17} strokeWidth={1.8} />
         </div>
       </div>
       <div
@@ -422,7 +417,7 @@ export function BrowserFrame({
             display: "grid",
             placeItems: "center",
             color: PALETTE.muted,
-            fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
+            fontFamily: PROGRAM_CUE_SANS,
             fontSize: 16,
           }}
         >
@@ -698,7 +693,7 @@ export function ChapterLabel({
         color: colors.foreground,
         opacity: progress,
         transform: `translate3d(0, ${slideFor(progress, 10)}px, 0)`,
-        fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
+        fontFamily: PROGRAM_CUE_SANS,
         fontSize: 13,
         fontWeight: 700,
         lineHeight: 1,
@@ -790,7 +785,7 @@ export function KineticTitle({
             marginBottom: 24,
             color: accent,
             opacity: fadeIn(frame, delay, 18),
-            fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
+            fontFamily: PROGRAM_CUE_SANS,
             fontSize: 14,
             fontWeight: 750,
             letterSpacing: "0.16em",
@@ -804,7 +799,7 @@ export function KineticTitle({
         <h1
           style={{
             margin: 0,
-            fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
+            fontFamily: PROGRAM_CUE_SANS,
             fontSize: size,
             fontWeight: 700,
             lineHeight,
@@ -856,7 +851,7 @@ export function KineticTitle({
             color: tone === "dark" ? PALETTE.muted : "rgba(255,253,248,.68)",
             opacity: sublineProgress,
             transform: `translate3d(0, ${slideFor(sublineProgress, 15)}px, 0)`,
-            fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
+            fontFamily: PROGRAM_CUE_SANS,
             fontSize: 23,
             fontWeight: 450,
             lineHeight: 1.4,
@@ -912,7 +907,7 @@ export function RoleChip({
         color: colors.foreground,
         opacity: progress,
         transform: `translate3d(0, ${slideFor(progress, 9)}px, 0)`,
-        fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
+        fontFamily: PROGRAM_CUE_SANS,
         fontSize: compact ? 12 : 13,
         fontWeight: 650,
         letterSpacing: "-0.01em",
@@ -1029,7 +1024,7 @@ export function Cursor({
             background: color,
             color: PALETTE.paper,
             whiteSpace: "nowrap",
-            fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
+            fontFamily: PROGRAM_CUE_SANS,
             fontSize: 11,
             fontWeight: 750,
             letterSpacing: "0.02em",
@@ -1152,7 +1147,7 @@ export function Callout({
           transform: `translate3d(0, ${slideFor(progress, 14)}px, 0)`,
           boxShadow:
             "0 18px 38px rgba(0,0,0,.2), inset 0 1px 0 rgba(255,255,255,.1)",
-          fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
+          fontFamily: PROGRAM_CUE_SANS,
           ...style,
         }}
       >
@@ -1269,7 +1264,7 @@ export function FlowChips({
                 opacity: progress,
                 transform: `translate3d(0, ${slideFor(progress, 12)}px, 0)`,
                 boxShadow: isActive ? "0 8px 22px rgba(190,98,66,.2)" : "none",
-                fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
+                fontFamily: PROGRAM_CUE_SANS,
                 fontSize: compact ? 12 : 13,
                 fontWeight: 650,
                 letterSpacing: "-0.01em",
@@ -1390,7 +1385,7 @@ export function TruthBadge({
         color: current.color,
         opacity: progress,
         transform: `translate3d(0, ${slideFor(progress, 8)}px, 0)`,
-        fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
+        fontFamily: PROGRAM_CUE_SANS,
         fontSize: 11,
         fontWeight: 750,
         letterSpacing: "0.015em",

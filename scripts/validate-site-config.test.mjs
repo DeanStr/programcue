@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import {
   cpSync,
   mkdtempSync,
@@ -372,10 +373,92 @@ describe("published pages", () => {
       ),
     );
 
-    assert.ok(reports(captionIssues, "must match the canonical film VTT"));
-    assert.ok(
-      reports(transcriptIssues, "must exactly match the canonical VTT"),
+    assert.ok(reports(captionIssues, "do not match the release manifest"));
+    assert.ok(reports(transcriptIssues, "must exactly match the released VTT"));
+  });
+
+  test("released captions remain valid when their manifest hash is updated", () => {
+    for (const [from, to] of [
+      ["WEBVTT", "NOTVTT"],
+      ["00:00:00.000", "00:00:01.000"],
+      ["00:06:00.000", "00:06:01.000"],
+    ]) {
+      const issues = brokenSite(({ read, write }) => {
+        const file = "program-cue-product-film-en.vtt";
+        const captions = read(file).replace(from, to);
+        assert.notEqual(captions, read(file));
+        write(file, captions);
+        const release = JSON.parse(read("product-film-release.json"));
+        release.captionsSha256 = createHash("sha256")
+          .update(captions)
+          .digest("hex");
+        write("product-film-release.json", JSON.stringify(release));
+      });
+      assert.ok(reports(issues, "Published product-film captions are invalid"));
+      assert.ok(!reports(issues, "do not match the release manifest"));
+      assert.ok(!reports(issues, "must exactly match the released VTT"));
+    }
+  });
+
+  test("the product-film URL is pinned to the released master", () => {
+    const issues = brokenSite(({ replace }) =>
+      replace(
+        "index.html",
+        "program-cue-launch-92cab554.mp4",
+        "program-cue-launch-unreleased.mp4",
+      ),
     );
+    assert.ok(reports(issues, "URLs must match the released master"));
+  });
+
+  test("malformed release fields are rejected without coercion or crashes", () => {
+    for (const field of [
+      "masterSha256",
+      "masterSha256Prefix",
+      "audioStreamSha256",
+      "decodedAudioSha256",
+      "captionsSha256",
+      "posterSha256",
+    ]) {
+      const issues = brokenSite(({ read, write }) => {
+        const release = JSON.parse(read("product-film-release.json"));
+        release[field] = [release[field]];
+        write("product-film-release.json", JSON.stringify(release));
+      });
+      assert.ok(reports(issues, `${field} must be a string`), field);
+    }
+  });
+
+  test("the release URL must identify a direct immutable media object", () => {
+    for (const suffix of ["?download=", "#", "/../"]) {
+      const issues = brokenSite(({ read, write }) => {
+        const release = JSON.parse(read("product-film-release.json"));
+        release.videoUrl = `https://media.programcue.com/films/other.mp4${suffix}program-cue-launch-${release.masterSha256Prefix}.mp4`;
+        write("product-film-release.json", JSON.stringify(release));
+      });
+      assert.ok(reports(issues, "URL must contain its immutable master hash"));
+    }
+  });
+
+  test("the product-film soundtrack is pinned to the Eleven release", () => {
+    const issues = brokenSite(({ replace }) =>
+      replace(
+        "product-film-release.json",
+        '"audioSource": "eleven_music_v2"',
+        '"audioSource": "procedural"',
+      ),
+    );
+    assert.ok(reports(issues, "must select the approved eleven_music_v2"));
+  });
+
+  test("the product-film poster is pinned to the released bundle", () => {
+    const issues = brokenSite(({ write }) =>
+      write(
+        "images/program-cue-product-film-poster.webp",
+        Buffer.from("not the released poster"),
+      ),
+    );
+    assert.ok(reports(issues, "poster does not match the release manifest"));
   });
 
   test("a malformed social sharing image is rejected", () => {

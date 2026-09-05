@@ -152,4 +152,4 @@ export const PALETTE = {
 } as const;
 
 export const FILM_TITLE =
-  "Program Cue — From first proposal to published programme";
+  "Program Cue — From first proposal to published program";

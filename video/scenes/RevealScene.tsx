@@ -140,7 +140,7 @@ function RevealHandoff({ frame }: { frame: number }) {
     >
       <div style={{ width: 430 }}>
         <Kicker color={PALETTE.copperDeep}>
-          COMMAND CENTRE / PROGRAMME PULSE
+          COMMAND CENTRE / PROGRAM PULSE
         </Kicker>
         <div
           style={{
@@ -155,7 +155,7 @@ function RevealHandoff({ frame }: { frame: number }) {
         >
           Know where the
           <br />
-          <span style={{ color: PALETTE.copper }}>programme stands.</span>
+          <span style={{ color: PALETTE.copper }}>program stands.</span>
         </div>
         <p
           style={{
@@ -251,7 +251,7 @@ function RevealTitle({ frame }: { frame: number }) {
       >
         One workspace for
         <br />
-        <span style={{ color: PALETTE.copper }}>the programme lifecycle.</span>
+        <span style={{ color: PALETTE.copper }}>the program lifecycle.</span>
       </h2>
       <p
         style={{
@@ -435,7 +435,7 @@ export function RevealScene({ duration }: SceneProps) {
         }}
       >
         <div style={{ ...mono, color: PALETTE.muted, fontSize: 12 }}>
-          FROM FIRST PROPOSAL TO PUBLISHED PROGRAMME
+          FROM FIRST PROPOSAL TO PUBLISHED PROGRAM
         </div>
         <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
           <div
@@ -456,7 +456,7 @@ export function RevealScene({ duration }: SceneProps) {
             />
           </div>
           <span style={{ ...mono, color: PALETTE.copperDeep, fontSize: 12 }}>
-            PROGRAMME / 01
+            PROGRAM / 01
           </span>
         </div>
       </div>

@@ -12,20 +12,37 @@
  * This also asserts the site Worker holds no binding to production data. It
  * serves static files and nothing else.
  */
+import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { unstable_readConfig } from "wrangler";
 
+import { validateDescriptions } from "../video/scripts/validate-descriptions.mjs";
+
 import { repositoryRoot } from "./e2e-runtime.mjs";
 
 const SITE_CONFIG_FILE = "./site/wrangler.jsonc";
 const ASSET_ROOT = join(repositoryRoot, "site/public");
-const CANONICAL_FILM_CAPTIONS = join(
-  repositoryRoot,
-  "video/delivery/program-cue-launch-descriptions.vtt",
-);
+const FILM_RELEASE_MANIFEST = "product-film-release.json";
+// The published six-minute release is independent of the working-cut timeline.
+const FILM_RELEASE_DURATION_SECONDS = 360;
+const FILM_CAPTIONS = "program-cue-product-film-en.vtt";
+const FILM_POSTER = "images/program-cue-product-film-poster.webp";
+const FILM_RELEASE_KEYS = Object.freeze([
+  "schemaVersion",
+  "videoUrl",
+  "masterSha256Prefix",
+  "masterSha256",
+  "audioSource",
+  "audioStreamSha256",
+  "decodedAudioSha256",
+  "captionsFile",
+  "captionsSha256",
+  "posterFile",
+  "posterSha256",
+]);
 
 const CONTACT_EMAIL = "support@programcue.com";
 const SIGN_IN_URL = "https://app.programcue.com/sign-in";
@@ -270,6 +287,89 @@ function filmTranscriptCueText(html) {
   ).join(" ");
 }
 
+function sha256(path) {
+  return createHash("sha256").update(readFileSync(path)).digest("hex");
+}
+
+function readFilmRelease(assetRoot, add) {
+  const path = join(assetRoot, FILM_RELEASE_MANIFEST);
+  if (!existsSync(path)) {
+    add(`Published product film is missing ${FILM_RELEASE_MANIFEST}.`);
+    return undefined;
+  }
+
+  let release;
+  try {
+    release = JSON.parse(readFileSync(path, "utf8"));
+  } catch (error) {
+    add(
+      `Published product-film release manifest is invalid JSON: ${error.message}`,
+    );
+    return undefined;
+  }
+  if (
+    release === null ||
+    typeof release !== "object" ||
+    Array.isArray(release)
+  ) {
+    add("Published product-film release manifest must be an object.");
+    return undefined;
+  }
+
+  const keys = Object.keys(release).sort();
+  if (!sameMembers(keys, FILM_RELEASE_KEYS)) {
+    add("Published product-film release manifest has an unexpected shape.");
+    return undefined;
+  }
+  const invalidType = FILM_RELEASE_KEYS.find(
+    (key) => key !== "schemaVersion" && typeof release[key] !== "string",
+  );
+  if (invalidType) {
+    add(`Published product-film ${invalidType} must be a string.`);
+    return undefined;
+  }
+  if (release.schemaVersion !== 1)
+    add("Published product-film release manifest must use schemaVersion 1.");
+  if (!/^[a-f0-9]{8,64}$/.test(release.masterSha256Prefix ?? ""))
+    add("Published product-film master hash prefix is invalid.");
+  if (
+    !/^[a-f0-9]{64}$/.test(release.masterSha256 ?? "") ||
+    !release.masterSha256.startsWith(release.masterSha256Prefix ?? "")
+  ) {
+    add("Published product-film master hash is invalid.");
+  }
+  if (
+    typeof release.videoUrl !== "string" ||
+    !/^https:\/\/media\.programcue\.com\/films\/[a-z0-9-]+\.mp4$/.test(
+      release.videoUrl,
+    ) ||
+    !release.videoUrl.endsWith(`-${release.masterSha256Prefix}.mp4`)
+  ) {
+    add(
+      "Published product-film URL must contain its immutable master hash prefix.",
+    );
+  }
+  if (release.audioSource !== "eleven_music_v2") {
+    add(
+      "Published product-film audio source must select the approved eleven_music_v2 release.",
+    );
+  }
+  if (release.captionsFile !== FILM_CAPTIONS)
+    add(`Published product-film captions must be ${FILM_CAPTIONS}.`);
+  if (release.posterFile !== FILM_POSTER)
+    add(`Published product-film poster must be ${FILM_POSTER}.`);
+  for (const field of [
+    "audioStreamSha256",
+    "decodedAudioSha256",
+    "captionsSha256",
+    "posterSha256",
+  ]) {
+    if (!/^[a-f0-9]{64}$/.test(release[field] ?? ""))
+      add(`Published product-film ${field} is invalid.`);
+  }
+  return release;
+}
+
 export function validateSitePages(assetRoot = ASSET_ROOT) {
   const issues = [];
   const add = (message) => issues.push(message);
@@ -295,22 +395,62 @@ export function validateSitePages(assetRoot = ASSET_ROOT) {
     ]),
   );
 
-  const publicFilmCaptions = join(assetRoot, "program-cue-product-film-en.vtt");
-  if (!existsSync(CANONICAL_FILM_CAPTIONS))
-    add("Canonical product-film captions are missing.");
-  else if (!existsSync(publicFilmCaptions))
+  const filmRelease = readFilmRelease(assetRoot, add);
+  const publicFilmCaptions = join(assetRoot, FILM_CAPTIONS);
+  if (!existsSync(publicFilmCaptions))
     add("Published product-film captions are missing.");
   else {
-    const canonicalCaptions = readFileSync(CANONICAL_FILM_CAPTIONS, "utf8");
-    if (readFileSync(publicFilmCaptions, "utf8") !== canonicalCaptions)
-      add("Published product-film captions must match the canonical film VTT.");
+    try {
+      validateDescriptions(publicFilmCaptions, FILM_RELEASE_DURATION_SECONDS);
+    } catch (error) {
+      add(
+        `Published product-film captions are invalid: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    const publishedCaptions = readFileSync(publicFilmCaptions, "utf8");
+    if (
+      filmRelease?.captionsSha256 &&
+      sha256(publicFilmCaptions) !== filmRelease.captionsSha256
+    ) {
+      add("Published product-film captions do not match the release manifest.");
+    }
 
-    const canonicalCueText = filmCaptionCues(canonicalCaptions).join(" ");
+    const publishedCueText = filmCaptionCues(publishedCaptions).join(" ");
     const transcriptCueText = filmTranscriptCueText(
       sources.get("product-film-transcript.html") ?? "",
     );
-    if (transcriptCueText !== canonicalCueText)
-      add("Product-film transcript cues must exactly match the canonical VTT.");
+    if (transcriptCueText !== publishedCueText)
+      add("Product-film transcript cues must exactly match the released VTT.");
+  }
+
+  const publicFilmPoster = join(assetRoot, FILM_POSTER);
+  if (!existsSync(publicFilmPoster))
+    add("Published product-film poster is missing.");
+  else if (
+    filmRelease?.posterSha256 &&
+    sha256(publicFilmPoster) !== filmRelease.posterSha256
+  ) {
+    add("Published product-film poster does not match the release manifest.");
+  }
+
+  const filmHome = sources.get("index.html") ?? "";
+  if (filmRelease) {
+    const mediaUrls = Array.from(
+      filmHome.matchAll(
+        /https:\/\/media\.programcue\.com\/films\/[^"'\s<]+\.mp4/g,
+      ),
+      ([url]) => url,
+    );
+    if (
+      mediaUrls.length !== 2 ||
+      mediaUrls.some((url) => url !== filmRelease.videoUrl)
+    ) {
+      add("Home page product-film URLs must match the released master.");
+    }
+    if (!filmHome.includes(`poster="/${filmRelease.posterFile}"`))
+      add("Home page product-film poster must match the release manifest.");
+    if (!filmHome.includes(`src="/${filmRelease.captionsFile}"`))
+      add("Home page product-film captions must match the release manifest.");
   }
 
   const brandMarkPath = join(assetRoot, BRAND_MARK);

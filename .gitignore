@@ -15,6 +15,8 @@ build/
 .artifacts/
 /video/public/video/program-cue-score.wav
 /video/public/video/.program-cue-score.wav.*.tmp
+/video/public/video/program-cue-procedural-score.wav
+/video/public/video/.program-cue-procedural-score.wav.*.tmp
 worker-configuration.d.ts
 .DS_Store
 *.log

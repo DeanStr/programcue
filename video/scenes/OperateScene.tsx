@@ -1008,19 +1008,19 @@ function OperationCentreDetail({ progress }: { progress: number }) {
 function ProviderPreview({ progress }: { progress: number }) {
   const steps = [
     {
-      label: "Programme",
-      status: "CHECKED",
+      label: "Eligible records",
+      status: "IN SCOPE",
       tone: muted,
     },
     {
-      label: "Speakers & rooms",
-      status: "INCLUDED",
+      label: "Field mappings",
+      status: "PREVIEW",
       tone: copper,
     },
     {
-      label: "Export package",
-      status: "READY",
-      tone: sage,
+      label: "Dry-run option",
+      status: "NO WRITE",
+      tone: PALETTE.gold,
     },
   ];
   const previewProgress = interpolate(
@@ -1084,14 +1084,13 @@ function ProviderPreview({ progress }: { progress: number }) {
                 letterSpacing: "-0.04em",
               }}
             >
-              Accelevents export preview
+              Accelevents mapping preview
             </div>
             <div style={{ color: muted, fontSize: 13, marginTop: 5 }}>
-              Published programme fields mapped in one place
+              Eligible published records mapped for review
             </div>
           </div>
         </div>
-        <Chip tone="good">READY TO EXPORT</Chip>
       </div>
       <div
         style={{
@@ -1132,7 +1131,7 @@ function ProviderPreview({ progress }: { progress: number }) {
               letterSpacing: "0.11em",
             }}
           >
-            PROGRAMME PAYLOAD
+            PROGRAM PAYLOAD
           </div>
           <div
             style={{
@@ -1143,7 +1142,7 @@ function ProviderPreview({ progress }: { progress: number }) {
               marginTop: 14,
             }}
           >
-            Programme payload
+            Program payload
           </div>
           <div
             style={{
@@ -1153,7 +1152,7 @@ function ProviderPreview({ progress }: { progress: number }) {
               marginTop: 7,
             }}
           >
-            Sessions, speakers, tracks and room fields
+            Sessions, speakers, tracks and room/location fields
           </div>
           <div
             style={{
@@ -1242,24 +1241,24 @@ function ProviderPreview({ progress }: { progress: number }) {
           style={{
             padding: 26,
             borderRadius: 18,
-            border: `1px solid rgba(143,191,154,${0.3 + boundaryPulse * 0.18})`,
-            background: "rgba(143,191,154,.09)",
+            border: `1px solid rgba(212,167,44,${0.32 + boundaryPulse * 0.18})`,
+            background: "rgba(212,167,44,.08)",
             boxShadow: `inset 0 0 ${interpolate(
               boundaryPulse,
               [0, 1],
               [0, 22],
-            )}px rgba(143,191,154,.09)`,
+            )}px rgba(212,167,44,.1)`,
           }}
         >
           <div
             style={{
-              color: PALETTE.sageDeep,
+              color: "#806315",
               fontSize: 10,
               fontWeight: 900,
               letterSpacing: "0.11em",
             }}
           >
-            EXPORT STATUS
+            PREVIEW STATUS
           </div>
           <div
             style={{ color: ink, fontSize: 21, fontWeight: 800, marginTop: 14 }}
@@ -1271,33 +1270,33 @@ function ProviderPreview({ progress }: { progress: number }) {
                 height: 9,
                 marginRight: 9,
                 borderRadius: "50%",
-                background: PALETTE.sageDeep,
+                background: PALETTE.gold,
                 boxShadow: `0 0 0 ${interpolate(
                   boundaryPulse,
                   [0, 1],
                   [2, 7],
-                )}px rgba(143,191,154,.14)`,
+                )}px rgba(212,167,44,.16)`,
               }}
             />
-            Ready to export
+            Ready for organiser review
           </div>
           <div style={{ color: muted, fontSize: 14, marginTop: 7 }}>
-            Mappings complete
+            Live export still requires confirmation
           </div>
           <div
             style={{
               marginTop: 20,
               padding: "16px 18px",
               borderRadius: 15,
-              background: "rgba(255,253,248,.72)",
-              border: "1px solid rgba(143,191,154,.28)",
-              color: PALETTE.sageDeep,
+              background: "rgba(255,253,248,.76)",
+              border: "1px solid rgba(212,167,44,.32)",
+              color: "#806315",
               fontSize: 12,
               fontWeight: 800,
               lineHeight: 1.45,
             }}
           >
-            Review once, then confirm the export
+            Review the mapped changes, then confirm the live export
           </div>
         </div>
       </div>
@@ -1309,15 +1308,14 @@ function ProviderPreview({ progress }: { progress: number }) {
           marginTop: 20,
           padding: "18px 20px",
           borderRadius: 13,
-          background: "rgba(143,191,154,.08)",
-          border: "1px solid rgba(143,191,154,.26)",
-          color: PALETTE.sageDeep,
+          background: "rgba(212,167,44,.07)",
+          border: "1px solid rgba(212,167,44,.28)",
+          color: "#806315",
           fontSize: 14,
           fontWeight: 800,
         }}
       >
-        <Check color={PALETTE.sageDeep} /> Speakers · tracks · sessions · room
-        fields included
+        MAPPING PREVIEW · speakers · tracks · sessions · room/location fields
       </div>
     </div>
   );
@@ -1427,8 +1425,8 @@ export function OperateScene({ duration }: SceneProps) {
         >
           <AssetWindow
             src={ASSETS.programmeAdmin}
-            label="PROGRAMME PUBLISHING"
-            caption="programme operations"
+            label="PROGRAM PUBLISHING"
+            caption="program operations"
             width={750}
             height={560}
             objectPosition="center top"
@@ -1469,8 +1467,8 @@ export function OperateScene({ duration }: SceneProps) {
               maxWidth: 380,
             }}
           >
-            Use documented REST paths and webhooks to connect programme
-            operations with the tools around them.
+            Use documented REST paths and webhooks to connect program operations
+            with the tools around them.
           </div>
           <div style={{ display: "flex", gap: 9, marginTop: 28 }}>
             <Chip tone="good" dark>
@@ -1624,7 +1622,7 @@ export function OperateScene({ duration }: SceneProps) {
           }}
         >
           <Eyebrow tone="copper" dark>
-            04 · Accelevents export
+            04 · Accelevents preview
           </Eyebrow>
           <div
             style={{
@@ -1636,84 +1634,66 @@ export function OperateScene({ duration }: SceneProps) {
               marginTop: 17,
             }}
           >
-            Your programme,
+            Map the program.
             <br />
-            <span style={{ color: copper }}>mapped for Accelevents.</span>
+            <span style={{ color: copper }}>Review before export.</span>
+          </div>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 16,
+              marginTop: 24,
+              fontSize: 18,
+              fontWeight: 750,
+              letterSpacing: "0.06em",
+              lineHeight: 1.2,
+            }}
+          >
+            <span
+              style={{
+                background: "rgba(190,98,66,.1)",
+                border: "1px solid rgba(190,98,66,.34)",
+                borderRadius: 9,
+                color: PALETTE.copperSoft,
+                padding: "12px 18px",
+              }}
+            >
+              MAPPING PREVIEW
+            </span>
+            <Arrow color="rgba(255,253,248,.4)" />
+            <span
+              style={{
+                background: "rgba(255,253,248,.04)",
+                border: "1px solid rgba(255,253,248,.2)",
+                borderRadius: 9,
+                color: paper,
+                padding: "12px 18px",
+              }}
+            >
+              CONFIRM TO EXPORT
+            </span>
           </div>
           <div
             style={{
               color: "rgba(255,253,248,.56)",
-              fontSize: 14,
+              fontSize: 18,
               lineHeight: 1.5,
-              marginTop: 19,
+              marginTop: 18,
               marginLeft: "auto",
               marginRight: "auto",
               maxWidth: 710,
             }}
           >
-            Bring published programme, speaker, track, session and room fields
-            together in one export-ready package.
-          </div>
-          <div
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 11,
-              marginTop: 17,
-              padding: "12px 15px",
-              borderRadius: 999,
-              background: "rgba(143,191,154,.1)",
-              border: "1px solid rgba(143,191,154,.3)",
-              color: "#b8e7bf",
-              fontSize: 11,
-              fontWeight: 850,
-              letterSpacing: "0.08em",
-            }}
-          >
-            <Check color="#b8e7bf" /> EXPORT PACKAGE READY
-          </div>
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "center",
-              gap: 10,
-              flexWrap: "wrap",
-              marginTop: 25,
-            }}
-          >
-            <div
-              style={{
-                padding: "12px 14px",
-                borderRadius: 13,
-                border: "1px solid rgba(212,167,44,.3)",
-                background: "rgba(212,167,44,.08)",
-                color: "#f7d56b",
-                fontSize: 11,
-                fontWeight: 800,
-              }}
-            >
-              SESSIONS · SPEAKERS · TRACKS · ROOM FIELDS
-            </div>
-            <div
-              style={{
-                background: "rgba(143,191,154,.08)",
-                border: "1px solid rgba(143,191,154,.28)",
-                borderRadius: 13,
-                color: sage,
-                fontSize: 10,
-                fontWeight: 800,
-                padding: "10px 13px",
-              }}
-            >
-              ONE CONNECTED EXPORT
-            </div>
+            Review eligible records and field mappings before export.
           </div>
         </div>
         <div
           style={{
             position: "absolute",
             left: 292,
-            top: 508,
+            top: 478,
             transform: `translate3d(0, ${providerCardY}px, 0) scale(.88)`,
             transformOrigin: "top center",
           }}
@@ -1723,7 +1703,7 @@ export function OperateScene({ duration }: SceneProps) {
       </Reveal>
       <FooterRail
         progress={progress}
-        items={["contract", "queue", "recovery", "export"]}
+        items={["contract", "queue", "recovery", "preview"]}
       />
     </AbsoluteFill>
   );

@@ -1716,39 +1716,79 @@ source for application UI. The film imports static captures directly where they
 tell the story clearly. Product-faithful code-native reconstructions may show a
 verified seeded state or connect those states with continuous motion, but they
 must preserve the real workflow, permissions, state boundaries and product
-language; they cannot invent a second interface or unsupported outcome. One
-generated editorial event image may be used as event context without an
-on-screen provenance label; internal provenance remains recorded and the film
-must not claim that Program Cue delivered the depicted event. The
-default score is generated deterministically from repository-owned code and
-local assets. The delivery master is H.264/AAC in an MP4 container, progressive
-1080p30, 4:2:0, limited-range BT.709 and 48 kHz stereo. Curated stills, media
-validation and rendered masters live under the ignored `.artifacts/` directory;
-implementation status is unchanged by the existence of a marketing film.
+language; they cannot invent a second interface or unsupported outcome. Two
+generated editorial images—one human opening and one event-context
+interstitial—may be used without on-screen provenance labels. Internal
+provenance remains recorded, and the film must not claim that Program Cue
+delivered either depicted event or that any depicted person is a customer or
+speaker. The selected score is recovered from the immutable approved Eleven
+Music v2 public master. The repository pins the full master hash plus encoded
+and decoded audio hashes; Studio receives a verified decoded WAV, while the
+delivery render copies the released AAC packet stream without re-encoding it.
+The deterministic repository-owned procedural score remains an explicit,
+unmounted fallback. The delivery master is H.264/AAC in an MP4 container,
+progressive 1080p30, 4:2:0, limited-range BT.709 and 48 kHz stereo. Curated
+stills, media validation and rendered masters live under the ignored
+`.artifacts/` directory; implementation status is unchanged by the existence
+of a marketing film.
+
+Film readability is reviewed at embedded-player size as well as full 1080p.
+Chapter titles receive a 1.2-second stationary hold between the wipes; enlarged
+scheduling cards prioritise the selected move and private/draft/public state.
+AI feedback has separate reading, selection and confirmation beats over seven
+seconds, with operator-facing copy. Detailed audit and permission rules remain
+in the product and production notes. This editorial redistribution preserves
+the six-minute timeline and exact released soundtrack.
+
+The checked-in `video/story-state.json` is the film's deliberate freshness
+lock. It pins every imported product capture and asserts the current readiness
+state, navigation, Scenario Lab boundary, publication digest, AI feedback flow,
+visible preparation state and provider-preview boundary across scene source,
+narration, voice-over audition copy and the working cut's captions. A product
+or capture change that breaks an anchor requires editorial review and an
+explicit manifest update; weakening the assertion is not evidence that the
+film remains current. Studio, review-frame and render commands run this guard
+before consuming the story. The same gate validates the working VTT’s
+syntax, contiguous picture-lock coverage and reading speed before audio
+preparation or rendering. Site deployment applies the same caption validation
+to the independently pinned six-minute public release, even when its manifest
+hash and HTML transcript agree. Boundary samples cover the closing wipe, title hold
+and outgoing reveal, including the extended hold after each scene boundary.
+The Command Centre payoff keeps its opaque background through the chapter
+wipe so its text exit cannot expose the earlier screenshot. A 53-second
+review sample covers this exit in addition to the chapter-boundary samples.
 
 Master acceptance is a decoded-output contract, not a metadata-only check. The
 release gate fully decodes picture and sound, counts 10,800 readable frames,
 requires one constant-rate H.264 video stream and one 48 kHz AAC stream,
-compares the full decoded soundtrack with its selected reference, measures the
+requires the encoded AAC stream hash to match the pinned release before
+expensive decoding, compares the full decoded soundtrack with its selected reference, measures the
 encoded music master, rejects excessive black, frozen or silent spans, and
 requires the exact picture-locked VTT sidecar. A separate canary pass compares
-39 curated scene frames and 64 boundary frames with the current Remotion review
+60 curated scene frames and 136 boundary frames with the current Remotion review
 renders and produces both contact sheets. Visual inspection remains required
 for truth-label legibility, transitions and motion quality because stream
 metadata and image similarity cannot prove those editorial properties.
 
-The normal Remotion render uses the deterministic procedural score. A selected,
-pinned Eleven Music v2 candidate has a separate offline mastering recipe and
-produces an explicitly named alternate master; it never replaces the score or
-picture source implicitly. Provider IDs, source hashes, plan hash, exact sample
-trim, mastering recipe and derived hashes remain in its ignored provenance
-manifest. A scene-timed ElevenLabs voice-over audition may be retained as
+The normal Remotion render uses the exact soundtrack from the approved public
+Eleven Music v2 master. First use retrieves the immutable public object and
+fails unless its complete file hash, encoded audio-stream hash, decoded audio
+hash, duration and sample count match the checked-in release record. This is a
+public media retrieval, not a new provider generation request. A newly
+generated, pinned Eleven Music v2 candidate retains a separate offline
+mastering recipe and cannot replace the selected soundtrack implicitly.
+Provider IDs, source hashes, plan hash, exact sample trim, mastering recipe and
+derived hashes remain in its ignored provenance manifest. A scene-timed
+ElevenLabs voice-over audition may be retained as
 optional review evidence, but is not mounted in either master merely because
 generation succeeded. Any narrated alternate needs a fresh picture-locked
 editorial, lossless mix and encoded-output gate. API credentials are process-only
-secrets and are never stored in the repository. The release owner's 25 August
-2026 instruction to publish selects the pinned Eleven Music master and records
-the commercial release approval required for that delivery.
+secrets and are never stored in the repository. An earlier release owner's 25
+August 2026 instruction selected the then-pinned Eleven Music master and
+recorded the commercial-release approval applicable to that exact delivery.
+The 4 September 2026 instruction selects that delivery's exact soundtrack for
+the revised picture. It does not itself publish or approve replacement of the
+public video before the new master passes its delivery gates.
 
 The public website delivers that approved master as one immutable progressive
 MP4 from the dedicated `programcue-media` R2 bucket at
@@ -1763,11 +1803,14 @@ picture-locked caption sidecar. The public-site Worker retains `script-src` and
 `media-src`. A visible HTML transcript beside the player provides the complete
 visual narrative to people who cannot use the video or its optional caption
 track. The public-site release validator requires both the checked-in caption
-sidecar and every transcript cue to match the canonical picture-locked VTT, so
-these static delivery assets cannot drift silently. R2 is preferred over Stream
-for this single low-bitrate film while its storage and request volume remain
-inside the included allowance; adaptive encoding can move to Stream later
-without changing the Remotion master.
+sidecar and every transcript cue to match the released VTT. The checked-in
+`site/public/product-film-release.json` also pins the immutable media URL, its
+complete master hash, encoded and decoded audio hashes, selected audio source,
+caption hash and poster hash. This keeps an unpublished working cut from
+silently changing the approved public bundle. R2 is preferred over Stream for
+this single low-bitrate film while its storage and request volume remain inside
+the included allowance; adaptive encoding can move to Stream later without
+changing the Remotion master.
 
 ## Bounded participant-operations depth
 
@@ -1960,3 +2003,8 @@ failed or non-`ok` result blocks deployment. Cloudflare's protected `_cf_`
 internal tables are excluded because D1 rejects direct inspection of them.
 Foreign-key validation and the explicit migration/schema contracts remain
 separate blocking checks.
+
+The launch film uses US English “program” for conference content in authored
+headlines, labels, descriptions and narration. The product name stays
+“Program Cue”; actual route paths and captured application screens retain their
+source spelling. This editorial change does not republish the existing video.

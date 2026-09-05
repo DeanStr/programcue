@@ -30,26 +30,18 @@ import {
   TopBar,
 } from "./CollectDecideSceneShared";
 
-function ReviewEvidenceState({
-  compact = false,
-  showSuggestions = false,
-  style,
-}: {
-  compact?: boolean;
-  showSuggestions?: boolean;
-  style: CSSProperties;
-}) {
+function ReviewAiBoundaryState({ style }: { style: CSSProperties }) {
   return (
     <div
       style={{
         background: "linear-gradient(135deg, #f7fbf7, #ffffff)",
         border: "1px solid rgba(58,95,66,.24)",
-        borderRadius: compact ? 7 : 10,
+        borderRadius: 10,
         boxShadow: "0 8px 22px rgba(24,37,34,.07)",
         boxSizing: "border-box",
         color: PALETTE.ink,
         overflow: "hidden",
-        padding: compact ? "8px 10px" : "12px 14px",
+        padding: "12px 14px",
         position: "absolute",
         zIndex: 3,
         ...style,
@@ -58,54 +50,34 @@ function ReviewEvidenceState({
       <div
         style={{
           color: PALETTE.sageDeep,
-          fontSize: compact ? 7 : 10,
+          fontSize: 10,
           fontWeight: 850,
           letterSpacing: ".08em",
           textTransform: "uppercase",
         }}
       >
-        Evidence assistant ready
+        Administrator opt-in required
       </div>
       <div
         style={{
-          fontSize: compact ? 8 : 11,
+          fontSize: 11,
           fontWeight: 760,
           lineHeight: 1.35,
-          marginTop: compact ? 5 : 7,
+          marginTop: 7,
         }}
       >
-        Cited suggestions bring the strongest source evidence into focus.
+        Advisory AI stays unavailable until this event explicitly enables it.
       </div>
       <div
         style={{
           color: PALETTE.sageDeep,
-          fontSize: compact ? 7 : 9,
+          fontSize: 9,
           fontWeight: 760,
-          marginTop: compact ? 5 : 7,
+          marginTop: 7,
         }}
       >
-        Source linked · reviewer decides
+        AI suggests · reviewer decides
       </div>
-      {showSuggestions ? (
-        <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-          {["Audience relevance · 4", "Practical value · 5"].map((item) => (
-            <span
-              key={item}
-              style={{
-                background: "rgba(143,191,154,.13)",
-                border: "1px solid rgba(58,95,66,.18)",
-                borderRadius: 999,
-                color: PALETTE.sageDeep,
-                fontSize: 8,
-                fontWeight: 760,
-                padding: "4px 7px",
-              }}
-            >
-              {item}
-            </span>
-          ))}
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -136,7 +108,7 @@ function DecideOpening({ start, end }: { start: number; end: number }) {
             fontWeight: 740,
           }}
         >
-          Choose the programme
+          Choose the program
           <br />
           <span style={{ color: PALETTE.sage }}>your audience came for.</span>
         </h1>
@@ -252,12 +224,7 @@ function DecideContext({ start, end }: { start: number; end: number }) {
         start={start + 7}
         end={end}
         objectPosition="72% 38%"
-      >
-        <ReviewEvidenceState
-          showSuggestions
-          style={{ height: 116, left: 220, top: 188, width: 425 }}
-        />
-      </BrowserShot>
+      />
       <div
         style={{
           position: "absolute",
@@ -530,7 +497,7 @@ function AdvisoryCard({
           ✦
         </span>
         <span style={{ color: PALETTE.paper, fontSize: 14, fontWeight: 850 }}>
-          AI evidence assistant
+          When configured · advisory only
         </span>
         <span
           style={{
@@ -546,7 +513,7 @@ function AdvisoryCard({
             textTransform: "uppercase",
           }}
         >
-          Evidence-linked suggestions
+          Explicit opt-in
         </span>
       </div>
       <p
@@ -557,11 +524,11 @@ function AdvisoryCard({
           lineHeight: 1.46,
         }}
       >
-        Source-linked suggestions bring the strongest evidence into focus.
-        Import what matters, then complete the review.
+        Suggestions can cite source evidence and offer closed-criterion values.
+        They never submit or change a reviewer&apos;s score.
       </p>
       <div style={{ marginTop: 15, display: "flex", flexWrap: "wrap", gap: 7 }}>
-        {["Source cited", "Import what matters", "Reviewer decides"].map(
+        {["Source cited", "No score changes", "Reviewer decides"].map(
           (item) => (
             <span
               key={item}
@@ -589,12 +556,12 @@ function DecideAdvisory({ start, end }: { start: number; end: number }) {
   return (
     <Stage start={start} end={end}>
       <div style={{ position: "absolute", left: 110, top: 188 }}>
-        <RolePill label="AI-assisted review" color={PALETTE.sage} />
+        <RolePill label="Optional AI boundary" color={PALETTE.sage} />
         <div style={{ marginTop: 28 }}>
           <Headline
-            eyebrow="03 / Turn evidence into insight"
-            title={"Let AI bring\nthe evidence\ninto focus."}
-            body="AI brings cited evidence and suggested values alongside the source. Reviewers choose what matters."
+            eyebrow="03 / Keep assistance explicit"
+            title={"Use AI only\nwhen the event\nenables it."}
+            body="Administrators opt in first. If enabled, suggestions cite source evidence; reviewers still own every score and submission."
             accent={PALETTE.sage}
           />
         </div>
@@ -602,7 +569,7 @@ function DecideAdvisory({ start, end }: { start: number; end: number }) {
       <BrowserShot
         src={ASSETS.reviewWorkbench}
         label="Evaluator workspace · reviewer suggestions"
-        caption="Cited suggestions · your call"
+        caption="Disabled until explicit opt-in"
         x={703}
         y={161}
         width={1050}
@@ -611,8 +578,8 @@ function DecideAdvisory({ start, end }: { start: number; end: number }) {
         end={end}
         objectPosition="50% 51%"
       >
-        <ReviewEvidenceState
-          style={{ height: 92, left: 232, top: 130, width: 410 }}
+        <ReviewAiBoundaryState
+          style={{ height: 96, left: 232, top: 128, width: 410 }}
         />
         <div
           style={{
@@ -642,123 +609,518 @@ function DecideAdvisory({ start, end }: { start: number; end: number }) {
           ...baseText,
         }}
       >
-        Source → cited insight → confident review
+        Opt in → cite the source → keep the human decision
       </div>
     </Stage>
   );
 }
 
-function SubmitReviewCard({ start }: { start: number }) {
+function ReviewReturnFlow({ start }: { start: number }) {
   const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
-  const p = pop(frame, start, fps);
+  const local = frame - start;
+  const clampMotion = {
+    easing: ease,
+    extrapolateLeft: "clamp" as const,
+    extrapolateRight: "clamp" as const,
+  };
+  const actionOpacity = interpolate(
+    local,
+    [12, 28, 55, 64],
+    [0, 1, 1, 0],
+    clampMotion,
+  );
+  const dialogOpacity = interpolate(
+    local,
+    [56, 66, 121, 122],
+    [0, 1, 1, 0],
+    clampMotion,
+  );
+  const resultOpacity = local >= 122 ? 1 : 0;
+  const pointerOpacity = interpolate(
+    local,
+    [18, 24, 118, 121],
+    [0, 1, 1, 0],
+    clampMotion,
+  );
+  const pointerX = interpolate(
+    local,
+    [20, 52, 62, 78, 84, 91, 99, 114],
+    [930, 405, 405, 520, 520, 520, 520, 770],
+    clampMotion,
+  );
+  const pointerY = interpolate(
+    local,
+    [20, 52, 62, 78, 84, 91, 99, 114],
+    [625, 581, 581, 190, 190, 315, 315, 480],
+    clampMotion,
+  );
+  const cannotReviewPress = interpolate(
+    local,
+    [50, 54, 59],
+    [0, 1, 0],
+    clampMotion,
+  );
+  const reasonPress = interpolate(local, [76, 79, 83], [0, 1, 0], clampMotion);
+  const notePress = interpolate(local, [89, 92, 96], [0, 1, 0], clampMotion);
+  const returnPress = interpolate(
+    local,
+    [111, 115, 120],
+    [0, 1, 0],
+    clampMotion,
+  );
+  const press = Math.max(
+    cannotReviewPress,
+    reasonPress,
+    notePress,
+    returnPress,
+  );
+  const actionRipple = interpolate(local, [52, 64], [0, 1], clampMotion);
+  const returnRipple = interpolate(local, [113, 124], [0, 1], clampMotion);
+  const reasonSelected = local >= 81;
+  const note = "Unavailable for the remainder of this review cycle.";
+  const noteLength = Math.floor(
+    interpolate(local, [94, 108], [0, note.length], clampMotion),
+  );
+  const returning = local >= 116;
+
   return (
-    <div
-      style={{
-        position: "absolute",
-        left: 1254,
-        top: 300,
-        width: 382,
-        padding: 21,
-        borderRadius: 15,
-        background: "rgba(247,245,241,.98)",
-        color: PALETTE.ink,
-        opacity: p,
-        transform: `translateY(${interpolate(p, [0, 1], [22, 0])}px)`,
-        boxShadow: "0 24px 50px rgba(0,0,0,.32)",
-        ...baseText,
-      }}
+    <BrowserShot
+      src={ASSETS.reviewWorkbench}
+      label="Evaluator workspace · review actions"
+      caption="Explicit return · no review submitted"
+      x={704}
+      y={157}
+      width={1054}
+      height={728}
+      start={start + 4}
+      end={start + 205}
+      holdToEnd
+      objectPosition="77% 55%"
     >
       <div
         style={{
-          color: PALETTE.copperDeep,
-          fontSize: 10,
-          letterSpacing: ".14em",
-          textTransform: "uppercase",
-          fontWeight: 900,
+          background: "rgba(13,24,22,.54)",
+          inset: 0,
+          opacity: dialogOpacity,
+          position: "absolute",
+          zIndex: 4,
         }}
-      >
-        SUBMITTED REVIEW
-      </div>
+      />
+
       <div
         style={{
-          marginTop: 12,
+          background: "rgba(255,253,248,.985)",
+          border: "1px solid rgba(173,70,52,.22)",
+          borderRadius: 17,
+          bottom: 38,
+          boxShadow: "0 24px 58px rgba(24,37,34,.24)",
           color: PALETTE.ink,
-          fontSize: 23,
-          lineHeight: 1.05,
-          letterSpacing: "-.05em",
-          fontWeight: 850,
+          left: 302,
+          opacity: actionOpacity,
+          padding: "18px 22px 20px",
+          position: "absolute",
+          width: 718,
+          zIndex: 6,
         }}
       >
-        Review recorded.
-      </div>
-      <div
-        style={{
-          marginTop: 14,
-          display: "flex",
-          flexDirection: "column",
-          gap: 9,
-        }}
-      >
-        {[
-          "4 criteria scored",
-          "Recommendation · Waitlist",
-          "Applicant feedback reviewed",
-        ].map((item) => (
-          <div
-            key={item}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 9,
-              color: "#596860",
-              fontSize: 11,
-              fontWeight: 700,
-            }}
-          >
-            <span style={{ color: PALETTE.sageDeep, fontSize: 14 }}>✓</span>
-            {item}
-          </div>
-        ))}
-      </div>
-      <div
-        style={{
-          marginTop: 19,
-          display: "flex",
-          justifyContent: "flex-end",
-        }}
-      >
-        <span
+        <div
           style={{
-            padding: "9px 13px",
-            borderRadius: 8,
-            background: PALETTE.sageDeep,
-            border: `1px solid ${PALETTE.sageDeep}`,
-            color: PALETTE.paper,
-            fontSize: 11,
-            fontWeight: 850,
+            alignItems: "center",
+            display: "flex",
+            justifyContent: "space-between",
           }}
         >
-          REVIEW SUBMITTED ✓
-        </span>
+          <span
+            style={{
+              color: "#66736d",
+              fontSize: 14,
+              fontWeight: 780,
+              letterSpacing: ".08em",
+              textTransform: "uppercase",
+            }}
+          >
+            Review actions
+          </span>
+          <span
+            style={{
+              color: PALETTE.sageDeep,
+              fontSize: 15,
+              fontWeight: 800,
+            }}
+          >
+            Saved
+          </span>
+        </div>
+        <div
+          style={{
+            alignItems: "center",
+            display: "flex",
+            gap: 11,
+            justifyContent: "flex-end",
+            marginTop: 17,
+          }}
+        >
+          <span
+            style={{
+              background:
+                cannotReviewPress > 0.08 ? "rgba(173,70,52,.1)" : "#fffdf8",
+              border: "1.5px solid rgba(173,70,52,.58)",
+              borderRadius: 9,
+              color: "#a33d32",
+              fontSize: 20,
+              fontWeight: 820,
+              padding: "13px 18px",
+              transform: `scale(${1 - cannotReviewPress * 0.035})`,
+            }}
+          >
+            Cannot review
+          </span>
+          {(
+            [
+              ["Save draft", false],
+              ["Submit review", false],
+              ["Submit and open next", true],
+            ] as const
+          ).map(([label, primary]) => (
+            <span
+              key={label}
+              style={{
+                background: primary ? "#c99280" : "#fffdf8",
+                border: `1px solid ${primary ? "#c99280" : "#d8d6cf"}`,
+                borderRadius: 9,
+                color: primary ? "#fff" : "#52605a",
+                fontSize: 15,
+                fontWeight: 760,
+                padding: "14px 15px",
+              }}
+            >
+              {label}
+            </span>
+          ))}
+        </div>
       </div>
-    </div>
+
+      <div
+        style={{
+          border: "2px solid rgba(173,70,52,.72)",
+          borderRadius: "50%",
+          height: 38 + actionRipple * 76,
+          left: 405 - (38 + actionRipple * 76) / 2,
+          opacity: (1 - actionRipple) * actionOpacity,
+          position: "absolute",
+          top: 581 - (38 + actionRipple * 76) / 2,
+          width: 38 + actionRipple * 76,
+          zIndex: 8,
+        }}
+      />
+
+      <div
+        style={{
+          background: "#fffdf8",
+          border: "1px solid rgba(24,37,34,.13)",
+          borderRadius: 19,
+          boxShadow: "0 34px 90px rgba(0,0,0,.34)",
+          color: PALETTE.ink,
+          left: 142,
+          opacity: dialogOpacity,
+          overflow: "hidden",
+          position: "absolute",
+          top: 30,
+          transform: `translateY(${(1 - dialogOpacity) * 16}px) scale(${0.985 + dialogOpacity * 0.015})`,
+          width: 770,
+          zIndex: 10,
+        }}
+      >
+        <div style={{ padding: "25px 29px 22px" }}>
+          <div
+            style={{
+              alignItems: "flex-start",
+              display: "flex",
+              gap: 20,
+              justifyContent: "space-between",
+            }}
+          >
+            <div>
+              <div
+                style={{
+                  fontSize: 34,
+                  fontWeight: 850,
+                  letterSpacing: "-.045em",
+                  lineHeight: 1.05,
+                }}
+              >
+                Cannot review this assignment
+              </div>
+              <div
+                style={{
+                  color: "#65716b",
+                  fontSize: 19,
+                  lineHeight: 1.35,
+                  marginTop: 8,
+                }}
+              >
+                Return the assignment without submitting a review.
+              </div>
+            </div>
+            <span
+              style={{
+                color: "#7c8781",
+                fontSize: 24,
+                fontWeight: 500,
+                lineHeight: 1,
+              }}
+            >
+              ×
+            </span>
+          </div>
+        </div>
+        <div
+          style={{
+            borderTop: "1px solid #e1ded6",
+            padding: "20px 29px 26px",
+          }}
+        >
+          <div style={{ color: "#34423c", fontSize: 17, fontWeight: 820 }}>
+            Reason
+          </div>
+          <div
+            style={{
+              alignItems: "center",
+              background: "#fff",
+              border: `1.5px solid ${reasonSelected ? "rgba(58,95,66,.56)" : "#cbc9c2"}`,
+              borderRadius: 9,
+              color: reasonSelected ? PALETTE.ink : "#7c8781",
+              display: "flex",
+              fontSize: 18,
+              fontWeight: reasonSelected ? 760 : 600,
+              justifyContent: "space-between",
+              marginTop: 8,
+              padding: "13px 15px",
+            }}
+          >
+            <span>{reasonSelected ? "Unavailable" : "Choose a reason"}</span>
+            <span style={{ color: "#78837d", fontSize: 14 }}>▾</span>
+          </div>
+
+          <div
+            style={{
+              color: "#34423c",
+              fontSize: 17,
+              fontWeight: 820,
+              marginTop: 17,
+            }}
+          >
+            Private note{" "}
+            <span style={{ color: "#7b8680", fontWeight: 650 }}>
+              (optional)
+            </span>
+          </div>
+          <div
+            style={{
+              background: "#fff",
+              border: "1.5px solid #cbc9c2",
+              borderRadius: 9,
+              color: PALETTE.ink,
+              fontSize: 17,
+              height: 58,
+              lineHeight: 1.35,
+              marginTop: 8,
+              padding: "12px 14px",
+            }}
+          >
+            {note.slice(0, noteLength)}
+            {local >= 94 && local < 111 ? (
+              <span style={{ color: PALETTE.copperDeep }}>│</span>
+            ) : null}
+          </div>
+
+          <div
+            style={{
+              background: "rgba(190,98,66,.075)",
+              border: "1px solid rgba(190,98,66,.19)",
+              borderRadius: 10,
+              color: "#5f6c66",
+              fontSize: 16,
+              fontWeight: 630,
+              lineHeight: 1.38,
+              marginTop: 17,
+              padding: "12px 14px",
+            }}
+          >
+            This resolves the assignment for your queue but reduces organizer
+            coverage. The private note is never shared with the applicant.
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "flex-end",
+              marginTop: 18,
+            }}
+          >
+            <span
+              style={{
+                background: returning ? "#91382f" : "#ad4634",
+                border: "1px solid #91382f",
+                borderRadius: 9,
+                color: "#fff",
+                fontSize: 19,
+                fontWeight: 820,
+                padding: "13px 18px",
+                transform: `scale(${1 - returnPress * 0.035})`,
+              }}
+            >
+              {returning ? "Returning…" : "Return without review"}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div
+        style={{
+          border: "2px solid rgba(246,197,169,.78)",
+          borderRadius: "50%",
+          height: 40 + returnRipple * 86,
+          left: 770 - (40 + returnRipple * 86) / 2,
+          opacity: (1 - returnRipple) * dialogOpacity,
+          position: "absolute",
+          top: 480 - (40 + returnRipple * 86) / 2,
+          width: 40 + returnRipple * 86,
+          zIndex: 12,
+        }}
+      />
+
+      <div
+        style={{
+          background:
+            "linear-gradient(145deg, rgba(248,250,246,.99), rgba(255,253,248,.99))",
+          border: "1px solid rgba(58,95,66,.27)",
+          borderRadius: 20,
+          boxShadow: "0 30px 76px rgba(24,37,34,.28)",
+          color: PALETTE.ink,
+          left: 188,
+          opacity: resultOpacity,
+          padding: "31px 34px 30px",
+          position: "absolute",
+          top: 164,
+          transform: `translateY(${(1 - resultOpacity) * 18}px)`,
+          width: 678,
+          zIndex: 9,
+        }}
+      >
+        <div style={{ alignItems: "center", display: "flex", gap: 18 }}>
+          <span
+            style={{
+              background: PALETTE.sageDeep,
+              borderRadius: "50%",
+              color: PALETTE.paper,
+              display: "grid",
+              fontSize: 25,
+              fontWeight: 900,
+              height: 52,
+              placeItems: "center",
+              width: 52,
+            }}
+          >
+            ✓
+          </span>
+          <div>
+            <div
+              style={{
+                color: PALETTE.sageDeep,
+                fontSize: 14,
+                fontWeight: 900,
+                letterSpacing: ".1em",
+                textTransform: "uppercase",
+              }}
+            >
+              Returned · no review submitted
+            </div>
+            <div
+              style={{
+                fontSize: 34,
+                fontWeight: 860,
+                letterSpacing: "-.05em",
+                marginTop: 6,
+              }}
+            >
+              Assignment returned without a review.
+            </div>
+          </div>
+        </div>
+        <div
+          style={{
+            borderTop: "1px solid #dadfd8",
+            color: "#596761",
+            display: "grid",
+            fontSize: 17,
+            gap: 11,
+            gridTemplateColumns: "1fr 1fr",
+            lineHeight: 1.36,
+            marginTop: 25,
+            paddingTop: 20,
+          }}
+        >
+          <span>
+            <strong style={{ color: PALETTE.ink }}>Reason</strong>
+            <br />
+            Unavailable
+          </span>
+          <span>
+            <strong style={{ color: PALETTE.ink }}>Queue</strong>
+            <br />1 assignment remains
+          </span>
+          <span>
+            <strong style={{ color: PALETTE.ink }}>Review</strong>
+            <br />
+            Nothing submitted
+          </span>
+          <span>
+            <strong style={{ color: PALETTE.ink }}>Private note</strong>
+            <br />
+            Not shared with applicant
+          </span>
+        </div>
+      </div>
+
+      <div
+        style={{
+          filter: "drop-shadow(0 8px 12px rgba(0,0,0,.24))",
+          left: pointerX,
+          opacity: pointerOpacity,
+          position: "absolute",
+          top: pointerY,
+          transform: `translate(-4px, -3px) scale(${1 - press * 0.08})`,
+          zIndex: 20,
+        }}
+      >
+        <svg aria-hidden="true" height="38" viewBox="0 0 32 40" width="31">
+          <path
+            d="M4 2.5v28.4l7.5-6.2 5.4 11.9 6-2.8-5.2-11.4H28L4 2.5Z"
+            fill="#fffdf8"
+            stroke="#182522"
+            strokeLinejoin="round"
+            strokeWidth="2.4"
+          />
+        </svg>
+      </div>
+    </BrowserShot>
   );
 }
 
 function DecideSubmit({ start, end }: { start: number; end: number }) {
   return (
-    <Stage start={start} end={end}>
+    <Stage start={start} end={end} visibleUntil={end}>
       <div style={{ position: "absolute", left: 110, top: 191 }}>
         <RolePill
-          label="Evaluator · recommendation"
+          label="Alternate reviewer path · cannot review"
           color={PALETTE.copperSoft}
         />
         <div style={{ marginTop: 28 }}>
           <Headline
-            eyebrow="04 / Make the recommendation"
-            title={"Turn every review\ninto a clear\nrecommendation."}
-            body="Finish the shared rubric, add useful feedback and send the organiser a confident recommendation."
+            eyebrow="04 / Submit—or return explicitly"
+            title={"Complete the review.\nOr return it\nwithout one."}
+            body="If a reviewer cannot continue, they choose a reason and return the assignment without submitting their draft."
           />
         </div>
         <div
@@ -770,37 +1132,21 @@ function DecideSubmit({ start, end }: { start: number; end: number }) {
             width: 415,
           }}
         >
-          <Check>Keep conflicts of interest clear.</Check>
-          <Check>Share helpful feedback without exposing private notes.</Check>
+          <Check>No draft score or recommendation is submitted.</Check>
+          <Check>The private note is never shared with the applicant.</Check>
         </div>
       </div>
-      <BrowserShot
-        src={ASSETS.reviewWorkbench}
-        label="Evaluator workspace · final check"
-        x={724}
-        y={178}
-        width={690}
-        height={704}
-        start={start + 8}
-        end={end}
-        objectPosition="76% 55%"
-      >
-        <ReviewEvidenceState
-          compact
-          style={{ height: 88, left: 144, top: 178, width: 281 }}
-        />
-      </BrowserShot>
-      <SubmitReviewCard start={start + 56} />
+      <ReviewReturnFlow start={start} />
       <div
         style={{
           position: "absolute",
-          left: 750,
-          top: 837,
+          left: 760,
+          top: 911,
           display: "flex",
           alignItems: "center",
-          gap: 9,
+          gap: 10,
           color: PALETTE.sage,
-          fontSize: 11,
+          fontSize: 12,
           fontWeight: 800,
           letterSpacing: ".1em",
           textTransform: "uppercase",
@@ -816,7 +1162,7 @@ function DecideSubmit({ start, end }: { start: number; end: number }) {
             boxShadow: `0 0 0 5px ${PALETTE.sage}22`,
           }}
         />{" "}
-        The organiser's decision preview now includes this review
+        Cannot review → choose a reason → return without review
       </div>
     </Stage>
   );
@@ -976,7 +1322,7 @@ function DecidePreview({ start, end }: { start: number; end: number }) {
   const { fps } = useVideoConfig();
   const p = pop(frame, start, fps);
   return (
-    <Stage start={start} end={end}>
+    <Stage start={start} end={end} visibleFrom={start}>
       <div
         style={{
           position: "absolute",
@@ -986,14 +1332,14 @@ function DecidePreview({ start, end }: { start: number; end: number }) {
         }}
       >
         <RolePill
-          label="Admin · review & selection"
+          label="Main review path · authorised organiser"
           color={PALETTE.copperSoft}
         />
         <div style={{ marginTop: 28 }}>
           <Headline
             eyebrow="05 / Review decision evidence"
             title={"Review decision evidence\nand release status."}
-            body="Submitted reviews inform an organiser-approved programme decision."
+            body="Only submitted reviews inform the organiser's program decision; returned drafts stay out."
           />
         </div>
         <div
@@ -1066,18 +1412,18 @@ export function DecideScene({ duration }: SceneProps) {
   const advisoryStart = Math.round(d * 0.46);
   const advisoryEnd = Math.round(d * 0.65);
   const submitStart = Math.round(d * 0.62);
-  const submitEnd = Math.round(d * 0.81);
-  const previewStart = Math.round(d * 0.78);
+  const submitEnd = Math.round(d * 0.795);
+  const previewStart = submitEnd;
   const previewEnd = Math.round(d * 0.93);
   const endStart = Math.round(d * 0.9);
   const railActive =
-    frame < contextStart
+    frame < rubricStart
       ? 0
-      : frame < rubricStart
+      : frame < advisoryStart
         ? 1
-        : frame < advisoryStart
+        : frame < submitStart
           ? 2
-          : frame < submitStart
+          : frame < previewStart
             ? 3
             : 4;
 
@@ -1096,7 +1442,13 @@ export function DecideScene({ duration }: SceneProps) {
         step="06 / 13"
       />
       <FlowRail
-        items={["Context", "Rubric", "Advisory", "Submit", "Preview"]}
+        items={[
+          "Context",
+          "Rubric",
+          "AI boundary",
+          "Submit / return",
+          "Preview",
+        ]}
         active={railActive}
       />
       <DecideOpening start={0} end={openingEnd} />
@@ -1109,7 +1461,7 @@ export function DecideScene({ duration }: SceneProps) {
       <Footer
         label="Decide"
         progress={frame / d}
-        right="context → rubric → advisory → submit → decision preview"
+        right="context → rubric → AI boundary → submit or return → decision preview"
       />
       <Grain />
     </AbsoluteFill>

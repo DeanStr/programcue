@@ -331,7 +331,7 @@ export function TopBar({
             Program Cue
           </div>
           <div style={{ color: WHITE_56, fontSize: 11, marginTop: 3 }}>
-            programme operations
+            program operations
           </div>
         </div>
       </div>

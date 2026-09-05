@@ -27,7 +27,6 @@ import {
   ink,
   line,
   local,
-  Metric,
   MiniAvatar,
   muted,
   paper,
@@ -259,7 +258,7 @@ function PlaceConflictCard({ progress }: { progress: number }) {
               boxShadow: `0 0 0 ${interpolate(alertPulse, [0, 1], [0, 7])}px rgba(220,38,38,.12)`,
             }}
           />
-          Conflict caught. Live programme protected.
+          Conflict caught. Live program protected.
         </div>
         <span style={{ color: muted, fontSize: 11, fontWeight: 700 }}>
           current conflict-policy revision
@@ -270,9 +269,19 @@ function PlaceConflictCard({ progress }: { progress: number }) {
 }
 
 function AutoPlacementCard({ progress }: { progress: number }) {
-  const subsetProgress = ease(local(progress, 0.36, 0.55));
-  const applyProgress = ease(local(progress, 0.62, 0.8));
-  const resultProgress = ease(local(progress, 0.8, 0.96));
+  const nameProgress = ease(local(progress, 0.03, 0.18));
+  const subsetProgress = ease(local(progress, 0.14, 0.3));
+  const saveProgress = ease(local(progress, 0.3, 0.48));
+  const applyProgress = ease(local(progress, 0.6, 0.73));
+  const scenarioSaving = progress >= 0.32;
+  const scenarioSaved = progress >= 0.48;
+  const scenarioApplying = progress >= 0.6;
+  const scenarioApplied = progress >= 0.77;
+  const scenarioName = "Thursday capacity option";
+  const visibleScenarioName = scenarioName.slice(
+    0,
+    Math.round(interpolate(nameProgress, [0, 1], [0, scenarioName.length])),
+  );
   const proposals = [
     {
       title: placementStory.title,
@@ -290,9 +299,9 @@ function AutoPlacementCard({ progress }: { progress: number }) {
   return (
     <div
       style={{
-        width: 672,
+        width: 960,
         borderRadius: 24,
-        padding: 25,
+        padding: 22,
         color: ink,
         background: paper,
         border: `1px solid ${line}`,
@@ -303,23 +312,135 @@ function AutoPlacementCard({ progress }: { progress: number }) {
         style={{
           display: "flex",
           alignItems: "flex-start",
+          gap: 18,
           justifyContent: "space-between",
-          marginBottom: 20,
+          marginBottom: 14,
         }}
       >
         <div>
           <div
-            style={{ fontSize: 22, fontWeight: 850, letterSpacing: "-0.04em" }}
+            style={{
+              color: PALETTE.copperDeep,
+              fontSize: 16,
+              fontWeight: 900,
+              letterSpacing: "0.14em",
+              textTransform: "uppercase",
+            }}
           >
-            Auto-place unscheduled sessions
+            Scenario Lab
           </div>
-          <div style={{ color: muted, fontSize: 12, marginTop: 6 }}>
-            Maya’s session is unscheduled; preview the current draft revision.
+          <div
+            style={{
+              fontSize: 30,
+              fontWeight: 850,
+              letterSpacing: "-0.04em",
+              marginTop: 5,
+            }}
+          >
+            Compare before changing the draft
           </div>
         </div>
-        <Chip tone="copper">2 proposals · 1 unplaced</Chip>
+        <Chip
+          tone={scenarioApplied ? "warn" : scenarioSaved ? "good" : "copper"}
+        >
+          {scenarioApplied
+            ? "PRIVATE · NEEDS REFRESH"
+            : scenarioSaved
+              ? "PRIVATE · READY TO COMPARE"
+              : "PRIVATE ALTERNATIVE"}
+        </Chip>
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 340px",
+          gap: 10,
+          marginBottom: 11,
+        }}
+      >
+        <div
+          style={{
+            alignItems: "center",
+            background: "#fff",
+            border: `1px solid ${interpolateColors(nameProgress, [0, 1], [line, "rgba(190,98,66,.42)"])}`,
+            borderRadius: 13,
+            display: "flex",
+            minHeight: 76,
+            padding: "0 13px",
+          }}
+        >
+          <div style={{ flex: 1 }}>
+            <div
+              style={{
+                color: muted,
+                fontSize: 14,
+                fontWeight: 900,
+                letterSpacing: "0.12em",
+                textTransform: "uppercase",
+              }}
+            >
+              Scenario name
+            </div>
+            <div style={{ fontSize: 24, fontWeight: 820, marginTop: 4 }}>
+              {visibleScenarioName}
+              <span
+                style={{
+                  color: copper,
+                  opacity: nameProgress < 1 ? 1 : 0,
+                }}
+              >
+                |
+              </span>
+            </div>
+          </div>
+          <span style={{ color: muted, fontSize: 16, fontWeight: 800 }}>
+            DRAFT REV 12
+          </span>
+        </div>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(3, 1fr)",
+            overflow: "hidden",
+            border: `1px solid ${line}`,
+            borderRadius: 13,
+            background: "rgba(24,37,34,.025)",
+          }}
+        >
+          {[
+            ["Selected moves", "1"],
+            ["Warnings", "0"],
+            ["Unplaced", "1"],
+          ].map(([label, value], index) => (
+            <div
+              key={label}
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "center",
+                padding: "8px 9px",
+                borderLeft: index ? `1px solid ${line}` : undefined,
+              }}
+            >
+              <div style={{ fontSize: 26, fontWeight: 880 }}>{value}</div>
+              <div
+                style={{
+                  color: muted,
+                  fontSize: 14,
+                  fontWeight: 850,
+                  letterSpacing: "0.06em",
+                  lineHeight: 1.25,
+                  marginTop: 2,
+                  textTransform: "uppercase",
+                }}
+              >
+                {label}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
         {proposals.map((proposal, index) => {
           const proposalProgress = ease(
             local(progress, 0.06 + index * 0.09, 0.24 + index * 0.09),
@@ -331,9 +452,9 @@ function AutoPlacementCard({ progress }: { progress: number }) {
               style={{
                 display: "flex",
                 alignItems: "center",
-                gap: 14,
-                padding: "13px 14px",
-                borderRadius: 15,
+                gap: 12,
+                padding: "10px 12px",
+                borderRadius: 13,
                 border: `1px solid ${interpolateColors(selectedProgress, [0, 1], [line, "rgba(143,191,154,.58)"])}`,
                 background: interpolateColors(
                   selectedProgress,
@@ -356,7 +477,7 @@ function AutoPlacementCard({ progress }: { progress: number }) {
                   borderRadius: 6,
                   color: ink,
                   display: "flex",
-                  fontSize: 12,
+                  fontSize: 20,
                   fontWeight: 950,
                   height: 22,
                   justifyContent: "center",
@@ -366,10 +487,10 @@ function AutoPlacementCard({ progress }: { progress: number }) {
                 <span style={{ opacity: selectedProgress }}>✓</span>
               </div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 14, fontWeight: 800 }}>
+                <div style={{ fontSize: 24, fontWeight: 800 }}>
                   {proposal.title}
                 </div>
-                <div style={{ color: muted, fontSize: 12, marginTop: 3 }}>
+                <div style={{ color: muted, fontSize: 18, marginTop: 3 }}>
                   {proposal.room} · {proposal.time}
                 </div>
               </div>
@@ -380,7 +501,7 @@ function AutoPlacementCard({ progress }: { progress: number }) {
                     [0, 1],
                     [muted, PALETTE.sageDeep],
                   ),
-                  fontSize: 12,
+                  fontSize: 18,
                   fontWeight: 850,
                 }}
               >
@@ -401,18 +522,18 @@ function AutoPlacementCard({ progress }: { progress: number }) {
           color: "#806315",
           display: "flex",
           gap: 11,
-          marginTop: 10,
+          marginTop: 8,
           opacity: ease(local(progress, 0.24, 0.42)),
-          padding: "11px 13px",
+          padding: "9px 11px",
           transform: `translate3d(${interpolate(ease(local(progress, 0.24, 0.42)), [0, 1], [14, 0])}px, 0, 0)`,
         }}
       >
-        <span style={{ fontSize: 15, fontWeight: 950 }}>!</span>
+        <span style={{ fontSize: 24, fontWeight: 950 }}>!</span>
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 12, fontWeight: 850 }}>
+          <div style={{ fontSize: 20, fontWeight: 850 }}>
             Building Better Event Data · not placed
           </div>
-          <div style={{ fontSize: 11, marginTop: 3 }}>
+          <div style={{ fontSize: 16, marginTop: 3 }}>
             No room satisfies capacity and speaker availability.
           </div>
         </div>
@@ -421,46 +542,97 @@ function AutoPlacementCard({ progress }: { progress: number }) {
       <div
         style={{
           display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          marginTop: 15,
+          flexDirection: "column",
+          alignItems: "stretch",
+          gap: 16,
+          marginTop: 14,
+          padding: "10px 11px",
+          borderRadius: 13,
+          border: `1px solid ${interpolateColors(saveProgress, [0, 1], ["rgba(190,98,66,.24)", "rgba(143,191,154,.38)"])}`,
+          background: interpolateColors(
+            saveProgress,
+            [0, 1],
+            ["rgba(190,98,66,.055)", "rgba(143,191,154,.085)"],
+          ),
         }}
       >
-        <div style={{ color: muted, fontSize: 12, fontWeight: 700 }}>
-          {resultProgress > 0.5
-            ? "1 placement applied · 1 deselected · 1 unplaced · draft only"
-            : "Preview bound to the current draft revision"}
+        <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+          <StatusDot tone={scenarioApplied ? "good" : "neutral"} />
+          <div>
+            <div
+              style={{
+                color: scenarioApplied ? PALETTE.sageDeep : ink,
+                fontSize: 16,
+                fontWeight: 900,
+                letterSpacing: "0.1em",
+                textTransform: "uppercase",
+              }}
+            >
+              {scenarioApplied
+                ? "Draft updated · not published"
+                : "Active draft boundary"}
+            </div>
+            <div
+              style={{
+                color: muted,
+                fontSize: 18,
+                fontWeight: 700,
+                marginTop: 3,
+              }}
+            >
+              {scenarioApplied
+                ? "Applied after a separate confirmation. Public program unchanged."
+                : scenarioSaved
+                  ? "Saved privately. The active draft remains unchanged."
+                  : "Saving this named alternative changes nothing."}
+            </div>
+          </div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <span style={{ color: muted, fontSize: 12, fontWeight: 750 }}>
-            {resultProgress > 0.5
-              ? "1 applied"
-              : subsetProgress < 0.5
-                ? "2 selected"
-                : "1 selected"}
-          </span>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "flex-end",
+            gap: 16,
+          }}
+        >
+          {scenarioSaved && !scenarioApplied ? (
+            <span
+              style={{
+                color: PALETTE.sageDeep,
+                fontSize: 16,
+                fontWeight: 850,
+              }}
+            >
+              SAVED PRIVATELY ✓
+            </span>
+          ) : null}
           <div
             style={{
-              padding: "12px 17px",
-              borderRadius: 12,
+              padding: "10px 13px",
+              borderRadius: 10,
               background: interpolateColors(
                 applyProgress,
                 [0, 1],
                 [ink, copper],
               ),
               color: paper,
-              fontSize: 11,
+              fontSize: 16,
               fontWeight: 850,
               letterSpacing: "0.06em",
-              boxShadow: `0 10px ${interpolate(applyProgress, [0, 1], [0, 24])}px rgba(190,98,66,.22)`,
-              transform: `translateY(${interpolate(applyProgress, [0, 1], [2, -1])}px)`,
+              boxShadow: `0 10px ${interpolate(Math.max(saveProgress, applyProgress), [0, 1], [0, 24])}px rgba(190,98,66,.22)`,
+              transform: `translateY(${interpolate(Math.max(saveProgress, applyProgress), [0, 1], [2, -1])}px)`,
             }}
           >
-            {resultProgress > 0.5
+            {scenarioApplied
               ? "APPLIED TO DRAFT ✓"
-              : subsetProgress < 0.5
-                ? "APPLY 2 PLACEMENTS"
-                : "APPLY 1 PLACEMENT"}
+              : scenarioApplying
+                ? "APPLY 1 TO DRAFT"
+                : scenarioSaved
+                  ? "REVIEW SAVED PLAN"
+                  : scenarioSaving
+                    ? "SAVE 1 SELECTED PLACEMENT"
+                    : "REVIEW PROPOSED PLAN"}
           </div>
         </div>
       </div>
@@ -470,6 +642,7 @@ function AutoPlacementCard({ progress }: { progress: number }) {
 
 function ApprovalCard({ progress }: { progress: number }) {
   const actionProgress = ease(local(progress, 0.72, 0.9));
+  const approved = progress >= 0.82;
   return (
     <div
       style={{
@@ -484,135 +657,187 @@ function ApprovalCard({ progress }: { progress: number }) {
     >
       <div
         style={{
-          display: "flex",
           alignItems: "center",
+          display: "flex",
           justifyContent: "space-between",
-          marginBottom: 19,
+          marginBottom: 16,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <Check />
-          <div>
-            <div
-              style={{
-                fontSize: 19,
-                fontWeight: 850,
-                letterSpacing: "-0.03em",
-              }}
-            >
-              Content approval
-            </div>
-            <div style={{ color: muted, fontSize: 11, marginTop: 3 }}>
-              Current revision ready for approval
-            </div>
+        <div>
+          <div
+            style={{
+              color: PALETTE.copperDeep,
+              fontSize: 9,
+              fontWeight: 900,
+              letterSpacing: "0.13em",
+              textTransform: "uppercase",
+            }}
+          >
+            Schedule version 2
+          </div>
+          <div
+            style={{
+              fontSize: 21,
+              fontWeight: 850,
+              letterSpacing: "-0.03em",
+              marginTop: 5,
+            }}
+          >
+            Content approval
           </div>
         </div>
-        <Chip tone="good">3 CHECKS</Chip>
+        <Chip tone={approved ? "good" : "copper"}>
+          {approved ? "APPROVED" : "IN REVIEW"}
+        </Chip>
       </div>
       <div
         style={{
           border: `1px solid ${line}`,
           borderRadius: 16,
-          padding: 16,
+          padding: 15,
           background: "#fff",
         }}
       >
-        <div
-          style={{
-            display: "flex",
-            gap: 13,
-            alignItems: "center",
-            marginBottom: 16,
-          }}
-        >
+        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
           <MiniAvatar initials="MC" color="#436b62" />
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 14, fontWeight: 800 }}>
-              {placementStory.speaker}
-            </div>
-            <div style={{ color: muted, fontSize: 11, marginTop: 3 }}>
-              {placementStory.title} · 25 min
-            </div>
-          </div>
-          <div
-            style={{ color: PALETTE.sageDeep, fontSize: 11, fontWeight: 850 }}
-          >
-            REVISION 4
-          </div>
-        </div>
-        {[
-          "Title and description",
-          "Track, format and duration",
-          "Exact revision selected",
-        ].map((item, index) => {
-          const checkProgress = ease(
-            local(progress, 0.12 + index * 0.14, 0.34 + index * 0.14),
-          );
-          return (
             <div
-              key={item}
               style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 9,
-                padding: "9px 0",
-                borderTop: `1px solid ${line}`,
-                color: interpolateColors(
-                  checkProgress,
-                  [0, 1],
-                  ["#a9b1ad", muted],
-                ),
-                fontSize: 11,
-                fontWeight: 700,
-                opacity: interpolate(checkProgress, [0, 1], [0.25, 1]),
-                transform: `translate3d(${interpolate(checkProgress, [0, 1], [16, 0])}px, 0, 0)`,
+                fontSize: 14,
+                fontWeight: 850,
               }}
             >
-              <div
-                style={{
-                  opacity: checkProgress,
-                  transform: `scale(${interpolate(checkProgress, [0, 1], [0.5, 1])})`,
-                }}
-              >
-                <Check color={PALETTE.sageDeep} />
-              </div>
-              {item}
+              {placementStory.title}
             </div>
-          );
-        })}
+            <div style={{ color: muted, fontSize: 11, marginTop: 3 }}>
+              {placementStory.speaker} · 25 min · Cities &amp; communities
+            </div>
+          </div>
+          <Chip tone="good">CONTENT REVISION 4</Chip>
+        </div>
+        <div
+          style={{
+            borderTop: `1px solid ${line}`,
+            color: ink,
+            fontSize: 12,
+            fontWeight: 720,
+            lineHeight: 1.45,
+            marginTop: 13,
+            paddingTop: 12,
+          }}
+        >
+          Care at neighbourhood scale
+        </div>
+        <div
+          style={{
+            color: muted,
+            fontSize: 10,
+            lineHeight: 1.45,
+            marginTop: 7,
+          }}
+        >
+          Public scheduled content must be Approved before its exact schedule
+          snapshot can be published.
+        </div>
       </div>
       <div
         style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginTop: 18,
+          background: "rgba(24,37,34,.025)",
+          border: `1px solid ${line}`,
+          borderRadius: 15,
+          marginTop: 10,
+          padding: 13,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <MiniAvatar initials="JL" color={copper} />
-          <span style={{ color: muted, fontSize: 11, fontWeight: 700 }}>
-            Reviewer · Jordan Lee
-          </span>
+        <div
+          style={{
+            alignItems: "center",
+            display: "grid",
+            gap: 10,
+            gridTemplateColumns: "1fr 166px",
+          }}
+        >
+          <div>
+            <div
+              style={{
+                color: muted,
+                fontSize: 8,
+                fontWeight: 900,
+                letterSpacing: "0.11em",
+                textTransform: "uppercase",
+              }}
+            >
+              Next status
+            </div>
+            <div
+              style={{
+                alignItems: "center",
+                background: "#fff",
+                border: `1px solid ${line}`,
+                borderRadius: 10,
+                display: "flex",
+                fontSize: 12,
+                fontWeight: 820,
+                justifyContent: "space-between",
+                marginTop: 5,
+                padding: "9px 11px",
+              }}
+            >
+              Approved <span style={{ color: muted }}>⌄</span>
+            </div>
+          </div>
+          <div
+            style={{
+              alignItems: "center",
+              alignSelf: "end",
+              background: interpolateColors(
+                actionProgress,
+                [0, 1],
+                [ink, PALETTE.sageDeep],
+              ),
+              borderRadius: 10,
+              boxShadow: `0 10px ${interpolate(actionProgress, [0, 1], [0, 24])}px rgba(143,191,154,.24)`,
+              color: paper,
+              display: "flex",
+              fontSize: 9,
+              fontWeight: 900,
+              justifyContent: "center",
+              letterSpacing: "0.06em",
+              minHeight: 36,
+              transform: `scale(${interpolate(actionProgress, [0, 1], [0.98, 1.015])})`,
+            }}
+          >
+            {approved ? "STATUS CHANGED ✓" : "CHANGE STATUS"}
+          </div>
         </div>
         <div
           style={{
-            padding: "11px 16px",
-            borderRadius: 12,
-            background: interpolateColors(
-              actionProgress,
-              [0, 1],
-              ["rgba(143,191,154,.36)", sage],
-            ),
-            color: ink,
-            fontSize: 11,
-            fontWeight: 900,
-            letterSpacing: "0.05em",
-            boxShadow: `0 10px ${interpolate(actionProgress, [0, 1], [0, 24])}px rgba(143,191,154,.24)`,
-            transform: `scale(${interpolate(actionProgress, [0, 1], [0.98, 1.02])})`,
+            alignItems: "center",
+            color: muted,
+            display: "flex",
+            fontSize: 10,
+            fontWeight: 720,
+            gap: 8,
+            marginTop: 10,
           }}
         >
-          APPROVE CONTENT
+          <span
+            style={{
+              alignItems: "center",
+              background: approved ? sage : "#fff",
+              border: `1px solid ${approved ? sage : "rgba(24,37,34,.24)"}`,
+              borderRadius: 5,
+              color: ink,
+              display: "flex",
+              fontSize: 9,
+              height: 17,
+              justifyContent: "center",
+              width: 17,
+            }}
+          >
+            {approved ? "✓" : ""}
+          </span>
+          Apply this exact status to the current content revision
         </div>
       </div>
     </div>
@@ -685,17 +910,17 @@ function PublicationDiff({ progress }: { progress: number }) {
       >
         <div>
           <div
-            style={{ fontSize: 22, fontWeight: 850, letterSpacing: "-0.04em" }}
+            style={{ fontSize: 30, fontWeight: 850, letterSpacing: "-0.04em" }}
           >
             Publication diff
           </div>
-          <div style={{ color: muted, fontSize: 12, marginTop: 5 }}>
+          <div style={{ color: muted, fontSize: 18, marginTop: 5 }}>
             A readable summary of material schedule and session-content changes.
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <Chip tone="good">CONTENT REV 4 · APPROVED</Chip>
-          <Chip tone="copper">4 CHANGES</Chip>
+          <Chip tone="copper">2 MATERIAL CHANGES</Chip>
         </div>
       </div>
       <div
@@ -745,7 +970,7 @@ function PublicationDiff({ progress }: { progress: number }) {
           alignItems: "center",
           gap: 9,
           color: muted,
-          fontSize: 11,
+          fontSize: 18,
           fontWeight: 750,
           opacity: footerProgress,
           transform: `translateY(${interpolate(footerProgress, [0, 1], [8, 0])}px)`,
@@ -754,7 +979,7 @@ function PublicationDiff({ progress }: { progress: number }) {
         <span
           style={{ width: 8, height: 8, borderRadius: 2, background: sage }}
         />{" "}
-        The current public programme remains unchanged until you confirm.
+        The current public program remains unchanged until you confirm.
       </div>
     </div>
   );
@@ -810,7 +1035,7 @@ function DiffColumn({
             ? "rgba(143,191,154,.11)"
             : "rgba(24,37,34,.035)",
           borderBottom: `1px solid ${highlight ? "rgba(143,191,154,.35)" : line}`,
-          fontSize: 10,
+          fontSize: 16,
           fontWeight: 900,
           letterSpacing: "0.11em",
         }}
@@ -828,13 +1053,13 @@ function DiffColumn({
             style={{
               display: "flex",
               alignItems: "center",
-              minHeight: 50,
+              minHeight: 68,
               gap: 10,
-              padding: "0 14px",
+              padding: "10px 14px",
               borderBottom:
                 index < rows.length - 1 ? `1px solid ${line}` : undefined,
-              color: mutedRows.includes(index) ? "#a9b1ad" : ink,
-              fontSize: 14,
+              color: mutedRows.includes(index) ? "#68756e" : ink,
+              fontSize: 22,
               fontWeight: 700,
               textDecoration: mutedRows.includes(index)
                 ? "line-through"
@@ -846,7 +1071,7 @@ function DiffColumn({
             <span
               style={{
                 color: highlight && !unchanged ? PALETTE.sageDeep : muted,
-                fontSize: 10,
+                fontSize: 16,
                 fontWeight: 900,
               }}
             >
@@ -857,7 +1082,7 @@ function DiffColumn({
               style={{
                 marginLeft: "auto",
                 color: highlight && !unchanged ? PALETTE.sageDeep : "#b6beb9",
-                fontSize: 14,
+                fontSize: 22,
               }}
             >
               {highlight ? (unchanged ? "=" : "+") : "·"}
@@ -949,7 +1174,7 @@ function ConfirmPublish({ progress }: { progress: number }) {
         >
           <Chip tone="good">READY TO PUBLISH</Chip>
           <span style={{ color: muted, fontSize: 11, fontWeight: 800 }}>
-            REVISION 4
+            SCHEDULE VERSION 2
           </span>
         </div>
         <div
@@ -960,9 +1185,7 @@ function ConfirmPublish({ progress }: { progress: number }) {
             lineHeight: 1.05,
           }}
         >
-          Publish this schedule
-          <br />
-          version?
+          Publish schedule
         </div>
         <div
           style={{
@@ -973,8 +1196,8 @@ function ConfirmPublish({ progress }: { progress: number }) {
             maxWidth: 460,
           }}
         >
-          This approved schedule version is ready to become the new public
-          programme.
+          Make version 2 the new public program. If blocked, version 1 remains
+          unchanged.
         </div>
         <div
           style={{
@@ -1015,8 +1238,8 @@ function ConfirmPublish({ progress }: { progress: number }) {
             fontWeight: 800,
           }}
         >
-          <span style={{ fontSize: 15 }}>✓</span> One final check keeps
-          conflicts, content, speakers and every public view aligned.
+          <span style={{ fontSize: 15 }}>✓</span> Conflicts, public content,
+          participation and publication dependencies revalidated.
         </div>
         <div
           style={{
@@ -1047,14 +1270,14 @@ function ConfirmPublish({ progress }: { progress: number }) {
               transform: `scale(${1 - pressProgress * 0.035}) translateY(${interpolate(hoverProgress, [0, 1], [0, -2])}px)`,
             }}
           >
-            CONFIRM &amp; PUBLISH ↗
+            CONFIRM PUBLICATION ↗
           </div>
         </div>
         <div
           style={{
             position: "absolute",
             left: interpolate(cursorTravel, [0, 1], [630, 522]),
-            top: interpolate(cursorTravel, [0, 1], [250, 390]),
+            top: interpolate(cursorTravel, [0, 1], [250, 350]),
             zIndex: 6,
             opacity: cursorOpacity,
             transform: `translate3d(0, ${Math.sin(progress * Math.PI * 5) * 1.5}px, 0) rotate(-9deg) scale(${interpolate(pressProgress, [0, 1], [1, 0.88])})`,
@@ -1074,7 +1297,7 @@ function ConfirmPublish({ progress }: { progress: number }) {
           style={{
             position: "absolute",
             left: 524,
-            top: 393,
+            top: 353,
             width: 48,
             height: 48,
             borderRadius: "50%",
@@ -1096,6 +1319,7 @@ function PublishedPages({ progress }: { progress: number }) {
   const badgeFloat = Math.sin(progress * Math.PI * 2) * 3 * (1 - hold);
   const recordReveal = ease(local(progress, 0.02, 0.42));
   const mobileReveal = ease(local(progress, 0.12, 0.58));
+  const digestReveal = ease(local(progress, 0.14, 0.68));
   const sweep = ease(local(progress, 0.1, 0.62));
   return (
     <div
@@ -1141,73 +1365,194 @@ function PublishedPages({ progress }: { progress: number }) {
         style={{
           position: "absolute",
           left: 0,
-          top: 72,
-          width: 520,
+          top: 22,
+          width: 700,
           zIndex: 3,
           opacity: interpolate(heroSettle, [0, 1], [0.34, 1]),
           transform: `translate3d(${interpolate(heroSettle, [0, 1], [-24, 0])}px, ${interpolate(heroSettle, [0, 1], [18, 0])}px, 36px)`,
         }}
       >
         <Eyebrow tone="sage" dark>
-          Published programme
+          Latest publication
         </Eyebrow>
         <div
           style={{
             color: paper,
-            fontSize: 42,
+            fontSize: 40,
             lineHeight: 1.03,
             fontWeight: 860,
             letterSpacing: "-0.06em",
-            marginTop: 18,
+            marginTop: 16,
           }}
         >
-          Publish once. Keep every
-          <br />
-          attendee view in step.
-        </div>
-        <div style={{ display: "flex", gap: 24, marginTop: 32 }}>
-          <Metric dark value="1" label="schedule version" tone="sage" />
-          <Metric dark value="APPROVED" label="public content" tone="copper" />
-          <Metric dark value="LOGGED" label="publication event" />
+          Version 2 <span style={{ color: sage }}>change digest.</span>
         </div>
         <div
           style={{
-            marginTop: 28,
-            padding: "13px 15px",
+            color: "rgba(255,253,248,.58)",
+            fontSize: 20,
+            fontWeight: 720,
+            marginTop: 8,
+          }}
+        >
+          Compared with published version 1 · durably recorded with version 2
+        </div>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(5, 1fr)",
+            gap: 6,
+            marginTop: 19,
+            opacity: digestReveal,
+            transform: `translate3d(0, ${interpolate(digestReveal, [0, 1], [10, 0])}px, 0)`,
+          }}
+        >
+          {[
+            ["Added", "0"],
+            ["Removed", "0"],
+            ["Moved or resized", "1"],
+            ["Visibility", "0"],
+            ["Public content", "1"],
+          ].map(([label, value]) => (
+            <div
+              key={label}
+              style={{
+                minHeight: 54,
+                padding: "9px 8px",
+                borderRadius: 11,
+                border: `1px solid ${value === "0" ? "rgba(255,253,248,.12)" : "rgba(143,191,154,.38)"}`,
+                background:
+                  value === "0"
+                    ? "rgba(255,253,248,.035)"
+                    : "rgba(143,191,154,.11)",
+              }}
+            >
+              <div
+                style={{
+                  color: value === "0" ? "rgba(255,253,248,.5)" : sage,
+                  fontSize: 28,
+                  fontWeight: 900,
+                  lineHeight: 1,
+                }}
+              >
+                {value}
+              </div>
+              <div
+                style={{
+                  color: "rgba(255,253,248,.56)",
+                  fontSize: 14,
+                  fontWeight: 850,
+                  letterSpacing: "0.06em",
+                  lineHeight: 1.2,
+                  marginTop: 5,
+                  textTransform: "uppercase",
+                }}
+              >
+                {label}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div
+          style={{
+            marginTop: 9,
+            padding: "12px 13px",
             borderRadius: 14,
             border: "1px solid rgba(143,191,154,.28)",
-            background: "rgba(143,191,154,.08)",
+            background: "rgba(143,191,154,.075)",
+            opacity: digestReveal,
+            transform: `translate3d(0, ${interpolate(digestReveal, [0, 1], [14, 0])}px, 0)`,
           }}
         >
           <div
             style={{
-              color: sage,
-              fontSize: 9,
-              fontWeight: 900,
-              letterSpacing: "0.12em",
+              alignItems: "center",
+              display: "flex",
+              justifyContent: "space-between",
             }}
           >
-            SAME RECORD · PUBLIC READ
+            <div
+              style={{
+                color: sage,
+                fontSize: 16,
+                fontWeight: 900,
+                letterSpacing: "0.11em",
+                textTransform: "uppercase",
+              }}
+            >
+              Review affected records
+            </div>
+            <div
+              style={{
+                color: paper,
+                fontSize: 18,
+                fontWeight: 850,
+              }}
+            >
+              2 material changes
+            </div>
           </div>
+          {[
+            {
+              category: "Moved or resized",
+              detail: "Main Hall, Thu 10:30 → Studio B, Thu 10:30",
+            },
+            {
+              category: "Public content",
+              detail: "description",
+            },
+          ].map((item, index) => (
+            <div
+              key={item.category}
+              style={{
+                alignItems: "center",
+                borderTop: "1px solid rgba(255,253,248,.1)",
+                display: "grid",
+                gap: 4,
+                gridTemplateColumns: "156px 1fr",
+                marginTop: index ? 8 : 10,
+                paddingTop: 8,
+              }}
+            >
+              <div
+                style={{
+                  color: sage,
+                  fontSize: 16,
+                  fontWeight: 850,
+                }}
+              >
+                {item.category}
+              </div>
+              <div>
+                <div style={{ color: paper, fontSize: 20, fontWeight: 820 }}>
+                  {placementStory.title}
+                </div>
+                <div
+                  style={{
+                    color: "rgba(255,253,248,.54)",
+                    fontSize: 16,
+                    marginTop: 2,
+                  }}
+                >
+                  {item.detail}
+                </div>
+              </div>
+            </div>
+          ))}
           <div
             style={{
-              color: paper,
+              borderTop: "1px solid rgba(255,253,248,.1)",
+              color: "rgba(255,253,248,.45)",
               fontSize: 14,
-              fontWeight: 850,
-              marginTop: 6,
+              fontWeight: 750,
+              letterSpacing: "0.035em",
+              marginTop: 9,
+              paddingTop: 8,
+              textTransform: "uppercase",
             }}
           >
-            {placementStory.title}
-          </div>
-          <div
-            style={{
-              color: "rgba(255,253,248,.58)",
-              fontSize: 11,
-              marginTop: 4,
-            }}
-          >
-            {placementStory.speaker} · {placementStory.placedRoom} ·{" "}
-            {placementStory.slot}
+            Counts exact · highlights capped at 20 per category · no content
+            bodies stored
           </div>
         </div>
       </div>
@@ -1270,7 +1615,7 @@ function PublishedPages({ progress }: { progress: number }) {
                 letterSpacing: "0.08em",
               }}
             >
-              FUTURE OF EVENTS 2027 / PROGRAMME
+              FUTURE OF EVENTS 2027 / PROGRAM
             </span>
             <span
               style={{
@@ -1592,6 +1937,7 @@ export function PlaceScene({ duration }: SceneProps) {
   const diffProgress = local(progress, 0.64, 0.8);
   const confirmProgress = local(progress, 0.8, 0.92);
   const publishedProgress = local(progress, 0.92, 1);
+  const scenarioApplied = resolutionProgress >= 0.77;
   const diffCamera = ease(local(diffProgress, 0.02, 0.72));
   const confirmCamera = ease(local(confirmProgress, 0.02, 0.68));
   const publishedCamera = ease(local(publishedProgress, 0.02, 0.54));
@@ -1614,7 +1960,7 @@ export function PlaceScene({ duration }: SceneProps) {
         }}
       />
       <SceneHeader
-        chapter="PROGRAMME SCHEDULING"
+        chapter="PROGRAM SCHEDULING"
         index="10 / 13 · PLACE"
         progress={progress}
       />
@@ -1634,7 +1980,7 @@ export function PlaceScene({ duration }: SceneProps) {
           letterSpacing: "0.12em",
         }}
       >
-        CONFLICT-AWARE AUTO-PLACEMENT
+        CONFLICT-AWARE PLANNING · PRIVATE SCENARIOS
       </div>
       <PlaceShotLayer end={0.13} progress={progress} start={0} zIndex={6}>
         <Reveal
@@ -1691,7 +2037,7 @@ export function PlaceScene({ duration }: SceneProps) {
           <AssetWindow
             src={ASSETS.schedulePlanner}
             label="SCHEDULE PLANNER"
-            caption="draft workspace"
+            caption="published baseline"
             width={770}
             height={560}
             objectPosition="center top"
@@ -1761,10 +2107,10 @@ export function PlaceScene({ duration }: SceneProps) {
           <div
             style={{
               color: "rgba(255,253,248,.56)",
-              fontSize: 14,
+              fontSize: 22,
               lineHeight: 1.45,
               marginTop: 18,
-              maxWidth: 340,
+              maxWidth: 430,
             }}
           >
             See the rule, affected sessions and next best action in one clear
@@ -1775,8 +2121,9 @@ export function PlaceScene({ duration }: SceneProps) {
           style={{
             position: "absolute",
             right: 116,
-            top: 174,
-            transform: `translate3d(${interpolate(conflictProgress, [0, 1], [18, -9])}px, ${interpolate(conflictProgress, [0, 1], [9, -5])}px, 0) scale(${interpolate(conflictProgress, [0, 1], [1.018, 1.032])})`,
+            top: 215,
+            transformOrigin: "right top",
+            transform: `translate3d(${interpolate(conflictProgress, [0, 1], [18, -9])}px, ${interpolate(conflictProgress, [0, 1], [9, -5])}px, 0) scale(${interpolate(conflictProgress, [0, 1], [1.38, 1.4])})`,
           }}
         >
           <PlaceConflictCard progress={conflictProgress} />
@@ -1793,7 +2140,7 @@ export function PlaceScene({ duration }: SceneProps) {
           }}
         >
           <Eyebrow tone="copper" dark>
-            02 · Auto-place
+            02 · Scenario Lab
           </Eyebrow>
           <div
             style={{
@@ -1805,23 +2152,26 @@ export function PlaceScene({ duration }: SceneProps) {
               marginTop: 16,
             }}
           >
-            Turn constraints
+            {scenarioApplied ? "Apply after review." : "Name the option."}
             <br />
-            into valid options.
-            <br />
-            <span style={{ color: sage }}>You choose the move.</span>
+            <span style={{ color: sage }}>
+              {scenarioApplied
+                ? "Keep publication intact."
+                : "Keep the draft intact."}
+            </span>
           </div>
           <div
             style={{
               color: "rgba(255,253,248,.56)",
-              fontSize: 14,
+              fontSize: 22,
               lineHeight: 1.45,
               marginTop: 18,
-              maxWidth: 350,
+              maxWidth: 430,
             }}
           >
-            The planner checks room, speaker, resource, track and capacity rules
-            before you apply selected placements to the draft.
+            {scenarioApplied
+              ? "A separate confirmation applies the selected move to the draft. The saved scenario needs refresh; the public program stays unchanged."
+              : "Choose which valid auto-placement moves define a private scenario. Warnings and unplaced sessions stay visible before the active draft changes."}
           </div>
           <div
             style={{
@@ -1835,15 +2185,19 @@ export function PlaceScene({ duration }: SceneProps) {
               letterSpacing: "0.1em",
             }}
           >
-            <Check /> VALID OPTIONS · YOU CHOOSE
+            <Check />
+            {scenarioApplied
+              ? "DRAFT CHANGED · PUBLIC PROGRAM UNCHANGED"
+              : "SAVE ≠ APPLY · APPLY ≠ PUBLISH"}
           </div>
         </div>
         <div
           style={{
             position: "absolute",
             left: 116,
-            top: 190,
-            transform: `translate3d(${interpolate(resolutionProgress, [0, 1], [20, -10])}px, ${interpolate(resolutionProgress, [0, 1], [8, -6])}px, 0) scale(${interpolate(resolutionProgress, [0, 1], [1.02, 1.034])})`,
+            top: 210,
+            transformOrigin: "left top",
+            transform: `translate3d(${interpolate(resolutionProgress, [0, 1], [20, -10])}px, ${interpolate(resolutionProgress, [0, 1], [8, -6])}px, 0) scale(${interpolate(resolutionProgress, [0, 1], [1.04, 1.06])})`,
           }}
         >
           <AutoPlacementCard progress={resolutionProgress} />
@@ -1879,22 +2233,23 @@ export function PlaceScene({ duration }: SceneProps) {
           <div
             style={{
               color: "rgba(255,253,248,.56)",
-              fontSize: 14,
+              fontSize: 22,
               lineHeight: 1.45,
               marginTop: 18,
-              maxWidth: 350,
+              maxWidth: 430,
             }}
           >
-            Shape the public content while speaker readiness and conflicts stay
-            visible.
+            Move the exact public-content revision to Approved. The currently
+            published program remains unchanged.
           </div>
         </div>
         <div
           style={{
             position: "absolute",
             right: 116,
-            top: 184,
-            transform: `translate3d(${interpolate(approvalProgress, [0, 1], [17, -9])}px, ${interpolate(approvalProgress, [0, 1], [8, -5])}px, 0) scale(${interpolate(approvalProgress, [0, 1], [1.018, 1.032])})`,
+            top: 215,
+            transformOrigin: "right top",
+            transform: `translate3d(${interpolate(approvalProgress, [0, 1], [17, -9])}px, ${interpolate(approvalProgress, [0, 1], [8, -5])}px, 0) scale(${interpolate(approvalProgress, [0, 1], [1.38, 1.4])})`,
           }}
         >
           <ApprovalCard progress={approvalProgress} />
@@ -1929,7 +2284,7 @@ export function PlaceScene({ duration }: SceneProps) {
           <div
             style={{
               color: "rgba(255,253,248,.56)",
-              fontSize: 15,
+              fontSize: 22,
               lineHeight: 1.45,
               marginTop: 18,
               marginLeft: "auto",
@@ -1983,23 +2338,23 @@ export function PlaceScene({ duration }: SceneProps) {
           <div
             style={{
               color: "rgba(255,253,248,.58)",
-              fontSize: 15,
+              fontSize: 22,
               lineHeight: 1.48,
               marginTop: 20,
-              maxWidth: 340,
+              maxWidth: 430,
             }}
           >
-            One final check revalidates every dependency before the schedule
-            goes live.
+            The publication boundary revalidates conflicts, public content,
+            confirmed participation and required public dependencies.
           </div>
         </div>
         <div
           style={{
             position: "absolute",
-            right: 200,
-            top: 206,
-            transformOrigin: "center center",
-            transform: `perspective(1400px) translate3d(${interpolate(confirmCamera, [0, 1], [58, 0])}px, ${interpolate(confirmCamera, [0, 1], [24, 0])}px, 0) rotateY(${interpolate(confirmCamera, [0, 1], [-4.5, 0])}deg) scale(${interpolate(confirmCamera, [0, 1], [0.92, 1])})`,
+            right: 116,
+            top: 230,
+            transformOrigin: "right top",
+            transform: `perspective(1400px) translate3d(${interpolate(confirmCamera, [0, 1], [58, 0])}px, ${interpolate(confirmCamera, [0, 1], [24, 0])}px, 0) rotateY(${interpolate(confirmCamera, [0, 1], [-4.5, 0])}deg) scale(${interpolate(confirmCamera, [0, 1], [1.42, 1.45])})`,
           }}
         >
           <ConfirmPublish progress={confirmProgress} />
@@ -2019,9 +2374,16 @@ export function PlaceScene({ duration }: SceneProps) {
       </PlaceShotLayer>
       <PlaceCueSeam progress={progress} />
       <FooterRail
-        activationPoints={[0.13, 0.3, 0.47, 0.64, 0.8]}
+        activationPoints={[0.13, 0.3, 0.47, 0.64, 0.8, 0.92]}
         progress={progress}
-        items={["detect", "auto-place", "approve", "compare", "confirm"]}
+        items={[
+          "detect",
+          "scenario lab",
+          "approve",
+          "compare",
+          "confirm",
+          "digest",
+        ]}
       />
     </AbsoluteFill>
   );

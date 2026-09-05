@@ -9,101 +9,120 @@ a fresh picture-locked mix and editorial review.
 
 ## 00:00 — Program Cue
 
-Programme work is already underway: the Command Centre reads 75 percent ready,
-a schedule change is waiting for revalidation, and the public programme is
-ready to evolve with the event. Program Cue connects every step from the first
-proposal to the published programme. Run the programme, not the spreadsheet.
+An editorial stage moment opens on the people waiting for a program to work.
+Conference programs rarely fail in one dramatic moment. They drift: an
+application still awaiting review, an unfinished speaker task, a schedule
+change attendees have not seen. The current Command Centre then brings those
+signals into one operating picture. Run the program, not the spreadsheet.
 
 ## 00:15 — Workflow overview
 
-One workspace maps the programme lifecycle. Shape the event through the brief,
-call and collection. Decide through review and speaker preparation. Share
-through communication, session placement and deliberate publication. The
-workflow diagram then gives way to the Command Centre and its current records.
+From call for speakers to the published timetable, every material change has a
+status, an owner and a next action. Program Cue connects collection, review,
+preparation, communication, scheduling and publication without replacing the
+conventional administrator workflow. The lifecycle resolves into the current
+Command Centre and the one action that matters now.
 
 ## 00:31 — Command Centre
 
-The Command Centre summarises readiness across six workflows and links each
-signal to supporting status. The event is 75 percent ready, with two
-blocking conditions. Organisers can open the source workflow to inspect the
-task, owner, impact and available actions.
+The Command Centre reads authoritative program records rather than
+maintaining a parallel checklist. In the current seeded view, readiness is 80
+percent and one critical condition is named. “Do this next” ranks that work and
+links to the filtered critical-work list; this seeded event has one matching
+row. The score remains transparent across six workflows and cannot hide a
+declared blocker.
 
 ## 00:54 — Event setup
 
-Define event identity, dates, venue, timezone, access settings and public slug
-for reuse across participant-facing surfaces. Choose Program Cue or Airtable as
-the event data source, with clear private-file and retention policies. Branding
-stays private through saved preview, then a confirmed public identity is ready
-for every participant-facing surface.
+Define event identity, dates, venue, timezone, access and public slug once.
+Those choices carry into applications, participant workspaces, the public
+program, embeds and email. Use Program Cue’s default data store, or select
+Airtable explicitly when connected; missing authority fails rather than
+silently falling back. Branding remains private through saved preview until an
+organiser confirms publication.
 
 ## 01:17 — Collect
 
-Build the application with sections, conditional fields and an explicit review
-purpose for every question. Preview the applicant route at desktop and mobile
-widths, then publish immutable form version 01. A verified applicant can save a
-private draft and submit against that exact published version.
+Build a conditional call-for-speakers form with an opening window, total
+capacity and per-person submission cap. Preview the applicant experience at
+desktop and mobile widths, then publish an immutable version. Applicants can
+start and recover a private draft; verified email is required before final
+submission. Submitted answers remain attached to the exact published version
+the review team sees.
 
 ## 01:50 — Review decisions
 
-Reviewers work with the submitted answers, published form version, conflict
-status and weighted rubric in one workbench. An optional advisory panel cites
-supporting evidence and suggests closed-criterion values; reviewers choose what
-to import and submit their own recommendation. Organisers make the final
-programme decisions, with communication status visible alongside the result.
+The review workspace keeps the proposal, published form version, conflict
+check, weighted rubric and queue together. Reviewers own their saved draft and
+final recommendation. When configured, advisory AI can cite source evidence
+and suggest closed-criterion values, but it cannot submit or change a score. A
+reviewer unable to complete an assignment can return it with an explicit
+reason. Authorised organisers retain the final decision.
 
 ## 02:26 — Prepare speakers
 
-An accepted session links the speaker workspace and selected onboarding tasks.
-The organiser sees one task complete, two outstanding and the next action in one
-preparation view. Private files remain role-restricted while the event itself
-comes into view: speaker preparation connected all the way to show day.
+Acceptance links a session, its participants and the selected onboarding plan.
+Speaker, Moderator and Chair roles receive independent accept-or-decline
+responses rather than one ambiguous relationship status. Organisers can see
+outstanding tasks, role responses, required fields and quarantined files
+without exposing private participant notes. Uploads remain private and
+quarantined until a clean scan releases them.
 
 ## 02:59 — Event assistant
 
-With Priya's onboarding work now visible, open the command palette and ask:
-“Find speakers with incomplete tasks and draft a reminder for my approval.”
-The assistant finds Priya Shah's one incomplete speaker-scoped task, counts
-session deliverables separately and prepares an editable reminder. Supported
-merge fields stay visible, with Priya listed as the single recipient. The
-organiser reviews the template and recipient, confirms the action and queues the
-reminder.
+After the critical session deliverable, choose a separate outstanding speaker
+task: Read the speaker handbook. Ask the assistant to find the affected
+participant and draft a reminder. It reads authorised event records, separates
+speaker work from session deliverables and prepares a draft candidate with the
+exact recipient. The requester can record focused feedback on the completed AI
+result. Nothing sends until an organiser reviews and approves the action;
+approval publishes the candidate and records durable queue work.
 
 ## 03:34 — Communicate
 
-Version a speaker welcome and inspect representative content for Alex Morgan.
-Confirmation rechecks the recipient and template before queuing the welcome.
-The handoff result appears in the delivery status. A separate calendar workflow
-keeps its own draft, stable identifier and queue status.
+Every communication begins as a versioned draft. Preview resolved merge values,
+sender and exact audience; confirm once; then track queue acceptance and
+provider result as separate states. Calendar invitations retain stable identity
+across create, update and cancellation. When explicitly enabled, a later
+schedule publication can prepare one transactional change notice for each
+affected pending or confirmed participant; the first publication establishes
+the baseline without sending.
 
 ## 04:00 — Place sessions
 
-Program Cue detects the blocking room overlap before publication. Its
-auto-place preview offers two valid
-placements; the organiser deselects one, while a third session stays unplaced
-because no room meets capacity and speaker availability. The organiser chooses
-which placements to apply to the draft. The sequence then shows content review,
-a publication diff, dependency revalidation and schedule-version confirmation.
+Program Cue catches the blocking room overlap while the published program
+remains unchanged. Scenario Lab lets an organiser save a named selection of
+deterministic placement proposals without changing or publishing the active
+draft. Applying selected moves remains explicit. An exact public-content
+revision moves from In review to Approved, and the full publication diff shows
+one moved session plus one public-content change. Publication revalidates
+conflicts, public content, confirmed participation and required public
+dependencies before confirmation. The durable latest-publication digest retains
+exact category counts and up to twenty affected-record highlights per category,
+without storing content bodies.
 
 ## 04:40 — Publish
 
-One approved programme revision supplies the programme, timetable, date view,
-speaker pages and managed embed. The event site combines that programme with
-separately published site content. A personal itinerary and managed embed
-complete the public experience from the same connected source.
+The film shows seven connected examples across published program views, a
+personal itinerary, a managed embed and the separately published event site.
+Program routes include distinct speaker and gallery surfaces; the examples
+are not an exhaustive route count. Attendees can discover, save and share
+sessions while each shown program surface reads only the current published
+snapshot.
 
 ## 05:16 — Operate
 
-Connect Program Cue to the event stack with 33 documented REST paths, scoped
-keys and webhook events.
-Operation recovery follows the queued one-recipient assistant reminder through
-a failed result, with initiator, audience and history visible in the Operation
-Centre. The organiser retries the failed operation with its original audience.
-The Accelevents export preview maps programme, speaker, track, session and room
-fields into one confirmation-ready package.
+Thirty-three documented REST paths, scoped keys and signed webhooks connect
+Program Cue to the surrounding event stack. The Operation Centre exposes
+initiator, scope, progress, record-level results and eligible recovery against
+the original durable intent. Bounded participant-readiness and session-staffing
+reports use the same operation path. In this film, Accelevents stops at its
+mapping preview; no completed provider export is claimed.
 
 ## 05:42 — Product summary
 
-From first proposal to published programme, Program Cue links submissions,
-decisions, speaker work, schedule changes and operations in one event workspace.
-One programme. Every workflow. Fully connected. The closing card links to
-ProgramCue.com beside three product snapshots.
+From first proposal to the timetable in an attendee’s pocket, Program Cue gives
+program work a shared source, visible ownership and a clear next move.
+Applications become decisions; decisions become prepared sessions; approved
+changes become one current public program. Make the program happen at
+ProgramCue.com.

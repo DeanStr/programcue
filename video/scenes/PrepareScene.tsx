@@ -1107,7 +1107,7 @@ function ReadyNotice({ progress }: { progress: number }) {
         </div>
         <div>
           <div style={{ ...label, color: PALETTE.sageDeep, fontSize: 10 }}>
-            Preparation ready
+            Preparation in view
           </div>
           <div
             style={{
@@ -1296,7 +1296,7 @@ export function PrepareScene({ duration }: SceneProps) {
         >
           Turn every “yes”
           <br />
-          <span style={{ color: PALETTE.copperSoft }}>into ready.</span>
+          <span style={{ color: PALETTE.copperSoft }}>into momentum.</span>
         </h1>
         <p
           style={{
@@ -1311,7 +1311,7 @@ export function PrepareScene({ duration }: SceneProps) {
           preparation view.
         </p>
         <Rail
-          items={["Accepted", "Linked", "In progress", "Ready"]}
+          items={["Accepted", "Linked", "In progress", "In view"]}
           active={activeStep}
           progress={stageProgress}
         />
@@ -1358,7 +1358,7 @@ export function PrepareScene({ duration }: SceneProps) {
           detail="Session, speaker, tasks and files move together from acceptance to show day."
           status={
             activeStep === 3
-              ? "Ready"
+              ? "In view"
               : activeStep === 2
                 ? "Tasks active"
                 : activeStep === 1
@@ -1608,7 +1608,7 @@ export function PrepareScene({ duration }: SceneProps) {
         {[
           { center: linkedCenter, from: "Accepted", to: "Linked" },
           { center: workspaceCenter, from: "Linked", to: "Tasks active" },
-          { center: readyCenter, from: "Tasks active", to: "Reviewable" },
+          { center: readyCenter, from: "Tasks active", to: "In view" },
         ].map(({ center, from, to }) => (
           <StateHandoff
             key={center}

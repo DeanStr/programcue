@@ -10,6 +10,14 @@
       "useBoundary": "Illustrative event context only; never product or customer evidence."
     },
     {
+      "path": "video/public/video/editorial-stage-moment.png",
+      "sha256": "4a72a04fddf51a77cfd7a5c953ff38f5190ac84e55fe624db3eaa2cbaec929c0",
+      "origin": "generated editorial image",
+      "generator": "OpenAI Media Service / gpt-image 2.0",
+      "embeddedC2pa": true,
+      "useBoundary": "Illustrative human opening only; never product, customer, speaker or delivered-event evidence."
+    },
+    {
       "path": "video/public/fonts/inter-latin-var.woff2",
       "sha256": "3100e775e8616cd2611beecfa23a4263d7037586789b43f035236a2e6fbd4c62",
       "origin": "bundled Inter variable font",
@@ -22,16 +30,25 @@
     },
     {
       "path": "video/delivery/program-cue-launch-descriptions.vtt",
-      "sha256": "3e3d24bf73f5b849dd0a4d091d7462d4640c8bed9dcf976c5214e724d544264f",
+      "sha256": "6754eeaede91bc6b64f6ec5786e184465f4231cd655713ef322aa96841ccd6ce",
       "origin": "Program Cue editorial accessibility track",
       "useBoundary": "Picture-locked visual descriptions for the music-led master."
     },
     {
       "path": "video/public/video/program-cue-score.wav",
-      "sha256": "137c0ea93117059b54657ea014d1e7514c0c2c2020978815ce6f6ee60744e903",
-      "origin": "deterministic Program Cue procedural score",
+      "sha256": "87c0fd02447461be9b6d1e57e3652d9e4e3f50fbef2ffca34d9f3189e5449e36",
+      "origin": "decoded soundtrack from the approved public Eleven Music v2 master",
+      "sourceMasterSha256": "92cab55415c237c77b4564ee2155fdacf05ad6787dc42daea159b6df54d52fb4",
+      "encodedAudioStreamSha256": "765c22a5d90541d27b75ce759b4c9b3fa2664a67cd8cbc75cb46ce94a81ffdd2",
+      "generator": "video/scripts/prepare-released-eleven-audio.mjs",
+      "useBoundary": "Ignored derived Studio source; recovered from the immutable approved master without a new provider request."
+    },
+    {
+      "path": "video/public/video/program-cue-procedural-score.wav",
+      "sha256": "15a2341248814e6c69e366a00e71e0c38f673928944a99bbfeb0f81e2f8769c3",
+      "origin": "deterministic Program Cue procedural fallback score",
       "generator": "video/scripts/generate-score.mjs",
-      "useBoundary": "Ignored derived asset; recreated from current repository source before every workflow that consumes the procedural score."
+      "useBoundary": "Ignored derived fallback asset; not selected by the launch film or normal render workflow."
     }
   ]
 }

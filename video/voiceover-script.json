@@ -1,6 +1,6 @@
 {
   "title": "Program Cue launch film voice-over",
-  "version": 5,
+  "version": 7,
   "language": "en-GB",
   "totalDurationSeconds": 360,
   "sceneCount": 13,
@@ -37,7 +37,7 @@
       "sceneDurationSeconds": 15,
       "voiceStartSeconds": 1,
       "voiceEndSeconds": 13,
-      "text": "Program Cue connects event readiness, schedule revalidation and the public programme, carrying one coherent journey from the first proposal through speaker preparation to a published timetable. Run the programme, not the spreadsheet."
+      "text": "Conference programs drift: an unreviewed proposal, an unfinished speaker task, a schedule change nobody sees. Program Cue brings those signals into one operating picture. Run the program, not the spreadsheet."
     },
     {
       "id": "02-reveal",
@@ -47,7 +47,7 @@
       "sceneDurationSeconds": 16,
       "voiceStartSeconds": 16,
       "voiceEndSeconds": 29,
-      "text": "One workspace maps the programme lifecycle: shape the brief, call for speakers and collection; decide through review and preparation; then share through communication, placement and explicit publication, with current status kept visible."
+      "text": "From call for speakers to the timetable in an attendee’s pocket, every change has a status, an owner and a next action. Start with the one that matters now."
     },
     {
       "id": "03-command",
@@ -57,7 +57,7 @@
       "sceneDurationSeconds": 23,
       "voiceStartSeconds": 32,
       "voiceEndSeconds": 52,
-      "text": "The Command Centre reads current programme records. Seventy-five percent readiness summarises six workflows, while two named blocking conditions open the source tasks, owners, impact and available actions for follow-up."
+      "text": "The Command Centre reads program records, not a parallel checklist. Readiness stays transparent, critical conditions stay named, and “Do this next” links to the filtered critical work. One signal becomes one clear action."
     },
     {
       "id": "04-set-event",
@@ -67,7 +67,7 @@
       "sceneDurationSeconds": 23,
       "voiceStartSeconds": 55,
       "voiceEndSeconds": 75,
-      "text": "Define identity, dates, venue, timezone and access once across every participant-facing surface. Choose Program Cue or Airtable for event data, with clear file and retention policies. Branding stays private through saved preview, then publishing confirms the public identity."
+      "text": "Set dates, venue, timezone, access and brand once. Those choices carry into applications, speaker workspaces, the public program and email. Use Program Cue’s default data store, or select Airtable explicitly when connected. Branding stays private until publication."
     },
     {
       "id": "05-collect",
@@ -77,7 +77,7 @@
       "sceneDurationSeconds": 33,
       "voiceStartSeconds": 78,
       "voiceEndSeconds": 108,
-      "text": "Build the application, preview desktop and mobile routes, then publish immutable form version one. A verified applicant can save a private draft and submit against that exact version unchanged."
+      "text": "Build a conditional call-for-speakers form, preview the applicant experience on desktop and mobile, then publish an immutable version. Applicants recover private drafts; final submissions stay tied to the exact published version reviewers see."
     },
     {
       "id": "06-decide",
@@ -87,7 +87,7 @@
       "sceneDurationSeconds": 36,
       "voiceStartSeconds": 111,
       "voiceEndSeconds": 144,
-      "text": "Reviewers keep source answers, form version, conflicts and weighted rubric together. An advisory panel cites evidence and suggests values; reviewers choose what to import, submit their recommendation, and organisers make the final decision with communication status visible."
+      "text": "Keep proposal, rubric, conflict check and queue together. Reviewers own their recommendation and can explicitly return work they cannot review. Advisory AI stays off until an administrator opts in; final decisions stay with authorised organisers."
     },
     {
       "id": "07-prepare",
@@ -97,7 +97,7 @@
       "sceneDurationSeconds": 33,
       "voiceStartSeconds": 147,
       "voiceEndSeconds": 177,
-      "text": "An accepted session opens the speaker workspace and onboarding plan. One task is complete, two remain open and every next action stays connected as the team moves from speaker preparation to show day."
+      "text": "Acceptance links each session, participant role and onboarding task. Speaker, Moderator and Chair responses stay independent. Outstanding work remains visible, while uploads stay quarantined until a clean scan releases them."
     },
     {
       "id": "08-assist",
@@ -107,7 +107,7 @@
       "sceneDurationSeconds": 35,
       "voiceStartSeconds": 180,
       "voiceEndSeconds": 212,
-      "text": "Ask: ‘Find speakers with incomplete tasks and draft a reminder for my approval.’ The assistant finds Priya’s speaker task, separates session deliverables and prepares an editable, targeted reminder ready for the organiser to approve and queue."
+      "text": "After the critical session deliverable, the assistant finds a separate handbook task. It prepares a draft reminder for one recipient and waits for approval. Approval publishes the candidate, records durable queue work, and the requester records focused feedback."
     },
     {
       "id": "09-communicate",
@@ -117,7 +117,7 @@
       "sceneDurationSeconds": 26,
       "voiceStartSeconds": 215,
       "voiceEndSeconds": 238,
-      "text": "Version a speaker welcome and preview Alex Morgan’s personalised message. Confirm the recipient and template, queue the welcome and follow its recorded handoff result, while calendar work keeps its own status."
+      "text": "Preview each versioned message’s merge values, sender and audience before confirmation. Then follow queue acceptance and provider result separately. Calendar invitations retain stable identity across create, update and cancel."
     },
     {
       "id": "10-place",
@@ -127,7 +127,7 @@
       "sceneDurationSeconds": 40,
       "voiceStartSeconds": 241,
       "voiceEndSeconds": 278,
-      "text": "Program Cue detects a blocking room overlap, proposes valid placements and lets the organiser choose the best path. Public content, publication changes and dependencies come together before the approved schedule goes live."
+      "text": "Catch the room clash before publication. Save a named Scenario Lab selection without changing the active draft; approve the exact content revision, inspect the full diff, revalidate public dependencies, publish explicitly, then retain the latest digest."
     },
     {
       "id": "11-publish",
@@ -137,7 +137,7 @@
       "sceneDurationSeconds": 36,
       "voiceStartSeconds": 281,
       "voiceEndSeconds": 314,
-      "text": "One approved programme revision powers programme, timetable, day, speaker and embed views. A personal itinerary and managed embed complete an event site built from the same connected published source."
+      "text": "Seven connected examples show the published program across desktop and mobile, including speaker and gallery surfaces, an itinerary and a managed embed. Separately published site content adds the wider event story; every example reads current published data."
     },
     {
       "id": "12-operate",
@@ -147,7 +147,7 @@
       "sceneDurationSeconds": 26,
       "voiceStartSeconds": 317,
       "voiceEndSeconds": 340,
-      "text": "Make Program Cue part of your event stack through thirty-three documented API paths. Follow Priya’s reminder to its result, recover the failed operation with its original audience, and prepare an Accelevents export-ready package."
+      "text": "Thirty-three documented REST paths, scoped keys and signed webhooks connect the event stack. Operation Centre traces failures and eligible retries against original intent. In this film, Accelevents stops at mapping preview; an authorised organiser must still confirm export."
     },
     {
       "id": "13-closing",
@@ -157,7 +157,7 @@
       "sceneDurationSeconds": 18,
       "voiceStartSeconds": 343,
       "voiceEndSeconds": 358,
-      "text": "From first proposal to published programme, Program Cue links submissions, decisions, speaker work, scheduling and operations in one event workspace. One programme. Every workflow. Fully connected at Program Cue dot com."
+      "text": "From first proposal to the timetable in an attendee’s pocket, Program Cue gives program work a shared source, visible ownership and a clear next move. Make the program happen at Program Cue dot com."
     }
   ]
 }

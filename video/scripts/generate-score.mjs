@@ -177,7 +177,7 @@ const OUTPUT_PATH = path.join(
   "video",
   "public",
   "video",
-  "program-cue-score.wav",
+  "program-cue-procedural-score.wav",
 );
 const FRAMES_PER_CHUNK = SAMPLE_RATE;
 
@@ -517,10 +517,19 @@ const MOTIF_STATEMENT_LOOKUPS = MOTIF_STATEMENTS.map(
 );
 
 // These are the handful of hero-state cuts that deserve picture-specific
-// sound direction inside the longer Collect and Assistant chapters. Frames are
-// local to the scene, so a moved chapter remains aligned without stale absolute
-// seconds. The cues are tonal and quiet; ordinary UI clicks stay silent.
+// sound direction. Frames are local to the scene, so a moved chapter remains
+// aligned without stale absolute seconds. The cues are tonal and quiet;
+// ordinary UI clicks stay silent.
 const HERO_CUE_DEFINITIONS = [
+  {
+    id: "command-action",
+    scene: "command",
+    localFrame: 470,
+    midi: 74,
+    interval: 7,
+    intensity: 0.44,
+    duration: 0.8,
+  },
   {
     id: "collect-build",
     scene: "collect",
@@ -592,6 +601,24 @@ const HERO_CUE_DEFINITIONS = [
     interval: 7,
     intensity: 0.54,
     duration: 1.02,
+  },
+  {
+    id: "place-publish-confirm",
+    scene: "place",
+    localFrame: 1052,
+    midi: 65,
+    interval: 7,
+    intensity: 0.46,
+    duration: 1.8,
+  },
+  {
+    id: "place-published-result",
+    scene: "place",
+    localFrame: 1104,
+    midi: 65,
+    interval: 4,
+    intensity: 0.38,
+    duration: 1.4,
   },
 ];
 const HERO_CUES = HERO_CUE_DEFINITIONS.map((cue) => {
@@ -675,7 +702,7 @@ const makeTemporaryOutputPath = () =>
   );
 
 const temporaryOutputPattern =
-  /^\.program-cue-score\.wav\.([1-9]\d*)\.[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.tmp$/u;
+  /^\.program-cue-procedural-score\.wav\.([1-9]\d*)\.[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.tmp$/u;
 
 const processIsAlive = (pid) => {
   try {
@@ -947,8 +974,14 @@ function createSynth() {
         return 1 - bell(progress, 0.48, 0.095) * 0.12;
       case SCENE_INDEX.place:
         return 1 - bell(progress, 0.52, 0.055) * 0.14;
-      case SCENE_INDEX.publish:
-        return 0.95 + smoothstep(progress) * 0.05;
+      case SCENE_INDEX.publish: {
+        const baseline = 0.95 + smoothstep(progress) * 0.05;
+        const breath =
+          progress <= 0.58
+            ? smoothstep((progress - 0.4) / 0.18)
+            : 1 - smoothstep((progress - 0.58) / 0.18);
+        return baseline * (1 - breath * 0.18);
+      }
       case SCENE_INDEX.operate:
         return 0.97 + Math.sin(progress * Math.PI * 2) ** 2 * 0.03;
       case SCENE_INDEX.closing:
@@ -1624,7 +1657,7 @@ function createSynth() {
       }
     }
 
-    // Eight restrained, exact-frame tonal cues give the major in-scene product
+    // Restrained, exact-frame tonal cues give the major in-scene product
     // transitions a subconscious focus/confirmation signal. Their oscillators
     // are stateless and zero-attack, so they neither disturb the deterministic
     // noise stream nor introduce a discontinuity at the edit.
@@ -1810,7 +1843,7 @@ function estimateGain() {
 
 async function main() {
   if (process.argv.length !== 2) {
-    throw new Error("Usage: npm run video:score");
+    throw new Error("Usage: npm run video:score:procedural");
   }
   await fs.promises.mkdir(outputDirectory, { recursive: true });
   await removeAbandonedTemporaryOutputs();

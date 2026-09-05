@@ -30,7 +30,7 @@ const sceneFocus = {
   assist: "evidence-backed assistant and approval",
   communicate: "communications and follow-up",
   place: "schedule placement and conflict handling",
-  publish: "publishing the public programme",
+  publish: "publishing the public program",
   operate: "durable operations and provider boundaries",
   closing: "the final promise / close",
 };
@@ -126,26 +126,71 @@ const readTimeline = () => {
 
 const canariesForScene = (scene) => {
   const duration = scene.durationInFrames;
+  if (scene.key === "opening") {
+    return [
+      [90, "human cold open"],
+      [150, "human-to-product transition"],
+      [300, "product promise"],
+      [420, "current readiness picture"],
+    ];
+  }
+  if (scene.key === "command") {
+    return [
+      [110, "command centre establish"],
+      [230, "readiness and critical condition"],
+      [430, "ranked action click"],
+      [480, "action response"],
+      [644, "ranked next-action payoff"],
+      [660, "payoff exit keeps the previous screen covered"],
+    ];
+  }
   if (scene.key === "assist") {
     return [
-      [120, "command palette"],
-      [255, "assistant request"],
-      [405, "authorised evidence"],
-      [585, "exact write preview"],
-      [735, "human approval"],
-      [900, "queued result"],
-      [1005, "durable audit"],
+      [75, "current readiness and navigation"],
+      [356, "speaker-scoped handbook evidence"],
+      [526, "exact reminder preview"],
+      [638, "human approval"],
+      [713, "durable queue and provider boundary"],
+      [798, "operation audit"],
+      [870, "AI feedback prompt"],
+      [939, "AI feedback selection"],
+      [1000, "AI feedback recorded"],
+    ];
+  }
+  if (scene.key === "decide") {
+    return [
+      [150, "review context"],
+      [360, "weighted rubric"],
+      [570, "explicit AI opt-in boundary"],
+      [750, "cannot-review workflow"],
+      [792, "returned without review outcome"],
+      [900, "main review path resumes"],
+      [950, "decision preview"],
     ];
   }
   if (scene.key === "place") {
     return [
+      [100, "published schedule baseline"],
       [210, "blocking conflict"],
-      [450, "auto-place subset"],
-      [540, "draft-only result"],
-      [666, "content approval"],
-      [950, "settled publication diff"],
-      [1032, "publication confirmation"],
-      [1140, "published snapshot"],
+      [400, "Scenario Lab proposal"],
+      [442, "Scenario Lab save selection"],
+      [468, "saved private scenario"],
+      [497, "explicit draft application"],
+      [527, "draft changed and public unchanged"],
+      [700, "exact revision in review"],
+      [750, "exact revision approved"],
+      [900, "full two-change publication diff"],
+      [1035, "publication confirmation"],
+      [1180, "latest-publication digest"],
+    ];
+  }
+  if (scene.key === "publish") {
+    return [
+      [70, "selected connected examples"],
+      [420, "published program"],
+      [530, "speaker gallery route"],
+      [780, "itinerary and managed embed"],
+      [930, "published event site"],
     ];
   }
   if (scene.key === "operate") {
@@ -202,7 +247,7 @@ const buildEvidencePlan = (timeline) => {
         ? [0, 1]
         : boundaryFrame === timeline.totalFrames
           ? [-2, -1]
-          : [-2, -1, 0, 1, 2];
+          : [-18, -9, -2, -1, 0, 1, 2, 18, 36, 45, 54];
     const fromScene =
       boundaryIndex > 0
         ? (timeline.scenes[boundaryIndex - 1]?.key ?? null)

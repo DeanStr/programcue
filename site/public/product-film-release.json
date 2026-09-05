@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "videoUrl": "https://media.programcue.com/films/program-cue-launch-92cab554.mp4",
+  "masterSha256Prefix": "92cab554",
+  "masterSha256": "92cab55415c237c77b4564ee2155fdacf05ad6787dc42daea159b6df54d52fb4",
+  "audioSource": "eleven_music_v2",
+  "audioStreamSha256": "765c22a5d90541d27b75ce759b4c9b3fa2664a67cd8cbc75cb46ce94a81ffdd2",
+  "decodedAudioSha256": "d7c97054a0d324e21327a6dc50347f3b373eadd19ba3f9eac5a13671762dcfa3",
+  "captionsFile": "program-cue-product-film-en.vtt",
+  "captionsSha256": "3e3d24bf73f5b849dd0a4d091d7462d4640c8bed9dcf976c5214e724d544264f",
+  "posterFile": "images/program-cue-product-film-poster.webp",
+  "posterSha256": "1d3cff5da55f8efb04332e27ed7afe393c50e548f689212380ee42485fce44d3"
+}
