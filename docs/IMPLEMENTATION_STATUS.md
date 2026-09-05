@@ -91,7 +91,7 @@ acceptance.
 
 ## Public website
 
-**Production foundation; deployed acceptance for the pre-guide surfaces:** A
+**Production foundation; deployed website acceptance:** A
 separate static-asset Worker serves the anonymous `programcue.com` home,
 privacy, terms, product guide and not-found surfaces without application data
 bindings, cookies, scripts, analytics or an authorisation dependency. The
@@ -124,9 +124,27 @@ Release `303912c` is deployed as `program-cue-site` Worker version
 Live anonymous checks returned 200 for home, privacy, terms, robots and sitemap;
 the not-found surface returned 404; `www` and plain HTTP canonicalised in one
 301 to the secure apex URL; and HTML responses carried the checked CSP and
-HSTS. Those live checks predate the product guide pages; deployed acceptance
-for `/guide` and its articles is outstanding until the next `program-cue-site`
-release. Cloudflare's zone-level managed robots policy prepends content signals
+HSTS. That historical release predates the product guide pages.
+
+On 5 September 2026, website bundle `67d5b4b4` deployed as Worker version
+`e9398ee9-5a85-4c73-b751-0de7468c0032`. The approved six-minute film rendered
+from `d03454c5` is served from the immutable
+`https://media.programcue.com/films/program-cue-launch-3e750f9b8eb9c0f6.mp4`
+URL. A full remote download matched the accepted master hash. The live release
+manifest, poster and 70-cue captions match the committed bundle, and desktop
+and mobile Chromium verified explicit-play playback, six-minute duration and
+the transcript link. All registered public pages, including `/guide` and its
+articles, returned 200; the media endpoint supports 206 byte-range playback.
+The film remains an editorial demonstration using seeded product states,
+not new evidence of external-provider operations.
+
+Validation passed for core tests, generated types, lint, production build,
+repository contracts, dependency policy, the 16-test website suite and five
+evaluation browser tests. The initial full application browser run had seven
+failures involving timeouts, disconnected servers and a draft-recovery
+assertion; all eight selected cases passed on an isolated rerun without
+application changes. The original full run was not a clean one-pass result.
+ Cloudflare's zone-level managed robots policy prepends content signals
 that allow ordinary search indexing while reserving AI training, then preserves
 the repository's allow-all and sitemap directives. The separate application
 health boundary remained HTTP 200 with `no-store`; this release did not deploy
