@@ -402,8 +402,10 @@ next role.
 
 ## Validate, evaluate and finalize
 
-Stamp the candidate revision in `SOURCE_REVISION`, apply the remote migration,
-run `npm run deploy`, and verify `/api/v1/health` reports that exact revision.
+From the Program Cue checkout, follow [the deployment runbook](DEPLOYMENT.md)
+and run `npm run deploy`. It validates the clean checkout, applies migrations
+after preflight, injects the checkout revision and verifies `/api/v1/health`.
+Do not stamp `SOURCE_REVISION` or apply remote migrations separately first.
 Only then install the temporary reset secrets, run the initial clean production
 fixture reset, remove those secrets and capture the three persona states. A D1 event
 created during the optional scenario can explicitly copy a still-verified
@@ -416,7 +418,8 @@ sends nothing. Use the separate row action to persist an actual portal
 invitation and durable email operation. Do not report a roster record as an
 invitation.
 
-Run the common preflight first. The dry run validates specs and prints the plan;
+Return to the separate evaluator checkout for the following `pnpm` commands.
+Run its common preflight first. The dry run validates specs and prints the plan;
 it does not browse or judge:
 
 ```bash

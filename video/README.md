@@ -73,6 +73,13 @@ and caption hashes, validates the released VTT’s syntax, timing and reading
 speed, and requires the HTML transcript to match those released captions. Soundtrack preparation verifies the downloaded master and its encoded
 and decoded audio against the release hashes.
 
+Visual review must inspect embedded-player and full-resolution readability,
+truth labels, transitions and motion quality. The comparison set includes 60
+scene frames and 136 boundary frames, including the Command Centre exit at 53
+seconds. Metadata and image similarity alone do not establish editorial quality.
+An optional narrated alternate needs fresh picture-lock, lossless-mix and
+encoded-output validation before selection.
+
 ## Optional new ElevenLabs auditions
 
 The 13 picture-locked chunks in `video/eleven-music-plan.json` define an
@@ -120,7 +127,12 @@ application or mounted by `LaunchFilm.tsx`.
 
 ## Delivery and publication
 
-Deliver the MP4 with its VTT sidecar. A host page must not autoplay the film;
+Deliver H.264 video and AAC audio in MP4: progressive 1920 × 1080 at 30 fps,
+4:2:0, limited-range BT.709 and 48 kHz stereo. Ship the picture-locked VTT
+sidecar with it. The exact media limits are enforced by
+[the render validator](scripts/validate-render.mjs).
+
+A host page must not autoplay the film;
 it must show a poster and an obvious play control. When
 `prefers-reduced-motion: reduce` is active, keep the poster stationary and wait
 for an explicit play action.
@@ -130,12 +142,13 @@ applicable Remotion licence approval and, for any ElevenLabs-derived audio,
 the applicable ElevenLabs plan and commercial-use approval. Credentials are
 never part of that record or the repository.
 
-The selected website release is `program-cue-launch-3e750f9b8eb9c0f6.mp4`, rendered
-from commit `d03454c5` and approved for publication on 5 September 2026.
-It retains the exact previously approved Eleven Music v2 soundtrack. The
-release bundle pins the validated master, its poster, 70-cue caption track
-and matching HTML transcript. Future picture changes require a newly validated
-master, an immutable upload and an atomic update of the whole site bundle.
+The selected public bundle is pinned in
+[the release manifest](../site/public/product-film-release.json). Dated approval
+and deployment evidence live in
+[the implementation audit](../docs/IMPLEMENTATION_STATUS.md#public-website).
+Future picture changes require a newly validated master, an immutable upload
+whose remote bytes match the accepted master hash, and an atomic update of the
+whole site bundle.
 
 ## Editorial boundaries
 

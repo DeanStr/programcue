@@ -354,13 +354,13 @@ test("production secret inventory is centralized, unique, and fail-closed", asyn
   );
 });
 
-test("README secret commands and local example cannot drift from the contract", async () => {
-  const readme = await readFile(
-    new URL("../README.md", import.meta.url),
+test("Deployment runbook secret commands and local example cannot drift from the contract", async () => {
+  const deploymentRunbook = await readFile(
+    new URL("../docs/DEPLOYMENT.md", import.meta.url),
     "utf8",
   );
   const documented = Array.from(
-    readme.matchAll(/^wrangler secret put ([A-Z0-9_]+)$/gmu),
+    deploymentRunbook.matchAll(/^wrangler secret put ([A-Z0-9_]+)$/gmu),
     (match) => match[1],
   );
   assert.deepEqual(documented, REQUIRED_PRODUCTION_SECRET_NAMES);
