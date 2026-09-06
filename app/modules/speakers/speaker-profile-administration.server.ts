@@ -22,6 +22,7 @@ import {
   adminSpeakerProfileSchema,
   speakerWorkflowSchema,
 } from "./speaker-administration-contracts.server";
+import { speakerWorkflowResultSchema } from "./speaker-command-results.server";
 import {
   canonicalProfileRevisionStatement,
   organisationProfileRevisionStatement,
@@ -527,6 +528,7 @@ export class SpeakerProfileAdministration {
       const { result } = await new ApiPersonIdempotencyService(this.env).run({
         viewer,
         scope: "speaker.workflow.update",
+        resultSchema: speakerWorkflowResultSchema,
         idempotencyKey: input.idempotencyKey,
         input: { personId, status: input.status },
         execute: async (commandId) => {

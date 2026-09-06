@@ -1,19 +1,17 @@
 {
   "extends": "./tsconfig.json",
   "include": [
-    "vite.config.ts",
-    "vitest.config.ts",
+    "*.config.ts",
     "vitest.test-files.ts",
-    "vitest.unit.config.ts",
-    "vitest.worker.config.ts",
-    "playwright.config.ts",
-    "playwright.quick.config.ts",
-    "react-router.config.ts",
     "scanner/src/contract.ts",
     "scanner/src/contract.test.ts",
     "e2e/**/*.ts",
+    "site/e2e/**/*.ts",
+    "site/*.ts",
+    "scripts/**/*.ts",
     "app/**/*.lint.ts"
   ],
+  "exclude": ["scripts/emit-openapi-schemas.ts"],
   "compilerOptions": {
     "strict": true,
     "allowImportingTsExtensions": true,

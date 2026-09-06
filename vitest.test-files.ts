@@ -1,4 +1,5 @@
 export const nodeOnlyTestFiles = [
+  "app/modules/ai/ai-assistant-result.test.ts",
   "scanner/src/contract.test.ts",
   "workers/queue/bounded-concurrency.test.ts",
   "site/src/e2e-port.test.ts",

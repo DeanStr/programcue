@@ -1,5 +1,4 @@
 import { z } from "zod";
-
 import { EvaluationService } from "~/modules/evaluations/evaluation-service.server";
 import { ResourceAuthoringService } from "~/modules/resources/resource-authoring-service.server";
 import { ScheduleService } from "~/modules/schedule/schedule-service.server";
@@ -18,6 +17,13 @@ import {
   type Command,
   type Family,
 } from "./api-administration-command-foundation.server";
+import {
+  decisionCommandResultSchema,
+  resourceCommandResultSchema,
+  sessionLifecycleResultSchema,
+  taskAssignmentCommandResultSchema,
+  taskTemplateCommandResultSchema,
+} from "./api-administration-result-contract";
 import {
   apiDecisionSchema,
   apiResourcePublishSchema,
@@ -62,6 +68,7 @@ export class ApiAdministrationDomainCommands extends ApiAdministrationCommandExe
       const response = await this.idempotency.run({
         viewer,
         scope: `api.session.${command}`,
+        resultSchema: sessionLifecycleResultSchema,
         idempotencyKey,
         input: { itemId, command },
         execute: (commandId) =>
@@ -135,6 +142,7 @@ export class ApiAdministrationDomainCommands extends ApiAdministrationCommandExe
       const response = await this.idempotency.run({
         viewer,
         scope: `api.decision.${command}`,
+        resultSchema: decisionCommandResultSchema,
         idempotencyKey,
         input: decisionInput,
         execute: async (commandId) => {
@@ -175,6 +183,7 @@ export class ApiAdministrationDomainCommands extends ApiAdministrationCommandExe
       const response = await this.idempotency.run({
         viewer,
         scope: "api.task-template.save",
+        resultSchema: taskTemplateCommandResultSchema,
         idempotencyKey,
         input,
         execute: async (commandId) => ({
@@ -281,6 +290,7 @@ export class ApiAdministrationDomainCommands extends ApiAdministrationCommandExe
       const response = await this.idempotency.run({
         viewer,
         scope: "api.task-template.assign",
+        resultSchema: taskAssignmentCommandResultSchema,
         idempotencyKey,
         input,
         execute: async (commandId) => {
@@ -356,6 +366,7 @@ export class ApiAdministrationDomainCommands extends ApiAdministrationCommandExe
       const response = await this.idempotency.run({
         viewer,
         scope: "api.resource.save",
+        resultSchema: resourceCommandResultSchema,
         idempotencyKey,
         input,
         execute: async (commandId) => {
@@ -386,6 +397,7 @@ export class ApiAdministrationDomainCommands extends ApiAdministrationCommandExe
       const response = await this.idempotency.run({
         viewer,
         scope: "api.resource.publish",
+        resultSchema: resourceCommandResultSchema,
         idempotencyKey,
         input: { itemId, ...input },
         execute: async (commandId) => {

@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 
-import { PUBLISHED_PAGES as SITE_PAGES } from "../../scripts/validate-site-config.mjs";
+import { PUBLISHED_PAGES as SITE_PAGES } from "../published-pages";
 
 const PUBLISHED_PAGES = SITE_PAGES.map((page) => page.path);
 

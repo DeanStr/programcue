@@ -21,6 +21,10 @@ import {
   manualSpeakerRecordSchema,
   organisationAdministratorViewer,
 } from "./speaker-administration-contracts.server";
+import {
+  existingSpeakerResultSchema,
+  manualSpeakerResultSchema,
+} from "./speaker-command-results.server";
 import type { SpeakerWorkflowStatus } from "./speaker-roster-import.server";
 import {
   SpeakerAdminIntegrityError,
@@ -80,6 +84,7 @@ export class SpeakerRosterRecordCommands {
         const { result } = await new ApiPersonIdempotencyService(this.env).run({
           viewer,
           scope: "speaker.admin.add",
+          resultSchema: manualSpeakerResultSchema,
           idempotencyKey,
           input: { ...input, evaluatorEmailRouting: resolution.routing },
           execute: (commandId) =>
@@ -569,6 +574,7 @@ export class SpeakerRosterRecordCommands {
         const { result } = await new ApiPersonIdempotencyService(this.env).run({
           viewer,
           scope: "speaker.admin.prospect.add_existing",
+          resultSchema: existingSpeakerResultSchema,
           idempotencyKey: input.idempotencyKey,
           input: { personId: input.personId },
           execute: (commandId) =>

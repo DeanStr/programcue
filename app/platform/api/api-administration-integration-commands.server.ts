@@ -11,6 +11,14 @@ import {
   type StoredWebhookSecret,
 } from "./api-administration-command-foundation.server";
 import {
+  integrationConnectionResultSchema,
+  integrationMappingResultSchema,
+  storedWebhookSecretSchema,
+  webhookSecretResultSchema,
+  webhookStatusResultSchema,
+  webhookTestResultSchema,
+} from "./api-administration-result-contract";
+import {
   apiIntegrationConnectionSchema,
   apiIntegrationDisconnectSchema,
   apiIntegrationMappingDeleteSchema,
@@ -36,6 +44,7 @@ export class ApiAdministrationIntegrationCommands extends ApiAdministrationComma
       const response = await this.idempotency.run({
         viewer,
         scope: "api.integration.connect",
+        resultSchema: integrationConnectionResultSchema,
         idempotencyKey,
         input,
         execute: (commandId) =>
@@ -67,6 +76,7 @@ export class ApiAdministrationIntegrationCommands extends ApiAdministrationComma
       const response = await this.idempotency.run({
         viewer,
         scope: "api.integration.disconnect",
+        resultSchema: integrationConnectionResultSchema,
         idempotencyKey,
         input: { itemId },
         execute: (commandId) =>
@@ -113,6 +123,7 @@ export class ApiAdministrationIntegrationCommands extends ApiAdministrationComma
       const response = await this.idempotency.run({
         viewer,
         scope: "api.integration-mapping.save",
+        resultSchema: integrationMappingResultSchema,
         idempotencyKey,
         input: { connectionId: itemId, ...input },
         execute: (commandId) =>
@@ -152,6 +163,7 @@ export class ApiAdministrationIntegrationCommands extends ApiAdministrationComma
       const response = await this.idempotency.run({
         viewer,
         scope: "api.integration-mapping.delete",
+        resultSchema: integrationMappingResultSchema,
         idempotencyKey,
         input: { connectionId: itemId, ...input },
         execute: (commandId) =>
@@ -206,6 +218,7 @@ export class ApiAdministrationIntegrationCommands extends ApiAdministrationComma
       >({
         viewer,
         scope: "api.webhook-endpoint.save",
+        resultSchema: webhookSecretResultSchema,
         idempotencyKey,
         input,
         execute: async (commandId) => {
@@ -243,12 +256,15 @@ export class ApiAdministrationIntegrationCommands extends ApiAdministrationComma
               }
             : null;
         },
-        store: async ({ endpointId, secret }) => ({
-          endpointId,
-          secretFingerprint: await apiRequestHash(secret),
-          secretFingerprintVersion: 2 as const,
-        }),
-        restore: (stored) => this.restoreCurrentWebhookSecret(viewer, stored),
+        storage: {
+          schema: storedWebhookSecretSchema,
+          store: async ({ endpointId, secret }) => ({
+            endpointId,
+            secretFingerprint: await apiRequestHash(secret),
+            secretFingerprintVersion: 2 as const,
+          }),
+          restore: (stored) => this.restoreCurrentWebhookSecret(viewer, stored),
+        },
       });
       const current = await this.restoreCurrentWebhookSecret(viewer, {
         endpointId: response.result.endpointId,
@@ -267,6 +283,7 @@ export class ApiAdministrationIntegrationCommands extends ApiAdministrationComma
       const response = await this.idempotency.run({
         viewer,
         scope: "api.webhook-endpoint.status",
+        resultSchema: webhookStatusResultSchema,
         idempotencyKey,
         input: { endpointId: itemId, ...input },
         execute: (commandId) =>
@@ -301,6 +318,7 @@ export class ApiAdministrationIntegrationCommands extends ApiAdministrationComma
       const response = await this.idempotency.run({
         viewer,
         scope: "api.webhook-endpoint.test",
+        resultSchema: webhookTestResultSchema,
         idempotencyKey,
         input: { endpointId: itemId },
         execute: (commandId) =>
@@ -339,6 +357,7 @@ export class ApiAdministrationIntegrationCommands extends ApiAdministrationComma
       >({
         viewer,
         scope: "api.webhook-endpoint.rotate-secret",
+        resultSchema: webhookSecretResultSchema,
         idempotencyKey,
         input: { endpointId: itemId },
         execute: (commandId) => service.rotateSecret(viewer, itemId, commandId),
@@ -364,12 +383,15 @@ export class ApiAdministrationIntegrationCommands extends ApiAdministrationComma
               }
             : null;
         },
-        store: async ({ endpointId, secret }) => ({
-          endpointId,
-          secretFingerprint: await apiRequestHash(secret),
-          secretFingerprintVersion: 2 as const,
-        }),
-        restore: (stored) => this.restoreCurrentWebhookSecret(viewer, stored),
+        storage: {
+          schema: storedWebhookSecretSchema,
+          store: async ({ endpointId, secret }) => ({
+            endpointId,
+            secretFingerprint: await apiRequestHash(secret),
+            secretFingerprintVersion: 2 as const,
+          }),
+          restore: (stored) => this.restoreCurrentWebhookSecret(viewer, stored),
+        },
       });
       const current = await this.restoreCurrentWebhookSecret(viewer, {
         endpointId: response.result.endpointId,

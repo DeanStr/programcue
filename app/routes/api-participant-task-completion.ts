@@ -1,4 +1,4 @@
-import { ZodError } from "zod";
+import { ZodError, z } from "zod";
 import {
   TaskService,
   TaskStateError,
@@ -93,6 +93,11 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     const response = await new ApiPersonIdempotencyService(env).run({
       viewer,
       scope: "api.participant-task.complete",
+      resultSchema: z.object({
+        taskId: z.string().min(1),
+        status: z.enum(["completed", "submitted"]),
+        revision: z.number().int().nonnegative(),
+      }),
       idempotencyKey: requireIdempotencyKey(request),
       input,
       execute: async (commandId) => {

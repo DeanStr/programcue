@@ -7,6 +7,7 @@
     "site/src/**/*",
     "test/**/*",
     "workers/**/*",
+    "scripts/emit-openapi-schemas.ts",
     "worker-configuration.d.ts"
   ],
   "exclude": ["app/**/*.lint.ts"],

@@ -10,6 +10,11 @@ import {
   type Family,
 } from "./api-administration-command-foundation.server";
 import {
+  formCommandResultSchema,
+  invitationCommandResultSchema,
+  membershipCommandResultSchema,
+} from "./api-administration-result-contract";
+import {
   apiFormPublishSchema,
   apiFormSaveSchema,
   apiMembershipRevocationSchema,
@@ -48,6 +53,7 @@ export class ApiAdministrationPeopleCommands extends ApiAdministrationCommandExe
       const response = await this.idempotency.run({
         viewer,
         scope: "api.form.save",
+        resultSchema: formCommandResultSchema,
         idempotencyKey,
         input,
         execute: async (commandId) => {
@@ -80,6 +86,7 @@ export class ApiAdministrationPeopleCommands extends ApiAdministrationCommandExe
       const response = await this.idempotency.run({
         viewer,
         scope: "api.form.publish",
+        resultSchema: formCommandResultSchema,
         idempotencyKey,
         input: { itemId, ...input },
         execute: async (commandId) => {
@@ -125,6 +132,7 @@ export class ApiAdministrationPeopleCommands extends ApiAdministrationCommandExe
       const response = await this.idempotency.run({
         viewer,
         scope: "api.person.invite",
+        resultSchema: invitationCommandResultSchema,
         idempotencyKey,
         input,
         execute: async (commandId) => {
@@ -199,6 +207,7 @@ export class ApiAdministrationPeopleCommands extends ApiAdministrationCommandExe
       const response = await this.idempotency.run({
         viewer,
         scope: "api.membership.revoke",
+        resultSchema: membershipCommandResultSchema,
         idempotencyKey,
         input,
         execute: (commandId) =>

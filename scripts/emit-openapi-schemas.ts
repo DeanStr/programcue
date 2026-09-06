@@ -15,4 +15,4 @@ const generated = Object.fromEntries(
     }),
 );
 
-process.stdout.write(JSON.stringify(generated));
+console.log(JSON.stringify(generated));

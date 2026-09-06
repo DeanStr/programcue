@@ -1,4 +1,4 @@
-import { z } from "zod";
+import type { z } from "zod";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ApiError, apiRequestHash } from "./api.server";
 
@@ -9,17 +9,15 @@ type StoredCommand = {
   responseJson: string | null;
 };
 
-const storedJsonSchema = z.string().transform((value, context) => {
-  try {
-    return JSON.parse(value) as unknown;
-  } catch {
-    context.addIssue({
-      code: "custom",
-      message: "The stored command response is not valid JSON",
-    });
-    return z.NEVER;
-  }
-});
+function parseCommandResult<Result>(
+  schema: z.ZodType<Result>,
+  value: unknown,
+): Result {
+  const parsed = schema.safeParse(value);
+  if (!parsed.success)
+    throw new Error("The API command result failed validation.");
+  return parsed.data;
+}
 
 export type PersonCommandOptions<Result, Stored = Result> = {
   viewer: Viewer;
@@ -33,8 +31,12 @@ export type PersonCommandOptions<Result, Stored = Result> = {
    * not committed; callers then receive an explicit in-progress response.
    */
   recover: (commandId: string) => Promise<Result | null>;
-  store?: (result: Result) => Promise<Stored> | Stored;
-  restore?: (stored: Stored) => Promise<Result> | Result;
+  resultSchema: z.ZodType<Result>;
+  storage?: {
+    schema: z.ZodType<Stored>;
+    store: (result: Result) => Promise<Stored> | Stored;
+    restore: (stored: Stored) => Promise<Result> | Result;
+  };
 };
 
 function actorId(viewer: Viewer) {
@@ -96,9 +98,13 @@ export class ApiPersonIdempotencyService {
     command: StoredCommand,
     result: Result,
   ) {
-    const stored = options.store
-      ? await options.store(result)
-      : (result as unknown as Stored);
+    const validated = parseCommandResult(options.resultSchema, result);
+    const stored = options.storage
+      ? parseCommandResult(
+          options.storage.schema,
+          await options.storage.store(validated),
+        )
+      : validated;
     const updated = await this.env.DB.prepare(
       `UPDATE idempotency_records
           SET status = 'completed', response_status = 200,
@@ -131,7 +137,7 @@ export class ApiPersonIdempotencyService {
       }
       return this.replay(options, converged);
     }
-    return result;
+    return validated;
   }
 
   private async replay<Result, Stored>(
@@ -143,10 +149,19 @@ export class ApiPersonIdempotencyService {
         "The completed API idempotency record is missing its response.",
       );
     }
-    const decoded = storedJsonSchema.parse(command.responseJson) as Stored;
-    return options.restore
-      ? await options.restore(decoded)
-      : (decoded as unknown as Result);
+    // Stored JSON is a runtime boundary: syntax alone does not establish its shape.
+    let decoded: unknown;
+    try {
+      decoded = JSON.parse(command.responseJson);
+    } catch {
+      throw new Error("The stored API command response is not valid JSON.");
+    }
+    const restored = options.storage
+      ? await options.storage.restore(
+          parseCommandResult(options.storage.schema, decoded),
+        )
+      : decoded;
+    return parseCommandResult(options.resultSchema, restored);
   }
 
   private async recordCommittedFailure<Result, Stored>(
@@ -257,12 +272,9 @@ export class ApiPersonIdempotencyService {
       );
     }
 
+    let result: Result;
     try {
-      const result = await options.execute(command.id);
-      return {
-        result: await this.complete(options, command, result),
-        replayed: false,
-      };
+      result = await options.execute(command.id);
     } catch (error) {
       if (isCommittedFailure(error)) {
         await this.recordCommittedFailure(options, command);
@@ -289,5 +301,12 @@ export class ApiPersonIdempotencyService {
         .run();
       throw error;
     }
+
+    // Execution succeeded. A validation, encoding or persistence failure must
+    // retain this claim: retries may recover its result, but never execute again.
+    return {
+      result: await this.complete(options, command, result),
+      replayed: false,
+    };
   }
 }

@@ -93,6 +93,25 @@ test("public programme filters sessions by track, format and room", async ({
   await expect(detailProfileLink).toBeFocused();
 });
 
+test("cleared session searches stay cleared when another filter changes", async ({
+  page,
+}) => {
+  const search = page.getByLabel("Search sessions, speakers, or topics");
+  await search.fill("event operations");
+  await expect(page).toHaveURL(/query=event(?:\+|%20)operations/u);
+
+  await page.getByRole("button", { name: "Clear filters" }).first().click();
+  await expect(search).toHaveValue("");
+  await expect(page).not.toHaveURL(/query=/u);
+  await page.getByLabel("Filter by track").selectOption("AI & Innovation");
+  await expect(page).toHaveURL(/track=AI(?:\+|%20)%26(?:\+|%20)Innovation/u);
+  await expect(page).not.toHaveURL(/query=/u);
+  await page.reload();
+  await page.locator("body[data-hydrated='true']").waitFor();
+  await expect(search).toHaveValue("");
+  await expect(page.locator(".programme-row")).toHaveCount(2);
+});
+
 test("public programme clears a pinned session when session filters change", async ({
   page,
 }) => {

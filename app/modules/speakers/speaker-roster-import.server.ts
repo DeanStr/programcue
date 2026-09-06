@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { requireValue } from "~/lib/required-value";
-
 import {
   existingPersonOrganisationRelationshipSql,
   organisationRelationshipBindings,
@@ -19,6 +18,7 @@ import {
   matchingCsvHeader,
   parseCsv,
 } from "~/platform/operations/csv";
+import { speakerRosterImportResultSchema } from "./speaker-command-results.server";
 
 const IMPORT_BYTES_LIMIT = 512_000;
 const PROFILE_LOOKUP_SIZE = 80;
@@ -383,6 +383,7 @@ export class SpeakerRosterImportService {
       const { result } = await new ApiPersonIdempotencyService(this.env).run({
         viewer,
         scope: "speaker.roster.import",
+        resultSchema: speakerRosterImportResultSchema,
         idempotencyKey,
         input: { csv, previewFingerprint },
         execute: async (commandId) => {

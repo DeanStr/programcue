@@ -1,116 +1,123 @@
+import { z } from "zod";
+
 export const AI_ASSISTANT_PROMPT_MAX_LENGTH = 4_000;
 
-export type AiEvidence = {
-  id: string;
-  label: string;
-  detail: string;
-  href: string;
-  source: "Program Cue D1";
-};
-
-type AiProposalChange = {
-  field: string;
-  before: string | null;
-  after: string;
-};
-
-type AiProposalBase = {
-  id: string;
-  title: string;
-  summary: string;
-  consequence: string;
-  changes: AiProposalChange[];
-  affectedRecords?: Array<{
-    id: string;
-    label: string;
-    detail: string;
-    href: string;
-  }>;
-  approvalRequired: true;
-};
-
-export type AiTaskProposalPreview = AiProposalBase & {
-  toolName: "propose_task";
-};
-
-export type AiReminderProposalPreview = AiProposalBase & {
-  toolName: "propose_reminder_send";
-  reminder: {
-    template: {
-      id: string;
-      templateId: string;
-      name: string;
-      category: "task_reminder";
-      versionNumber: number;
-      versionStatus: "draft";
-      subject: string;
-      content: {
-        body: string;
-        physicalAddress: string;
-        buttonText?: string;
-        buttonUrl?: string;
-      };
-    };
-    audienceType:
-      | "incomplete_speakers"
-      | "due_speakers"
-      | "overdue_speakers"
-      | "event_administrators";
-    kind: "transactional" | "optional";
-    recipients: {
-      selected: number;
-      deliverable: Array<{
-        personId: string | null;
-        address: string;
-        name: string;
-        sourceId: string | null;
-      }>;
-      invalid: Array<{ address: string; name: string; reason: string }>;
-      suppressed: Array<{
-        personId: string | null;
-        address: string;
-        name: string;
-        sourceId: string | null;
-      }>;
-    };
-    confirmation: {
-      recipientFingerprint: string;
-      deliverableFingerprint: string;
-      suppressedCount: number;
-    };
-    rendered: { subject: string; text: string };
-    provider: {
-      configured: true;
-      sender: string;
-      queueConfigured: true;
-    };
-  };
-};
-
-export type AiDomainProposalPreview = AiProposalBase & {
-  toolName:
-    | "propose_form_draft"
-    | "propose_rubric_update"
-    | "propose_reviewer_assignment"
-    | "propose_email_template_draft"
-    | "propose_schedule_placement"
-    | "propose_form_publication"
-    | "propose_schedule_publication"
-    | "propose_accelevents_run";
-};
-
-export type AiProposalPreview =
-  | AiTaskProposalPreview
-  | AiReminderProposalPreview
-  | AiDomainProposalPreview;
-
-export type AiAttribution = {
-  provider: "OpenAI" | "Workers AI" | "Anthropic";
-  model: string;
-  responseId: string;
-  generatedAt: string;
-  advisory: true;
-};
+const evidenceSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  detail: z.string(),
+  href: z.string(),
+  source: z.literal("Program Cue D1"),
+});
+export type AiEvidence = z.infer<typeof evidenceSchema>;
+const proposalBaseSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  summary: z.string(),
+  consequence: z.string(),
+  changes: z.array(
+    z.object({
+      field: z.string(),
+      before: z.string().nullable(),
+      after: z.string(),
+    }),
+  ),
+  affectedRecords: z
+    .array(
+      z.object({
+        id: z.string(),
+        label: z.string(),
+        detail: z.string(),
+        href: z.string(),
+      }),
+    )
+    .optional(),
+  approvalRequired: z.literal(true),
+});
+const taskProposalSchema = proposalBaseSchema.extend({
+  toolName: z.literal("propose_task"),
+});
+const recipientSchema = z.object({
+  personId: z.string().nullable(),
+  address: z.string(),
+  name: z.string(),
+  sourceId: z.string().nullable(),
+});
+const reminderProposalSchema = proposalBaseSchema.extend({
+  toolName: z.literal("propose_reminder_send"),
+  reminder: z.object({
+    template: z.object({
+      id: z.string(),
+      templateId: z.string(),
+      name: z.string(),
+      category: z.literal("task_reminder"),
+      versionNumber: z.number().int(),
+      versionStatus: z.literal("draft"),
+      subject: z.string(),
+      content: z.object({
+        body: z.string(),
+        physicalAddress: z.string(),
+        buttonText: z.string().optional(),
+        buttonUrl: z.string().optional(),
+      }),
+    }),
+    audienceType: z.enum([
+      "incomplete_speakers",
+      "due_speakers",
+      "overdue_speakers",
+      "event_administrators",
+    ]),
+    kind: z.enum(["transactional", "optional"]),
+    recipients: z.object({
+      selected: z.number().int().nonnegative(),
+      deliverable: z.array(recipientSchema),
+      suppressed: z.array(recipientSchema),
+      invalid: z.array(
+        z.object({ address: z.string(), name: z.string(), reason: z.string() }),
+      ),
+    }),
+    confirmation: z.object({
+      recipientFingerprint: z.string(),
+      deliverableFingerprint: z.string(),
+      suppressedCount: z.number().int().nonnegative(),
+    }),
+    rendered: z.object({ subject: z.string(), text: z.string() }),
+    provider: z.object({
+      configured: z.literal(true),
+      sender: z.string(),
+      queueConfigured: z.literal(true),
+    }),
+  }),
+});
+const domainProposalSchema = proposalBaseSchema.extend({
+  toolName: z.enum([
+    "propose_form_draft",
+    "propose_rubric_update",
+    "propose_reviewer_assignment",
+    "propose_email_template_draft",
+    "propose_schedule_placement",
+    "propose_form_publication",
+    "propose_schedule_publication",
+    "propose_accelevents_run",
+  ]),
+});
+const proposalSchema = z.discriminatedUnion("toolName", [
+  taskProposalSchema,
+  reminderProposalSchema,
+  domainProposalSchema,
+]);
+export type AiTaskProposalPreview = z.infer<typeof taskProposalSchema>;
+export type AiReminderProposalPreview = z.infer<typeof reminderProposalSchema>;
+export type AiDomainProposalPreview = z.infer<typeof domainProposalSchema>;
+export type AiProposalPreview = z.infer<typeof proposalSchema>;
+const attributionSchema = z.object({
+  provider: z.enum(["OpenAI", "Workers AI", "Anthropic"]),
+  model: z.string(),
+  responseId: z.string(),
+  generatedAt: z.string(),
+  advisory: z.literal(true),
+});
+export type AiAttribution = z.infer<typeof attributionSchema>;
 
 export type AiReadinessAdvisory = {
   generatedAt: string;
@@ -132,14 +139,15 @@ export type AiReadinessAdvisory = {
   uncertainties: string[];
 };
 
-export type AiAssistantResult = {
-  runId: string;
-  operationId: string;
-  answer: string;
-  attribution: AiAttribution;
-  evidence: AiEvidence[];
-  proposals: AiProposalPreview[];
-};
+export const aiAssistantResultSchema = z.object({
+  runId: z.string().min(1),
+  operationId: z.string().min(1),
+  answer: z.string(),
+  attribution: attributionSchema,
+  evidence: z.array(evidenceSchema),
+  proposals: z.array(proposalSchema),
+});
+export type AiAssistantResult = z.infer<typeof aiAssistantResultSchema>;
 
 export type ContextualAiResult = {
   operationId: string;

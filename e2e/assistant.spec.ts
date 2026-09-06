@@ -671,3 +671,52 @@ test("an accidental contextual AI document GET renders the application error pag
     page.getByText("Contextual AI actions require POST.", { exact: true }),
   ).toBeVisible();
 });
+
+test("assistant rejects an incomplete streamed result before displaying approval controls", async ({
+  page,
+  request,
+}) => {
+  await resetDemoEvent(request);
+  const configure = async (enabled: boolean) => {
+    const response = await request.post("/demo/fixtures/assistant-proposal", {
+      form: {
+        intent: "configure_stream_test",
+        confirm: FIXTURE_CONFIRMATION,
+        enabled: enabled ? "yes" : "no",
+      },
+      headers: { origin: e2eOrigin },
+    });
+    expect(response.ok(), await response.text()).toBeTruthy();
+  };
+  await configure(true);
+  try {
+    await page.goto("/admin/assistant");
+    await page.locator("body[data-hydrated='true']").waitFor();
+    // This is an intentionally malformed transport fixture, not a provider response.
+    await page.route("**/admin/assistant/stream", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: 'event: result\ndata: {"runId":"fixture","answer":"Incomplete result","proposals":[{"toolName":"propose_task"}]}\n\n',
+      }),
+    );
+    await page
+      .getByRole("button", {
+        name: "What is blocking event readiness? Cite the exact records and rank the next three actions.",
+      })
+      .click();
+    await expect(
+      page
+        .getByRole("alert")
+        .filter({ hasText: "The assistant returned an invalid result." }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Assistant answer" }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Approve and create task" }),
+    ).toHaveCount(0);
+  } finally {
+    await configure(false);
+  }
+});

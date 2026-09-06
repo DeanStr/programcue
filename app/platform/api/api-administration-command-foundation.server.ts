@@ -1,8 +1,12 @@
 import type { z } from "zod";
-
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { decryptWebhookSecret } from "~/platform/operations/webhook-crypto.server";
 import { ApiError, apiRequestHash } from "./api.server";
+import type {
+  formCommandResultSchema,
+  resourceCommandResultSchema,
+  storedWebhookSecretSchema,
+} from "./api-administration-result-contract";
 import type {
   apiAdministrationCommandSchema,
   apiAdministrationFamilySchema,
@@ -12,29 +16,9 @@ import { ApiPersonIdempotencyService } from "./api-person-idempotency.server";
 export type Family = z.infer<typeof apiAdministrationFamilySchema>;
 export type Command = z.infer<typeof apiAdministrationCommandSchema>;
 
-type FormResult = {
-  formId: string;
-  revision: number;
-  draftVersionId: string;
-  draftRevision: number;
-  publishedVersionId: string | null;
-  status: string;
-};
-
-type ResourceResult = {
-  pageId: string;
-  revision: number;
-  status: string;
-  versionId: string;
-  versionNumber: number;
-};
-
-export type StoredWebhookSecret = {
-  endpointId: string;
-  secretFingerprint: string;
-  /** Absent on records written before plaintext-secret fingerprints. */
-  secretFingerprintVersion?: 2;
-};
+type FormResult = z.infer<typeof formCommandResultSchema>;
+type ResourceResult = z.infer<typeof resourceCommandResultSchema>;
+export type StoredWebhookSecret = z.infer<typeof storedWebhookSecretSchema>;
 
 export function assertNew(itemId: string) {
   if (itemId !== "new") {

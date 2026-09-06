@@ -24,6 +24,36 @@ Generated build, Worker and route artifacts are excluded. The generated public
 OpenAPI document and package lock retain their owning generators rather than
 being rewritten by the formatter.
 
+## Source quality boundaries — 6 September 2026
+
+Every maintained TypeScript source, test and configuration file must belong to
+one of the compiler programs. An inventory test checks the actual programs
+against the working tree. Node/browser tooling and Worker contracts retain
+separate environments; the OpenAPI emitter is checked with the Worker contracts
+it imports and uses portable console output. Website release
+validation and browser tests share a typed page inventory.
+
+Submission finalization owns the single final D1 batch and subsequent dispatch;
+its statement builders group the guarded transition, routing and direct-session
+effects. Decision statement construction delegates accepted-session onboarding
+and notification intent while keeping their ordering in the same atomic batch.
+These extractions preserve the existing authority and revision predicates.
+
+Speaker-detail panels receive the loaded record and explicit callbacks. The
+page retains dirty-state reset, navigation blocking and confirmation ownership.
+Public-programme pending text edits, URL acknowledgements, facets and clearing
+share one filter hook; record selection and focus remain in the programme model.
+
+Assistant transport results use runtime schemas as the source of their TypeScript
+types. Person-command idempotency requires a result schema for every caller;
+commands that encode a different stored shape also supply its schema and explicit
+store/restore functions. Invalid durable results fail as server integrity errors,
+preserve the completed record and never rerun the command. Validation does not
+replace current-authority checks when restoring webhook secrets. Once execution
+returns successfully, result validation, encoding or persistence failures retain
+the processing claim. Retries can recover the canonical result or report an
+in-progress command; they cannot release that claim and repeat the mutation.
+
 ## Documentation ownership
 
 The README is the entry point for setup, common checks and document links.

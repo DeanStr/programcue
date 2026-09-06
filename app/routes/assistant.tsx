@@ -24,6 +24,7 @@ import { WORKERS_AI_MODEL } from "~/modules/ai/ai-provider.server";
 import {
   AI_ASSISTANT_PROMPT_MAX_LENGTH,
   type AiAssistantResult,
+  aiAssistantResultSchema,
 } from "~/modules/ai/ai-types";
 import {
   AssistantResultPanel,
@@ -361,8 +362,14 @@ function StreamingAssistantWorkspace({
         if (eventName === "delta" && typeof payload.delta === "string") {
           setPartial((current) => current + payload.delta);
         } else if (eventName === "result") {
+          const result = aiAssistantResultSchema.safeParse(payload);
+          if (!result.success) {
+            throw new Error(
+              "The assistant returned an invalid result. Try again or report this if it keeps happening.",
+            );
+          }
           receivedResultEvent = true;
-          setResult(payload as unknown as AiAssistantResult);
+          setResult(result.data);
         } else if (
           eventName === "error" &&
           typeof payload.message === "string"

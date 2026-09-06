@@ -12,6 +12,55 @@ Status terms:
 - **Demonstration only** — explicitly environment-gated seed or simulation, never a production fallback.
 - **External acceptance outstanding** — the in-repository path exists, but credentials, deployed resources or independent acceptance evidence are unavailable in this workspace.
 
+## Source quality follow-through — 6 September 2026
+
+**Production foundation; repository candidate:** Tiptap's complete dependency
+family now resolves to 3.31.3 and transitive `qs` to 6.16.0. A clean `npm ci`
+completed and the subsequent dependency audit reported zero vulnerabilities.
+Maintained TypeScript configuration, website browser tests and the OpenAPI
+emitter are covered by compiler programs, with a working-tree inventory check
+preventing silent omissions. Website checks share a typed published-page list.
+
+Submission and decision statement builders separate routing, direct-session,
+accepted-speaker and notification work while preserving the existing SQL,
+parameter bindings, batch ordering and dispatch boundaries. Speaker-detail
+panels retain page-owned confirmation and unsaved-edit protection; public
+programme filters retain pending-query and URL-acknowledgement state in one
+hook. Assistant results and person-command replay now validate concrete runtime
+shapes. Malformed stored results retain the completed idempotency record and do
+not repeat execution; encrypted-secret restoration still checks current authority.
+Review also closed the result-persistence failure window: validation failures
+after successful execution retain the processing claim, return a server integrity
+error and allow recovery without repeating the mutation. Clearing a programme
+search now updates its pending text value alongside the displayed field.
+
+Final review validation: `npm run check:core` passed in one complete run with
+647 unit tests, 1,922 Worker tests and the Agent test. It also passed the complete
+TypeScript check, production build, 96 configuration tests, 14 scanner tests,
+design-system checks, migration/audit contracts, recovery drill and synchronized
+33-path OpenAPI check. This supersedes the earlier core attempt whose TypeScript
+lane failed while the emitter's compiler environment was being corrected. Two
+new regression cases reproduced the lost idempotency claim before the fix and
+passed afterward; the focused idempotency file passed all nine tests.
+
+Affected Chromium workflows passed 63 of 64 tests on their initial run, including
+both text editors, programme filtering/embeds/itineraries, speaker details and
+availability, and malformed assistant stream handling. The Event Settings route-
+announcement assertion failed once and passed in isolation without an application
+change. The website suite passed all 16 desktop/mobile tests. After review fixes,
+all 29 programme, embed and assistant Chromium tests passed together, including
+clearing a search, changing a facet and reloading the resulting URL. This focused
+rerun does not replace the broader browser matrix: complete cross-browser/visual
+release coverage and deployment were not performed for this source-quality task.
+
+The requested `codex exec review --uncommitted -m gpt-6-astra` review with high
+reasoning effort completed its first round with no actionable findings. No
+findings required dismissal and no additional application fixes were needed.
+That review reran the complete generated TypeScript check, two compiler-inventory
+checks, seven assistant-result unit tests and 24 person/API Worker tests; all
+passed. The full output and per-round assessment are retained locally in
+`.artifacts/review-loop-1.log` and `.artifacts/review-loop-assessment.json`.
+
 ## Latest recorded deployments
 
 | Surface | Latest evidence in this audit | Boundary |

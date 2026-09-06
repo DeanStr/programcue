@@ -10,6 +10,7 @@ import {
   organisationAdministratorViewer,
   speakerInvitationSchema,
 } from "./speaker-administration-contracts.server";
+import { speakerInvitationResultSchema } from "./speaker-command-results.server";
 import {
   dispatchSpeakerInvitationsForCommand,
   prepareSpeakerInvitations,
@@ -82,6 +83,7 @@ export class SpeakerInvitationCommands {
           ).run({
             viewer,
             scope: "speaker.admin.invite",
+            resultSchema: speakerInvitationResultSchema,
             idempotencyKey: input.idempotencyKey,
             input: { personId: input.personId },
             execute: (commandId) =>
