@@ -1,5 +1,6 @@
 import { SubmissionAdminRepository } from "./submission-admin-repository.server";
 import { SubmissionApplicantRepository } from "./submission-applicant-repository.server";
+import { SubmissionDraftDiscardRepository } from "./submission-draft-discard-repository.server";
 import { SubmissionFormRepository } from "./submission-form-repository.server";
 import { closeDateFromEpoch } from "./submission-repository-shared";
 
@@ -23,19 +24,21 @@ export {
 
 /**
  * Stable repository facade used by routes and services. The concrete
- * repositories keep form administration, applicant workflow, and administrator
- * read models independently navigable without changing the public boundary.
+ * repositories keep form administration, applicant drafts, draft discard and
+ * administrator read models independently navigable.
  */
 export class D1SubmissionRepository {
   static closeDateFromEpoch = closeDateFromEpoch;
 
   private readonly forms: SubmissionFormRepository;
   private readonly applicants: SubmissionApplicantRepository;
+  private readonly discards: SubmissionDraftDiscardRepository;
   private readonly administration: SubmissionAdminRepository;
 
   constructor(env: CloudflareEnvironment) {
     this.forms = new SubmissionFormRepository(env);
     this.applicants = new SubmissionApplicantRepository(env);
+    this.discards = new SubmissionDraftDiscardRepository(env);
     this.administration = new SubmissionAdminRepository(env);
   }
 
@@ -128,27 +131,31 @@ export class D1SubmissionRepository {
   }
 
   beginDraftDiscard(
-    ...args: Parameters<SubmissionApplicantRepository["beginDraftDiscard"]>
+    ...args: Parameters<SubmissionDraftDiscardRepository["beginDraftDiscard"]>
   ) {
-    return this.applicants.beginDraftDiscard(...args);
+    return this.discards.beginDraftDiscard(...args);
   }
 
   findDraftDiscardReplay(
-    ...args: Parameters<SubmissionApplicantRepository["findDraftDiscardReplay"]>
+    ...args: Parameters<
+      SubmissionDraftDiscardRepository["findDraftDiscardReplay"]
+    >
   ) {
-    return this.applicants.findDraftDiscardReplay(...args);
+    return this.discards.findDraftDiscardReplay(...args);
   }
 
   getDraftFileAssets(
-    ...args: Parameters<SubmissionApplicantRepository["getDraftFileAssets"]>
+    ...args: Parameters<SubmissionDraftDiscardRepository["getDraftFileAssets"]>
   ) {
-    return this.applicants.getDraftFileAssets(...args);
+    return this.discards.getDraftFileAssets(...args);
   }
 
   completeDraftDiscard(
-    ...args: Parameters<SubmissionApplicantRepository["completeDraftDiscard"]>
+    ...args: Parameters<
+      SubmissionDraftDiscardRepository["completeDraftDiscard"]
+    >
   ) {
-    return this.applicants.completeDraftDiscard(...args);
+    return this.discards.completeDraftDiscard(...args);
   }
 
   withdrawSubmission(

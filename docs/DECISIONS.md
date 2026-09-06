@@ -2016,3 +2016,29 @@ The launch film uses US English “program” for conference content in authored
 headlines, labels, descriptions and narration. The product name stays
 “Program Cue”; actual route paths and captured application screens retain their
 source spelling. This editorial change does not republish the existing video.
+
+## Review workbench hook boundaries — 5 September 2026
+
+The review workbench model composes a draft lifecycle hook, a keyboard/focus
+hook and display calculations. Autosave, acknowledged revisions, edit
+generations, draft recovery and save-before-navigation remain together because
+they share one concurrency boundary. AI import and confirmation state lives in
+a focused hook used by that lifecycle; restoring AI suggestions still follows
+the ordinary draft restoration path. These are component-level boundaries,
+with no new runtime or persistence mechanism.
+
+A queued navigation must wait for the preceding save acknowledgement before
+flushing newer edits. Fetcher idleness alone does not mean the revision has
+advanced: the response effect still owns the in-flight edit generation until
+it has processed the acknowledgement.
+
+## Submission draft discard repository — 5 September 2026
+
+Draft-discard persistence lives in `SubmissionDraftDiscardRepository`: acquiring
+the durable lock, finding completed retries, selecting private assets under
+that lock and atomically finalizing deletion, membership cleanup and audit
+evidence stay together. The existing `D1SubmissionRepository` delegates these
+operations directly to it. Applicant draft creation, saving and withdrawal
+remain in the applicant repository; private R2 erasure remains orchestrated by
+the applicant workflow between lock acquisition and finalization. The
+extraction preserves SQL, transaction boundaries and error behavior.

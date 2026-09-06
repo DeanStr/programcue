@@ -29,14 +29,17 @@ test("form drafts restore explicitly and stale browser payloads are pruned", asy
   await page.locator("body[data-hydrated='true']").waitFor();
   await clearDraftRecovery(page);
   await page.reload();
+  await page.locator("body[data-hydrated='true']").waitFor();
 
   const introduction = page.getByLabel("Introduction");
   const serverValue = await introduction.inputValue();
   const recoveredValue = `Unsubmitted browser recovery ${Date.now()}`;
   await introduction.fill(recoveredValue);
+  await expect(introduction).toHaveValue(recoveredValue);
   await expect(page.getByText("Saved locally", { exact: true })).toBeVisible();
 
   await page.reload();
+  await page.locator("body[data-hydrated='true']").waitFor();
   await expect(introduction).toHaveValue(serverValue);
   await expect(
     page.getByRole("button", { name: "Restore local edits" }),
@@ -46,6 +49,7 @@ test("form drafts restore explicitly and stale browser payloads are pruned", asy
   await expect(page.getByText("Restored draft", { exact: true })).toBeVisible();
 
   await page.reload();
+  await page.locator("body[data-hydrated='true']").waitFor();
   await page.getByRole("button", { name: "Discard recovery copy" }).click();
   await expect(introduction).toHaveValue(serverValue);
 
@@ -86,6 +90,7 @@ test("form drafts restore explicitly and stale browser payloads are pruned", asy
   }, expiredKey);
 
   await page.reload();
+  await page.locator("body[data-hydrated='true']").waitFor();
   await expect(
     page.getByText("Checking recovery…", { exact: true }),
   ).toBeHidden();

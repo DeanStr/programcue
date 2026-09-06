@@ -261,6 +261,77 @@ test("review submission and return controls preserve context", async ({
   await resetDemoEvent(request);
 });
 
+test("review navigation saves edits made while an earlier save is in flight", async ({
+  page,
+  request,
+}) => {
+  await resetDemoEvent(request);
+  await page.context().addCookies([
+    {
+      name: "program_cue_event",
+      value: "evt-foe-2025",
+      domain: "127.0.0.1",
+      path: "/",
+    },
+    {
+      name: "program_cue_demo_identity",
+      value: "evaluator",
+      domain: "127.0.0.1",
+      path: "/",
+    },
+  ]);
+  await page.goto("/review/workbench");
+  await page.locator("body[data-hydrated='true']").waitFor();
+  const currentAssignment = page
+    .getByRole("navigation", { name: "Assigned review sources" })
+    .locator('a[aria-current="page"]');
+  const originalHref = await currentAssignment.getAttribute("href");
+  expect(originalHref).not.toBeNull();
+
+  let releaseSave!: () => void;
+  const saveHeld = new Promise<void>((resolve) => {
+    releaseSave = resolve;
+  });
+  let heldFirstSave = false;
+  let firstSaveCommitted = false;
+  await page.route("**/review/workbench*", async (route) => {
+    if (route.request().method() !== "POST" || heldFirstSave) {
+      await route.continue();
+      return;
+    }
+    heldFirstSave = true;
+    const response = await route.fetch();
+    firstSaveCommitted = true;
+    await saveHeld;
+    await route.fulfill({ response });
+  });
+  try {
+    const notes = page.getByLabel("Private notes");
+    await notes.fill("First saved version");
+    await expect.poll(() => firstSaveCommitted).toBe(true);
+    await notes.fill("Newer edits must survive the older acknowledgement");
+    // Keyboard navigation uses the same save-before-leaving path as Next.
+    await page.getByRole("button", { name: "Next", exact: true }).focus();
+    await page.keyboard.press("j");
+    await expect(currentAssignment).toHaveAttribute("href", originalHref!);
+    releaseSave();
+    await expect(currentAssignment).not.toHaveAttribute("href", originalHref!);
+    await page.getByRole("button", { name: "Previous", exact: true }).click();
+    await expect(currentAssignment).toHaveAttribute("href", originalHref!);
+    await expect(notes).toHaveValue(
+      "Newer edits must survive the older acknowledgement",
+    );
+    await page.reload();
+    await expect(notes).toHaveValue(
+      "Newer edits must survive the older acknowledgement",
+    );
+  } finally {
+    releaseSave();
+    await page.unrouteAll({ behavior: "wait" });
+    await resetDemoEvent(request);
+  }
+});
+
 test("review source remains visible at the final scoring controls", async ({
   page,
 }) => {

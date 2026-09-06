@@ -1164,6 +1164,23 @@ error. The reference route exercises mounted workspace navigation, operational
 rows, format/status presentation and a consequential confirmation
 with affected records and focus restoration.
 
+On 5 September 2026 the review workbench model was split into draft lifecycle,
+keyboard/focus and AI suggestion hooks. Autosave acknowledgements and recovery
+continue to share edit-generation ownership. A Chromium regression holds an
+older save response, edits the notes again, navigates with the keyboard and
+verifies the newer notes after returning and reloading. It exposed and now
+covers a race where navigation could flush another save before the revision
+acknowledgement was processed. Review-note recovery and the evaluation browser
+workflows pass. On 6 September the source review resolved the separate
+form-builder recovery test failure: after a reload the test edited a controlled
+field without waiting for hydration. It now waits for hydration and verifies
+the entered text before testing persistence and restoration. Both recovery
+browser tests pass against the unchanged application build. The draft-discard
+repository extraction preserves the original method bodies and transaction
+boundaries; its 32 applicant-draft Worker tests and focused Chromium discard
+workflow passed on 5 September. This is focused source validation, not a
+complete repository gate or deployed evidence.
+
 On 1 September 2026 two audited responsive-workflow defects were closed with
 production-shaped browser evidence. At the three-column desktop breakpoint the
 review workbench is bounded to the available viewport: source, rubric and an
