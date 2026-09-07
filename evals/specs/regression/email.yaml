@@ -1,0 +1,53 @@
+id: local-mail
+title: Local notification capture
+weight: 30
+description: Check real browser-triggered mail at Mailpit; this suite makes no external delivery claim.
+scenarios:
+  - id: PC-MAIL-WATCH
+    name: Establish a fresh Mailpit cursor
+    kind: command
+    instructions: Snapshot the receiving inbox before sending.
+    outputs: { watch: { type: file }, recipient: { type: string }, subject: { type: string } }
+    collect:
+      command: node evals/scripts/mail-watch.mjs
+      methodFiles: [evals/scripts/mail-watch.mjs]
+      sources: { mailbox: evals/fixtures/mailpit.json }
+      files: [watch]
+  - id: PC-MAIL-SEND
+    name: Send a correlated message through Programcue
+    kind: browser
+    persona: organizer
+    requiresAuth: true
+    dependsOn: [PC-MAIL-WATCH]
+    inputs:
+      recipient: { from: PC-MAIL-WATCH, output: recipient }
+      subject: { from: PC-MAIL-WATCH, output: subject }
+    instructions: |
+      Open Communications for Future of Events 2027. Compose a message to the bound recipient (the populated showcase speaker Priya Shah, not the clean SBEK speaker). Use exactly the bound subject and include the phrases Hello Priya and Programcue local capture in the body. Select the verified local sender notifications@example.invalid. Preview the resolved recipient and content, confirm the send and inspect its durable status. If a published template is required, create and publish an evaluation-specific template through the interface. A send confirmation is not proof of external delivery. Report blocked if the recipient or sending capability cannot be exercised.
+      Once you have explicitly confirmed delivery, the send HAS been exercised: finish completed even if its durable operation subsequently reports failed. Record the exact product error and let the independent mailbox collector determine receipt. Do not repeat the send. Use blocked only when you cannot reach the confirmation or cannot observe the attempted operation. A sole verified enabled sender with no composer picker is sufficient; verify it in Delivery settings once.
+  - id: PC-MAIL-INSPECT
+    name: Observe the correlated local message
+    kind: command
+    dependsOn: [PC-MAIL-WATCH, PC-MAIL-SEND]
+    inputs:
+      watch: { from: PC-MAIL-WATCH, output: watch }
+      recipient: { from: PC-MAIL-WATCH, output: recipient }
+      subject: { from: PC-MAIL-WATCH, output: subject }
+    instructions: Inspect only a new matching local message within 60 seconds.
+    collect:
+      command: node evals/scripts/mail-inspect.mjs
+      timeoutSeconds: 90
+      methodFiles: [evals/scripts/mail-inspect.mjs]
+      sources: { mailbox: evals/fixtures/mailpit.json, expected: evals/fixtures/mail-expected.json }
+      files: [receipt]
+rubric:
+  - id: PC-MAIL-CAPTURED
+    criterion: The exercised send reaches local Mailpit with the expected recipient, unique subject and body.
+    weight: 1
+    scenarios: [PC-MAIL-SEND, PC-MAIL-INSPECT]
+    grader:
+      type: command
+      command: node evals/scripts/check-mail.mjs
+      output: json
+      methodFiles: [evals/scripts/check-mail.mjs, evals/scripts/checks.mjs, evals/fixtures/mail-expected.json, evals/scripts/scan-receipt.mjs]
+    passCriteria: A new matching message arrives within the healthy observation window and contains every expected passage; local capture only.

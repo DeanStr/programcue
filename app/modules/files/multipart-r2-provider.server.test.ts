@@ -55,3 +55,23 @@ describe("multipart R2 completion", () => {
     expect(head).toHaveBeenCalledTimes(2);
   });
 });
+
+it("lists parts with a receiver-safe native fetch call", async () => {
+  const fetcher = function (this: unknown) {
+    if (this !== undefined) throw new TypeError("Illegal invocation");
+    return Promise.resolve(
+      new Response(
+        "<ListPartsResult><IsTruncated>false</IsTruncated><Part><PartNumber>1</PartNumber><Size>16</Size><ETag>real-part-etag</ETag></Part></ListPartsResult>",
+      ),
+    );
+  } as typeof fetch;
+  const environment = {
+    R2_ACCOUNT_ID: "local-account",
+    R2_BUCKET_NAME: "local-files",
+    R2_ACCESS_KEY_ID: "local-key",
+    R2_SECRET_ACCESS_KEY: "local-secret-0123456789",
+  } as CloudflareEnvironment;
+  await expect(
+    new MultipartR2Provider(environment, { fetch: fetcher }).listParts(row),
+  ).resolves.toEqual([{ PartNumber: 1, Size: 16, ETag: "real-part-etag" }]);
+});

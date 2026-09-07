@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "policy": {
+    "mode": "release",
+    "policy": {
+      "minimumCoverage": 100,
+      "minimumScore": 100,
+      "split": "development",
+      "includeOptional": false
+    },
+    "expectedAreas": [
+      "local-mail",
+      "file-integrity",
+      "publication"
+    ],
+    "expectedScenarios": [
+      "PC-MAIL-WATCH",
+      "PC-MAIL-SEND",
+      "PC-MAIL-INSPECT",
+      "PC-FILES",
+      "PC-FILES-SCANS",
+      "PC-FILES-QUARANTINE",
+      "PC-FILES-ACCESS",
+      "PC-PUBLICATION"
+    ],
+    "failures": []
+  },
+  "baselineName": "local-astra-medium",
+  "snapshotId": "2026-09-07T02-29-38-534Z-67a9d91b487d-ee63187c",
+  "sourceRunId": "2026-09-07T02-12-32",
+  "sourceReportSha256": "822afb5e4762316e249f4d26486342a3ad4a193dd661707d96fa62eea9696c71",
+  "reportSha256": "67a9d91b487d21b30190d57e54d1c6fab010ba5d88e17e215e4b48e8954efd4f",
+  "sourceArtifactIndexSha256": "54b04a6427a1492c275601662ba3ec1f9e6e129b3d5aee2f524b7bfe045a420a",
+  "sourceArtifactRootSha256": "5c7afb60bb4a86f5937aacdd786fe0de16ff5b0c5d798dc16517334b5b5c5415",
+  "evaluationFingerprint": "167a4a7c8cd1c1237d23178f291a50dbec8875ff88a8226ef1dfd9f6fb3f421a",
+  "target": {
+    "kind": "web",
+    "root": ".",
+    "git": {
+      "commit": "3da09cc86ee2a4795edb44a292ca321d421e41f6",
+      "dirty": true,
+      "worktreeSha256": "54aab76b46ccad47a665a005b04838800d7102c8a3e2f322a1170b26f7644d93"
+    }
+  },
+  "reviewer": "Codex",
+  "promotedAt": "2026-09-07T02:29:38.534Z",
+  "promotionSha256": "15e8033fdc981a8083aded1302159dab1c5849b49ab6911d33fa7a22f6f855fc"
+}

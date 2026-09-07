@@ -1,0 +1,37 @@
+id: publication
+title: Programcue publication contract
+weight: 40
+description: Draft session content must remain private until an approved publication; this differs deliberately from upstream EMB-16.
+scenarios:
+  - id: PC-PUBLICATION
+    name: Verify the draft and published content boundary
+    kind: browser
+    persona: organizer
+    requiresAuth: true
+    allowedPersonas: [organizer, anonymous]
+    instructions: |
+      Use the canonical Future of Events 2027 event and session demo-session-1. Switch to anonymous and inspect /public/programme/future-of-events-2027?session=demo-session-1, recording the session's title and public URL. Switch to organizer and open /admin/schedule?session=demo-session-1. Use Create next draft and explicitly Confirm new draft if needed. In the session content editor, change Title by appending PC-DRAFT-ONLY. Wait for Saved and reload the same schedule URL to inspect persistence. Do not publish yet.
+      Record checkpoint draft after inspecting the saved draft title. Switch to anonymous, reload the original public surface and verify the old published title remains and PC-DRAFT-ONLY is absent. Record checkpoint isolated with the public evidence.
+      Switch to organizer and open Publish schedule. Inspect the actual approval blocker and disabled Confirm publication button, retaining a screenshot before Cancel. Follow Review history in the session content editor, select approved as Next status, check the explicit status confirmation and click Change status. Inspect Content updated, then Open schedule. Open Publish schedule again, inspect the preview and explicitly Confirm publication. Switch to anonymous and reload the original public URL to inspect the changed title.
+      Record checkpoint published with evidence references for ALL of these steps: the unapproved blocker and disabled confirmation, actual approval/status save, publication preview and explicit confirmation, and the anonymously reloaded changed title. Do not cite only the final screenshot: the grader is scoped to the checkpoint's referenced evidence.
+      Select at most 12 relevant references for this checkpoint (the tool's hard limit is 20); do not cite every intervening step. Check that each checkpoint call succeeds. If it returns an error, correct its arguments and retry before calling done. A failed checkpoint submission is not a recorded checkpoint.
+      If required approvals or external steps cannot be reached, report blocked and preserve earlier checkpoints. Never count a fixture publication as a new exercised publication.
+    checkpoints:
+      draft: The edited draft was inspected after save/reload.
+      isolated: The anonymous public content was inspected while the edit was still a draft.
+      published: Unapproved publication was blocked, the edit was approved and explicitly published, and the changed content was observed anonymously; evidence covers each step.
+rubric:
+  - id: PC-DRAFT-PRIVATE
+    criterion: Draft session-content edits do not alter the last published public programme.
+    weight: 2
+    scenarios: [PC-PUBLICATION]
+    checkpoints: { PC-PUBLICATION: [draft, isolated] }
+    grader: { type: llm }
+    passCriteria: The persisted draft has PC-DRAFT-ONLY while the anonymously reloaded published session still has its previous title.
+  - id: PC-PUBLISH-CONTENT
+    criterion: Approved publication makes the changed session content public.
+    weight: 1
+    scenarios: [PC-PUBLICATION]
+    checkpoints: { PC-PUBLICATION: [published] }
+    grader: { type: llm }
+    passCriteria: Unapproved publication was visibly blocked; the browser then exercised approval and explicit publication and observed the changed title anonymously on the original public surface.

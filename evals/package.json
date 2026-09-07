@@ -1,0 +1,32 @@
+{
+  "name": "programcue-evals",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "import": "node scripts/import-upstream.mjs",
+    "validate": "aek validate --config evalkit.local.yaml && aek validate --config evalkit.production.yaml && aek validate --config evalkit.regression.yaml",
+    "plan": "aek run --config evalkit.local.yaml --include-optional --dry-run",
+    "local": "node scripts/local.mjs",
+    "auth:production": "node scripts/auth-production.mjs",
+    "run:production": "aek run --config evalkit.production.yaml --include-optional",
+    "test": "node --import tsx --test test/*.test.mjs",
+    "setup": "node scripts/setup.mjs",
+    "smoke:product": "node scripts/local.mjs --smoke-product",
+    "smoke:files": "node scripts/local.mjs --smoke-files",
+    "regression:files": "node scripts/local.mjs --files-regression",
+    "regression:all": "node scripts/local.mjs --regression"
+  },
+  "dependencies": {
+    "agent-eval-kit": "file:.agent-eval/vendor/agent-eval-kit.tgz",
+    "playwright": "1.62.1",
+    "yaml": "^2.9.0"
+  },
+  "engines": {
+    "node": ">=24.11.0"
+  },
+  "devDependencies": {
+    "miniflare": "5.20260801.1-alpha",
+    "tsx": "4.23.11"
+  }
+}

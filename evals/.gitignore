@@ -1,0 +1,4 @@
+node_modules/
+.agent-eval/
+.env
+*.log

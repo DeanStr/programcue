@@ -2023,3 +2023,149 @@ operations directly to it. Applicant draft creation, saving and withdrawal
 remain in the applicant repository; private R2 erasure remains orchestrated by
 the applicant workflow between lock acquisition and finalization. The
 extraction preserves SQL, transaction boundaries and error behavior.
+
+## Application-owned AEK evaluations — 6 September 2026
+
+Programcue owns its evaluation configs, pinned upstream fixtures and scenarios
+under `evals/`. AEK is installed from an explicitly selected package checkout;
+its public CLI and package exports are the integration boundary. Configs use the
+application root so ordinary AEK receipts identify Programcue. Private state and
+reports are ignored. Earlier standalone reports retain their original sealed
+identity and must not be resumed under the moved configuration.
+
+The pinned upstream criteria are a comparison contract, not the product spec.
+AEK's explicit equal automatic/manual shares for the 15 hybrid criteria are a
+new scoring policy; historical SBEK percentages are not comparable. Unverified
+manual shares reduce coverage. Preserve upstream EMB-16 and score it honestly;
+the separate Programcue regression suite verifies draft isolation followed by
+explicit publication. A failed exercised action is scoreable failure; unavailable
+providers or insufficient evidence are missing coverage. Local Mailpit evidence
+never establishes external delivery or ordinary production email verification.
+
+Opaque email-preview frames retain their empty sandbox and no-referrer policy.
+A coding-agent screenshot that masks them is unavailable evaluator evidence, not
+a blank-preview product defect. Direct project-owned Playwright smokes verify
+rendering without loosening those application or evaluator boundaries. Missing
+local upload/scanner configuration is a blocked browser-acceptance check; released
+R2 fixtures in Worker tests establish ZIP bytes separately and never claim scanning.
+
+The explicit `evals/` file smoke and AEK file regression share the local R2
+emulator plus a signed S3 transport adapter, with a manifest containing only acknowledged multipart
+writes. It verifies the existing signed scanner dispatch and object identity,
+runs the production Python ClamAV invocation with fresh signatures in an isolated
+container, and delivers the ordinary signed callback. Missing prerequisites and
+scanner execution errors fail this smoke; no verdict is fabricated. A virtual
+HTTPS callback origin is routed inside Miniflare, so production network policy
+needs no local exception. Hosted S3/CORS, the scanner HTTP object proxy and
+Cloudflare Workflow/Container scheduling require separate acceptance.
+
+An evaluation-only Worker entry maps same-origin loopback uploads back to the
+original signed S3 authority. Ordinary browser requests work for both AEK and
+Playwright, without browser interception or changes to production configuration.
+AEK retains scanner receipts through a public command collector and checks their
+actual object hashes, engine/signature metadata and accepted callbacks. Its ZIP
+grader inspects retained bytes independently of the browser model. The first
+completed run exposed a remaining LLM checkpoint-scope limitation for version
+history; preserve that partial grade separately from deterministic integrity
+passes. No reusable AEK core change was required for this integration.
+
+The file regression now splits the previous version-history weight equally
+between an LLM check of visible history/current markers and a deterministic
+check of both individually downloaded PDFs against distinct fixture hashes.
+This preserves combined weight 4 for the original file criteria and makes byte correctness
+independent of visual judgment. Upstream criteria remain unchanged. Both
+regression model roles are pinned to `gpt-6-astra` with medium reasoning;
+AEK records requested model/effort and CLI versions, without claiming that
+Codex's JSON event stream confirms a resolved provider model snapshot.
+
+The file area adds separate deterministic criteria for EICAR quarantine and
+anonymous private-file denial, each with weight 1; the original four criteria
+keep their weights. Clean scan receipts are collected before a second browser
+workflow uploads the EICAR PDF as v3. A public AEK command collector retains
+actual local scanner results, authenticated server version history and the
+response bodies/statuses from organizer and empty-cookie requests. Quarantine
+must preserve current v2 and its exact bytes while denying v3. Anonymous denial
+needs a successful authenticated control for the same URL; an unrelated error
+page cannot establish authorization correctness. No hosted credentials, direct
+database release changes or synthetic scanner verdicts are involved.
+
+Local Programcue regression selections share one isolated Worker runtime.
+AEK's validated JSON plan determines whether selected file-integrity scenarios
+require the signed storage adapter and real ClamAV; publication and mail alone
+do not start those services. Its only additional outbound network
+permission is POST to the fixed loopback Mailpit send endpoint, with redirects
+rejected and actual provider responses/errors preserved. This allows the three
+project areas to share fresh state without introducing production credentials
+or claiming external delivery. Publication checkpoints retain the unapproved
+blocker, approval action, explicit publication and anonymous result together
+so scoped judging can assess the complete publication boundary.
+
+AEK records checkpoint argument failures inside its authoritative browser/workspace
+transcript. A completed finalization requires the checkpoints selected by the
+rubric and returns a recoverable error if any are missing; unused declarations
+do not prevent completion. Honest blocked or feature-not-found outcomes retain
+partial evidence and unavailable coverage. The evaluator dependency includes
+this handling without changing Programcue's application or scoring criteria.
+
+The nine-criterion local regression comparison baseline is `local-astra-medium`,
+promoted from the verified combined run `2026-09-06T13-55-39` with reviewer
+recorded as Codex. The explicit promotion policy uses `development` (all current
+project criteria), requires 100% score and coverage, and checks every required
+scenario. No milestone-policy bypass is used. Its compact snapshot preserves
+requested Astra/medium settings and source artifact provenance; baseline
+promotion is separate from ordinary evaluation and does not assert production
+acceptance. The subsequent checkpoint-fix publication run provides bounded
+validation of the updated kit; the other areas were not rerun for that fix.
+
+Local evaluator commands run in owned process groups. Cancellation, early leader
+exit and unexpected Worker exit must stop surviving descendants before owned
+state is removed; the shutdown grace allows AEK to stop its detached providers.
+Docker cleanup failures must still release the coordinator lock. Generated
+baseline snapshots are excluded from formatting because their exact bytes are
+part of AEK's integrity contract; baseline loading/comparison validates them.
+
+A successful workspace finalization is terminal, including blocked outcomes;
+later tools cannot add evidence or overwrite the result. Report provider fields
+come from the retained receipt, so rescoring with changed configuration cannot
+relabel the model or reasoning effort that collected the evidence.
+AEK's artifact validation must also retain effort when a sealed collection is
+passed to a detached judge; the current evaluator package includes that schema
+round-trip fix.
+
+Scanner evidence uses one shared structural validator. Missing engine, callback
+status or object-size fields are execution errors, not failed product criteria.
+The shared validator is declared in collector/grader method files so its changes
+affect AEK provenance. Mailbox providers likewise share one bounded JSON reader
+inside AEK, preserving limits, cancellation and redacted failure diagnostics.
+
+Local startup retries only expected transient conditions: a missing ClamAV ready
+file, Worker connection refusal/reset/timeout, or HTTP 503. Docker command errors,
+unexpected HTTP statuses and exited Workers fail with diagnostics; each ClamAV
+readiness command has a bounded timeout. Preflight uses AEK's public JSON plan
+before any owned resource is created rather than duplicating its CLI parser.
+The real-file smoke shares the grader's explicit anonymous-denial policy. It
+requires a same-URL authenticated byte control, rejects anonymous private bytes,
+and accepts only an access-denial status or the expected local sign-in redirect.
+Server errors and redirects to unrelated or accessible files cannot pass.
+
+The local evaluator always rebuilds Programcue before serving it, overriding
+the ordinary E2E skip-build environment setting in both startup paths. AEK's
+current-checkout receipt must not describe an older application build.
+
+Configured scanner failures notify the isolated runtime immediately and remain
+errors when its pending work drains. The coordinator checks the Worker's final
+exit status after collection, so a blocked scenario cannot hide provider errors
+by skipping its evidence collectors. Cleanup still removes owned containers,
+state and locks before reporting unsuccessful or forced Worker termination.
+Normal isolated shutdown uses an IPC request so service draining finishes
+before process-group signals stop remaining descendants. The coordinator rejects
+an isolated Worker that needs forced termination instead of accepting its signal
+exit as proof that cleanup succeeded.
+
+When the installed evaluator requires provenance absent from an older baseline,
+collect and promote a fresh compatible run through AEK's public CLI. Preserve
+historical sealed snapshots; do not fabricate missing receipt fields or bypass
+schema validation. The active `local-astra-medium` baseline now uses the verified
+nine-criterion run `2026-09-07T02-12-32` with AEK 0.4.0, under the same strict
+promotion policy. A suite test exercises named baseline loading with the locked
+evaluator so dependency/schema changes cannot silently break comparison.

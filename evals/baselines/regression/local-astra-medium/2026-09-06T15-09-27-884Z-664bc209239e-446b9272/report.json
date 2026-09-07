@@ -1,0 +1,625 @@
+{
+  "schemaVersion": 1,
+  "runId": "2026-09-06T13-55-39",
+  "project": "Programcue — product regression requirements",
+  "target": {
+    "kind": "web",
+    "root": "."
+  },
+  "startedAt": "2026-09-06T13:55:49.302Z",
+  "finishedAt": "2026-09-06T14:15:10.590Z",
+  "kitVersion": "0.4.0",
+  "providers": {
+    "agent": {
+      "provider": "codex",
+      "model": "gpt-6-astra",
+      "effort": "medium"
+    },
+    "judge": {
+      "provider": "codex",
+      "model": "gpt-6-astra",
+      "effort": "medium"
+    }
+  },
+  "areas": [
+    {
+      "id": "file-integrity",
+      "title": "Real file versions and ZIP bytes",
+      "weight": 30,
+      "optional": false,
+      "earned": 6,
+      "judgeable": 6,
+      "total": 6,
+      "scorePct": 100,
+      "coveragePct": 100,
+      "items": [
+        {
+          "id": "PC-VERSION-HISTORY",
+          "verdict": "pass",
+          "confidence": "high",
+          "reasoning": "Promoted baseline comparison snapshot.",
+          "evidenceRefs": [],
+          "source": "llm",
+          "score": {
+            "earned": 0.5,
+            "judgeable": 0.5,
+            "total": 0.5,
+            "scorePct": 100,
+            "coveragePct": 100
+          }
+        },
+        {
+          "id": "PC-VERSION-BYTES",
+          "verdict": "pass",
+          "reasoning": "Promoted baseline comparison snapshot.",
+          "evidenceRefs": [],
+          "confidence": "high",
+          "source": "command",
+          "score": {
+            "earned": 0.5,
+            "judgeable": 0.5,
+            "total": 0.5,
+            "scorePct": 100,
+            "coveragePct": 100
+          }
+        },
+        {
+          "id": "PC-ZIP-LATEST",
+          "verdict": "pass",
+          "reasoning": "Promoted baseline comparison snapshot.",
+          "evidenceRefs": [],
+          "confidence": "high",
+          "source": "command",
+          "score": {
+            "earned": 2,
+            "judgeable": 2,
+            "total": 2,
+            "scorePct": 100,
+            "coveragePct": 100
+          }
+        },
+        {
+          "id": "PC-FILES-SCANNED",
+          "verdict": "pass",
+          "reasoning": "Promoted baseline comparison snapshot.",
+          "evidenceRefs": [],
+          "confidence": "high",
+          "source": "command",
+          "score": {
+            "earned": 1,
+            "judgeable": 1,
+            "total": 1,
+            "scorePct": 100,
+            "coveragePct": 100
+          }
+        },
+        {
+          "id": "PC-FILES-QUARANTINED",
+          "verdict": "pass",
+          "reasoning": "Promoted baseline comparison snapshot.",
+          "evidenceRefs": [],
+          "confidence": "high",
+          "source": "command",
+          "score": {
+            "earned": 1,
+            "judgeable": 1,
+            "total": 1,
+            "scorePct": 100,
+            "coveragePct": 100
+          }
+        },
+        {
+          "id": "PC-FILES-PRIVATE",
+          "verdict": "pass",
+          "reasoning": "Promoted baseline comparison snapshot.",
+          "evidenceRefs": [],
+          "confidence": "high",
+          "source": "command",
+          "score": {
+            "earned": 1,
+            "judgeable": 1,
+            "total": 1,
+            "scorePct": 100,
+            "coveragePct": 100
+          }
+        }
+      ],
+      "defects": [],
+      "notes": "",
+      "scenarios": [],
+      "pendingManual": [],
+      "unproven": [],
+      "byTag": {
+        "general": {
+          "earned": 6,
+          "judgeable": 6,
+          "total": 6,
+          "scorePct": 100,
+          "coveragePct": 100
+        }
+      },
+      "byStratum": {},
+      "gates": [],
+      "caseResults": [
+        {
+          "areaId": "file-integrity",
+          "rubricId": "PC-VERSION-HISTORY",
+          "caseId": "default",
+          "scenarioIds": [
+            "PC-FILES"
+          ],
+          "strata": [],
+          "verdict": "pass",
+          "confidence": "high",
+          "reasoning": "Promoted baseline case snapshot.",
+          "evidenceRefs": [],
+          "source": "llm",
+          "points": 1
+        }
+      ]
+    },
+    {
+      "id": "local-mail",
+      "title": "Local notification capture",
+      "weight": 30,
+      "optional": false,
+      "earned": 1,
+      "judgeable": 1,
+      "total": 1,
+      "scorePct": 100,
+      "coveragePct": 100,
+      "items": [
+        {
+          "id": "PC-MAIL-CAPTURED",
+          "verdict": "pass",
+          "reasoning": "Promoted baseline comparison snapshot.",
+          "evidenceRefs": [],
+          "confidence": "high",
+          "source": "command",
+          "score": {
+            "earned": 1,
+            "judgeable": 1,
+            "total": 1,
+            "scorePct": 100,
+            "coveragePct": 100
+          }
+        }
+      ],
+      "defects": [],
+      "notes": "",
+      "scenarios": [],
+      "pendingManual": [],
+      "unproven": [],
+      "byTag": {
+        "general": {
+          "earned": 1,
+          "judgeable": 1,
+          "total": 1,
+          "scorePct": 100,
+          "coveragePct": 100
+        }
+      },
+      "byStratum": {},
+      "gates": [],
+      "caseResults": []
+    },
+    {
+      "id": "publication",
+      "title": "Programcue publication contract",
+      "weight": 40,
+      "optional": false,
+      "earned": 3,
+      "judgeable": 3,
+      "total": 3,
+      "scorePct": 100,
+      "coveragePct": 100,
+      "items": [
+        {
+          "id": "PC-DRAFT-PRIVATE",
+          "verdict": "pass",
+          "confidence": "high",
+          "reasoning": "Promoted baseline comparison snapshot.",
+          "evidenceRefs": [],
+          "source": "llm",
+          "score": {
+            "earned": 2,
+            "judgeable": 2,
+            "total": 2,
+            "scorePct": 100,
+            "coveragePct": 100
+          }
+        },
+        {
+          "id": "PC-PUBLISH-CONTENT",
+          "verdict": "pass",
+          "confidence": "high",
+          "reasoning": "Promoted baseline comparison snapshot.",
+          "evidenceRefs": [],
+          "source": "llm",
+          "score": {
+            "earned": 1,
+            "judgeable": 1,
+            "total": 1,
+            "scorePct": 100,
+            "coveragePct": 100
+          }
+        }
+      ],
+      "defects": [],
+      "notes": "",
+      "scenarios": [],
+      "pendingManual": [],
+      "unproven": [],
+      "byTag": {
+        "general": {
+          "earned": 3,
+          "judgeable": 3,
+          "total": 3,
+          "scorePct": 100,
+          "coveragePct": 100
+        }
+      },
+      "byStratum": {},
+      "gates": [],
+      "caseResults": [
+        {
+          "areaId": "publication",
+          "rubricId": "PC-DRAFT-PRIVATE",
+          "caseId": "default",
+          "scenarioIds": [
+            "PC-PUBLICATION"
+          ],
+          "strata": [],
+          "verdict": "pass",
+          "confidence": "high",
+          "reasoning": "Promoted baseline case snapshot.",
+          "evidenceRefs": [],
+          "source": "llm",
+          "points": 1
+        },
+        {
+          "areaId": "publication",
+          "rubricId": "PC-PUBLISH-CONTENT",
+          "caseId": "default",
+          "scenarioIds": [
+            "PC-PUBLICATION"
+          ],
+          "strata": [],
+          "verdict": "pass",
+          "confidence": "high",
+          "reasoning": "Promoted baseline case snapshot.",
+          "evidenceRefs": [],
+          "source": "llm",
+          "points": 1
+        }
+      ]
+    }
+  ],
+  "overallScorePct": 100,
+  "overallCoveragePct": 100,
+  "scoreWithheld": false,
+  "byTag": {
+    "general": {
+      "earned": 100,
+      "judgeable": 100,
+      "total": 100,
+      "scorePct": 100,
+      "coveragePct": 100
+    }
+  },
+  "byStratum": {},
+  "manualPending": 0,
+  "receipt": {
+    "schemaVersion": 1,
+    "evaluationFingerprint": "85fd63ebe21cb91588f88e7b8b1c359f745d4bab4dade0ff8b13b31e481a9c1c",
+    "inputFingerprint": "e57fb53b915be639bb7ea6f7547610f5132561e1f3ad73e4eab6cf830ab5f0b0",
+    "inputs": {
+      "config": {
+        "sha256": "1b1e2de3375c572e0ba2afd2ddb8b0833324b6447973cdb1b7ab467f343aa5ff",
+        "bytes": 2401
+      },
+      "configRepresentation": "resolved",
+      "configCompatibility": {
+        "config.version": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+        "config.project": "aa626fb4af3f0c0b77af73e4c482680b7cde553d99be915ae0da92e963848760",
+        "config.target": "041c1812d5bf08d78ed847b6af53aa9cfcd8092b7dba5b42c611251a2b7e2e2c",
+        "config.agent": "78e1ffc20628a00d7e55067233eb2c0ecd3559444541143f0e30ce536d462ce7",
+        "config.paths": "22672efb22bacf58a525412e712ea0b1538097c9daa375ebc7c40ae46b6ff7c4",
+        "config.browser": "5b28a72f8b17790c49f77bb841ec60dcfffcbd45f504367967ff37aaa6c51094",
+        "config.variables": "a532045e11fb46724d4fa75de9f59521abf8e4863179f9ce65e6be8a90e8f0f5",
+        "config.instructions": "c63549e7daebd23d4b98135791c539f05fd062c4972e9b72f9464c71ab884802",
+        "judge.provider": "89b4cbabff4785a08fe39a321cd8515b788ffa7f7868cb5f58a4782d4c2a246b",
+        "judge.model": "2ebc146837efd9828eda2ce28add9c52892fbfa67a74a92e7894e5a0aeda551b",
+        "judge.effort": "9f0829df4e296698fc91784eef0f55e6f18779697980ae3c3a27dbe1ae5f9071",
+        "judge.timeoutSeconds": "22f1a6d92267c9f76dc66173843d9e5b713179e17f9bd29a0779e60ef58de27a",
+        "judge.extraArgs": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+      },
+      "methodSha256": "b063a0ca4496561d61b804fdc053ad773d9865600077499c10ac36f855d249e4",
+      "collectionMethodSha256": "613108c21d4a9892777892591c897b829128e4f88ffe63ce69016c164975edc0",
+      "visual": {},
+      "textCandidates": {},
+      "textReferences": {},
+      "collectorSources": {
+        "PC-MAIL-WATCH/mailbox": {
+          "sha256": "95434ffddcbb6e6e2becc0ff1505d8569185ed146922dbf99b4e576163e469e1",
+          "bytes": 83
+        },
+        "PC-MAIL-INSPECT/mailbox": {
+          "sha256": "95434ffddcbb6e6e2becc0ff1505d8569185ed146922dbf99b4e576163e469e1",
+          "bytes": 83
+        },
+        "PC-MAIL-INSPECT/expected": {
+          "sha256": "f055b6be8f080a31c719b8e4caa82c30b01bf7ce087b9f470f96427c20da87b1",
+          "bytes": 109
+        },
+        "PC-FILES-SCANS/expected": {
+          "sha256": "e576fbef82aaeb8ac589b82e860a78ca14f2333971f7df3a916f3c0b9e1e57b4",
+          "bytes": 177
+        }
+      },
+      "collectorMethods": {
+        "PC-MAIL-WATCH/evals/scripts/mail-watch.mjs": {
+          "sha256": "7d885a0d81b691de88a13a55d2be9b875e1453d080e8bc556be3fb5a7ff4904f",
+          "bytes": 1139
+        },
+        "PC-MAIL-INSPECT/evals/scripts/mail-inspect.mjs": {
+          "sha256": "98ef271a378531f2db272a93d112ac1fcf7097824b5a9f2b4997da18ad462c25",
+          "bytes": 1315
+        },
+        "PC-FILES-SCANS/evals/scripts/file-scan-inspect.mjs": {
+          "sha256": "c0e819a638cd6ab7e2eb37aea339b5b3e499710ad51ec12cc35741cc551f495a",
+          "bytes": 1805
+        },
+        "PC-FILES-SCANS/evals/scripts/checks.mjs": {
+          "sha256": "12f32aa2e1763bdac9867a4f07719cd2d602f48427cc6d391902aeca88b21765",
+          "bytes": 2366
+        },
+        "PC-FILES-ACCESS/evals/scripts/file-access-inspect.mjs": {
+          "sha256": "bf8be3442b6659b8651714b5d1b4255833d32445a168a2a047a1255aa2b66c33",
+          "bytes": 4751
+        },
+        "PC-FILES-ACCESS/evals/scripts/file-access-checks.mjs": {
+          "sha256": "e1e265b1dc0162d44e2f82521a19b83a09d8c8088e3b3ddb497293c21df8da44",
+          "bytes": 5829
+        }
+      },
+      "graderMethods": {
+        "PC-MAIL-CAPTURED/evals/scripts/check-mail.mjs": {
+          "bytes": 1197,
+          "sha256": "b6c0ed0ead870044625e797d55fac13a98b0b3ca5c30c7780c64b44ed07aac1d"
+        },
+        "PC-MAIL-CAPTURED/evals/scripts/checks.mjs": {
+          "bytes": 2366,
+          "sha256": "12f32aa2e1763bdac9867a4f07719cd2d602f48427cc6d391902aeca88b21765"
+        },
+        "PC-MAIL-CAPTURED/evals/fixtures/mail-expected.json": {
+          "bytes": 109,
+          "sha256": "f055b6be8f080a31c719b8e4caa82c30b01bf7ce087b9f470f96427c20da87b1"
+        },
+        "PC-VERSION-BYTES/evals/scripts/check-versions.mjs": {
+          "bytes": 2307,
+          "sha256": "56d1f0e83403d918357aacd21228c8fb4d53b8713ed65a9f0fac284d52e1feb3"
+        },
+        "PC-VERSION-BYTES/evals/fixtures/files-expected.json": {
+          "bytes": 177,
+          "sha256": "e576fbef82aaeb8ac589b82e860a78ca14f2333971f7df3a916f3c0b9e1e57b4"
+        },
+        "PC-ZIP-LATEST/evals/scripts/check-zip.mjs": {
+          "bytes": 1475,
+          "sha256": "de49021087f9472abd89276ce88963b4795321bcbaff9fbdad2e1278e4a2d01d"
+        },
+        "PC-ZIP-LATEST/evals/scripts/checks.mjs": {
+          "bytes": 2366,
+          "sha256": "12f32aa2e1763bdac9867a4f07719cd2d602f48427cc6d391902aeca88b21765"
+        },
+        "PC-ZIP-LATEST/evals/fixtures/files-expected.json": {
+          "bytes": 177,
+          "sha256": "e576fbef82aaeb8ac589b82e860a78ca14f2333971f7df3a916f3c0b9e1e57b4"
+        },
+        "PC-FILES-SCANNED/evals/scripts/check-scans.mjs": {
+          "bytes": 1215,
+          "sha256": "746b6e774439dbf6f96d8388ab1a9067d70d90d8594204a16a8a4d92c91ec3b4"
+        },
+        "PC-FILES-SCANNED/evals/scripts/checks.mjs": {
+          "bytes": 2366,
+          "sha256": "12f32aa2e1763bdac9867a4f07719cd2d602f48427cc6d391902aeca88b21765"
+        },
+        "PC-FILES-SCANNED/evals/fixtures/files-expected.json": {
+          "bytes": 177,
+          "sha256": "e576fbef82aaeb8ac589b82e860a78ca14f2333971f7df3a916f3c0b9e1e57b4"
+        },
+        "PC-FILES-QUARANTINED/evals/scripts/check-file-access.mjs": {
+          "bytes": 2271,
+          "sha256": "2b8e9bfee887b7b8563202d1700b35c7c68cc724c1899b7bc84d40920e664034"
+        },
+        "PC-FILES-QUARANTINED/evals/scripts/file-access-checks.mjs": {
+          "bytes": 5829,
+          "sha256": "e1e265b1dc0162d44e2f82521a19b83a09d8c8088e3b3ddb497293c21df8da44"
+        },
+        "PC-FILES-QUARANTINED/evals/fixtures/file-access-expected.json": {
+          "bytes": 194,
+          "sha256": "401ea99612e84b3a4972531c5ad9744020cef784e1f596ad6162f7a767196301"
+        },
+        "PC-FILES-PRIVATE/evals/scripts/check-file-access.mjs": {
+          "bytes": 2271,
+          "sha256": "2b8e9bfee887b7b8563202d1700b35c7c68cc724c1899b7bc84d40920e664034"
+        },
+        "PC-FILES-PRIVATE/evals/scripts/file-access-checks.mjs": {
+          "bytes": 5829,
+          "sha256": "e1e265b1dc0162d44e2f82521a19b83a09d8c8088e3b3ddb497293c21df8da44"
+        },
+        "PC-FILES-PRIVATE/evals/fixtures/file-access-expected.json": {
+          "bytes": 194,
+          "sha256": "401ea99612e84b3a4972531c5ad9744020cef784e1f596ad6162f7a767196301"
+        }
+      },
+      "specs": {
+        "file-integrity": {
+          "file": "files.yaml",
+          "sha256": "59527f7dad2732efe91ad38899406a32f06edb26479ae7013a52117d27ce3ca7",
+          "bytes": 8736
+        },
+        "local-mail": {
+          "file": "email.yaml",
+          "sha256": "8283268be7ead9f85dbb58f615275407586aacc372debe6a8d4018e934e28801",
+          "bytes": 3292
+        },
+        "publication": {
+          "file": "publication.yaml",
+          "sha256": "f49323f52f14e2beb97282441ba2d4a2aef42fa7e5f9624d86fde8e61b3f49b2",
+          "bytes": 3732
+        }
+      },
+      "fixtures": {
+        "manifest": {
+          "sha256": "a8557ba80826f5bbc92fdb1981afb68eb191c5f10251ba32153f7ee969924df8",
+          "bytes": 5257
+        },
+        "files": {
+          "headshot": {
+            "configuredPath": "../upstream/fixtures/headshot.png",
+            "sha256": "9727e98b19375716494cffa46f09edc60624d8a381199cc63a420a6c0f7174fc",
+            "bytes": 569
+          },
+          "slides": {
+            "configuredPath": "../upstream/fixtures/slides.pdf",
+            "sha256": "ffc81c3487a25fb311ecba34beaa9a99e88815e87fd9d7b7a46e7c301da42484",
+            "bytes": 608
+          },
+          "speakers_csv": {
+            "configuredPath": "local-speakers.csv",
+            "sha256": "d3a6b440f65e96a8ef89449c022dd6d5544773b5d85b38e63d2fd005983069ed",
+            "bytes": 464
+          },
+          "deck_v1": {
+            "configuredPath": "./deck-v1.pdf",
+            "sha256": "86ff4753029ca17a9b9e8cace922930cd265ff1f7df7c87292f608015bd7a785",
+            "bytes": 604
+          },
+          "deck_v2": {
+            "configuredPath": "./deck-v2.pdf",
+            "sha256": "33556ccb1c35a73b66afb038064d78e8473ba0840efff65b51750a2e2a22a7e6",
+            "bytes": 604
+          },
+          "eicar_pdf": {
+            "configuredPath": "./eicar-attachment.pdf",
+            "sha256": "f6ad4939d08155eebc93f5b22d25cff9a6a6fa877529d48bd0d10f066a2c72ac",
+            "bytes": 724
+          }
+        }
+      },
+      "selection": {
+        "areas": [
+          "file-integrity",
+          "local-mail",
+          "publication"
+        ],
+        "split": "development"
+      }
+    },
+    "target": {
+      "kind": "web",
+      "git": {
+        "commit": "3da09cc86ee2a4795edb44a292ca321d421e41f6",
+        "dirty": true,
+        "worktreeSha256": "df63a9a98ed328d26554f71da378f9106ac69833a3929072c30f8aa60fbfb929"
+      }
+    },
+    "providers": {
+      "agent": {
+        "provider": "codex",
+        "model": "gpt-6-astra",
+        "effort": "medium",
+        "cliVersion": "codex-cli 0.153.4"
+      },
+      "judge": {
+        "provider": "codex",
+        "model": "gpt-6-astra",
+        "effort": "medium",
+        "cliVersion": "codex-cli 0.153.4"
+      }
+    },
+    "runtime": {
+      "kitVersion": "0.4.0",
+      "node": "v24.18.0",
+      "platform": "linux",
+      "arch": "x64",
+      "judging": {
+        "node": "v24.18.0",
+        "kitVersion": "0.4.0",
+        "platform": "linux",
+        "arch": "x64",
+        "sharp": {
+          "aom": "3.15.0",
+          "archive": "3.8.9",
+          "cairo": "1.18.4",
+          "cgif": "0.5.3",
+          "exif": "0.6.26",
+          "expat": "2.8.3",
+          "ffi": "3.8.0",
+          "fontconfig": "2.18.3",
+          "freetype": "2.14.3",
+          "fribidi": "1.0.16",
+          "glib": "2.89.4",
+          "harfbuzz": "14.3.1",
+          "heif": "1.23.2",
+          "highway": "1.4.0",
+          "imagequant": "2.4.1",
+          "lcms": "2.19.1",
+          "mozjpeg": "0826579",
+          "pango": "1.58.2",
+          "pixman": "0.46.4",
+          "png": "1.6.58",
+          "proxy-libintl": "0.5",
+          "rsvg": "2.62.91",
+          "tiff": "4.7.2",
+          "uhdr": "2.0.2",
+          "vips": "8.18.6",
+          "webp": "1.6.0",
+          "xml2": "2.15.3",
+          "zlib-ng": "2.3.3",
+          "sharp": "0.35.4"
+        }
+      },
+      "evidence": {
+        "chromium": "151.0.7922.34",
+        "sharp": {
+          "aom": "3.15.0",
+          "archive": "3.8.9",
+          "cairo": "1.18.4",
+          "cgif": "0.5.3",
+          "exif": "0.6.26",
+          "expat": "2.8.3",
+          "ffi": "3.8.0",
+          "fontconfig": "2.18.3",
+          "freetype": "2.14.3",
+          "fribidi": "1.0.16",
+          "glib": "2.89.4",
+          "harfbuzz": "14.3.1",
+          "heif": "1.23.2",
+          "highway": "1.4.0",
+          "imagequant": "2.4.1",
+          "lcms": "2.19.1",
+          "mozjpeg": "0826579",
+          "pango": "1.58.2",
+          "pixman": "0.46.4",
+          "png": "1.6.58",
+          "proxy-libintl": "0.5",
+          "rsvg": "2.62.91",
+          "tiff": "4.7.2",
+          "uhdr": "2.0.2",
+          "vips": "8.18.6",
+          "webp": "1.6.0",
+          "xml2": "2.15.3",
+          "zlib-ng": "2.3.3",
+          "sharp": "0.35.4"
+        },
+        "playwright": "1.62.1"
+      }
+    }
+  },
+  "gates": {
+    "passed": true,
+    "blocking": []
+  }
+}

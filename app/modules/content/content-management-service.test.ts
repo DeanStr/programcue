@@ -733,6 +733,34 @@ describe("content management", () => {
     expect(firstDownload.headers.get("content-disposition")).toContain(
       "slides-v1.pdf",
     );
+    // These are released R2 fixtures: this checks ZIP selection and bytes, not scanning.
+    const preview = await content.previewZip(viewer, {
+      assetIds: [assetId],
+      groupBy: "session",
+    });
+    expect(preview.manifest).toContain(secondVersionId);
+    expect(preview.manifest).not.toContain(firstVersionId);
+    const archive = await content.downloadZip(viewer, {
+      manifest: preview.manifest,
+      groupBy: preview.groupBy,
+      confirmed: true,
+    });
+    const zip = new Uint8Array(await archive.arrayBuffer());
+    const view = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
+    const end = zip.byteLength - 22;
+    expect(view.getUint32(end, true)).toBe(0x06054b50);
+    expect(view.getUint16(end + 10, true)).toBe(1); // One central-directory entry.
+    const central = view.getUint32(end + 16, true);
+    expect(view.getUint16(central + 10, true)).toBe(0); // Standard stored ZIP entry.
+    const local = view.getUint32(central + 42, true);
+    const start =
+      local +
+      30 +
+      view.getUint16(local + 26, true) +
+      view.getUint16(local + 28, true);
+    const size = view.getUint32(central + 20, true);
+    expect(zip.slice(start, start + size)).toEqual(secondBytes);
+
     await expect(
       content.downloadFileVersion(
         { ...viewer, role: "speaker" },

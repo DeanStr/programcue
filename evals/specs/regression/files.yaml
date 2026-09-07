@@ -1,0 +1,107 @@
+id: file-integrity
+title: Real file versions and ZIP bytes
+weight: 30
+description: Distinct v1/v2 PDFs make latest-version exports distinguishable; metadata alone cannot prove integrity.
+scenarios:
+  - id: PC-FILES
+    name: Upload distinct versions and inspect the exported archive
+    kind: browser
+    persona: organizer
+    requiresAuth: true
+    allowedPersonas: [organizer, showcase_speaker]
+    instructions: |
+      This bounded file regression uses the existing showcase speaker Priya Shah and her assigned Upload presentation slides task for Designing inclusive event technology. It does not test invitation or onboarding.
+      Switch to showcase_speaker and open /participant/tasks. Upload fixture deck_v1 to Upload presentation slides, wait for its file version to appear, then upload deck_v2 to the SAME task using its replacement upload control. Reload and inspect both versions and the latest marker.
+      Switch to organizer and open /admin/content. Scans run asynchronously: refresh until both versions are clean and the second is current. Expand this task's version history, take a screenshot showing both versions and the current marker, and record checkpoint versions citing that screenshot and the upload/reload evidence. Retain Download v1 with download label previous-version and Download v2 with label current-version. These must be two actual PDF downloads, not metadata or screenshots. Select only this task's current file (its filename may be deck-v2.pdf), Preview ZIP export, check Download exactly these current released versions, Generate ZIP, and wait for the ready Download ZIP control. Use the download tool on that control with label latest-export. Independent command graders hash both retained PDFs and inspect the retained ZIP bytes and entry count; the browser agent is not required to inspect file contents. Do not use a toast as file evidence. Once all three actual downloads are retained, finish completed and leave the byte-level verdict to that grader.
+      The local transport writes real R2 bytes and ClamAV signs real verdicts; this is not hosted Cloudflare acceptance. If upload or generation actually fails, record the product error. If a required service is unavailable, report blocked. Do not substitute fixture metadata for uploads or claim completion without the retained ZIP. Do not create tasks, send invitations or change personas via /demo.
+    checkpoints:
+      versions: The expanded version history visibly shows v1 and v2 after reload, with v2 marked latest/current. This checkpoint assesses visible state only; downloaded bytes are assessed separately.
+  - id: PC-FILES-SCANS
+    name: Retain independent real scanner receipts
+    kind: command
+    dependsOn: [PC-FILES]
+    instructions: Observe and retain the actual local scanner receipts after the browser workflow.
+    collect:
+      command: node evals/scripts/file-scan-inspect.mjs
+      timeoutSeconds: 90
+      methodFiles: [evals/scripts/file-scan-inspect.mjs, evals/scripts/checks.mjs, evals/scripts/scan-receipt.mjs]
+      sources: { expected: evals/fixtures/files-expected.json }
+      files: [scans]
+  - id: PC-FILES-QUARANTINE
+    name: Upload EICAR and inspect quarantine with the clean version preserved
+    kind: browser
+    persona: showcase_speaker
+    requiresAuth: true
+    allowedPersonas: [showcase_speaker, organizer]
+    dependsOn: [PC-FILES-SCANS]
+    instructions: |
+      The prior file workflow has already uploaded clean v1 and v2 to Priya Shah's Upload presentation slides task for Designing inclusive event technology. Open /participant/tasks as showcase_speaker and upload fixture eicar_pdf as the next replacement version of that SAME task. This is an inert antivirus test fixture. Submit the upload and wait for version 3 to appear. Do not replace the task or upload additional copies.
+      Switch to organizer and open /admin/content. Refresh while the real scanner works, expand this task's version history and take a screenshot of the third version's scan status and the current marker. The expected behavior is v3 infected with Download unavailable while clean v2 remains current. An infected upload is the expected result of this test, not a reason to mark the scenario blocked. Finish completed after observing the actual result, including an unexpected clean release or wrong current marker if that occurs. The independent command collector will verify the real verdict and HTTP denial plus anonymous access; do not invent those checks or perform them via unsupported browser tools. If the scanner is unavailable or remains pending after a bounded wait, report blocked with evidence.
+  - id: PC-FILES-ACCESS
+    name: Independently verify quarantine and anonymous private-file denial
+    kind: command
+    dependsOn: [PC-FILES, PC-FILES-QUARANTINE]
+    instructions: Retain actual scanner/history observations and response bodies for authenticated and anonymous private-file requests.
+    collect:
+      command: node evals/scripts/file-access-inspect.mjs
+      timeoutSeconds: 120
+      methodFiles: [evals/scripts/file-access-inspect.mjs, evals/scripts/file-access-checks.mjs, evals/scripts/scan-receipt.mjs]
+      files: [access, clean, infected, anonymous]
+rubric:
+  - id: PC-VERSION-HISTORY
+    criterion: Two successive uploads remain visible in version history after reload, with v2 clearly marked latest/current.
+    weight: 0.5
+    scenarios: [PC-FILES]
+    checkpoints: { PC-FILES: [versions] }
+    grader: { type: llm }
+    passCriteria: The reloaded interface shows v1 and v2 in the same task history and clearly identifies v2 as latest/current. Judge only the visible history and markers; PC-VERSION-BYTES independently verifies accessibility and exact contents of both downloaded PDFs.
+  - id: PC-VERSION-BYTES
+    criterion: Both separately downloaded PDF versions preserve their respective uploaded bytes.
+    weight: 0.5
+    scenarios: [PC-FILES]
+    grader:
+      type: command
+      command: node evals/scripts/check-versions.mjs
+      output: json
+      methodFiles: [evals/scripts/check-versions.mjs, evals/fixtures/files-expected.json]
+    passCriteria: The previous-version download hashes to the v1 fixture and the current-version download hashes to the distinct v2 fixture.
+  - id: PC-ZIP-LATEST
+    criterion: A single-file latest-version export contains exactly the selected v2 PDF bytes.
+    weight: 2
+    scenarios: [PC-FILES]
+    grader:
+      type: command
+      command: node evals/scripts/check-zip.mjs
+      output: json
+      methodFiles: [evals/scripts/check-zip.mjs, evals/scripts/checks.mjs, evals/fixtures/files-expected.json, evals/scripts/scan-receipt.mjs]
+    passCriteria: The downloaded ZIP contains one non-directory entry matching the independently hashed v2 fixture, with no stale or unselected files.
+  - id: PC-FILES-SCANNED
+    criterion: Both distinct uploaded PDF objects receive real clean ClamAV verdicts and accepted signed release callbacks.
+    weight: 1
+    scenarios: [PC-FILES, PC-FILES-SCANS]
+    grader:
+      type: command
+      command: node evals/scripts/check-scans.mjs
+      output: json
+      methodFiles: [evals/scripts/check-scans.mjs, evals/scripts/checks.mjs, evals/fixtures/files-expected.json, evals/scripts/scan-receipt.mjs]
+    passCriteria: Two distinct version IDs and object hashes match the v1/v2 fixtures, with real engine/signature metadata and HTTP 200 callbacks. Local evidence only.
+  - id: PC-FILES-QUARANTINED
+    criterion: A real EICAR upload remains unavailable while the prior clean v2 remains current and downloadable.
+    weight: 1
+    scenarios: [PC-FILES-QUARANTINE, PC-FILES-ACCESS]
+    grader:
+      type: command
+      command: node evals/scripts/check-file-access.mjs quarantine
+      output: json
+      methodFiles: [evals/scripts/check-file-access.mjs, evals/scripts/file-access-checks.mjs, evals/fixtures/file-access-expected.json, evals/scripts/scan-receipt.mjs]
+    passCriteria: The exact EICAR PDF receives a real infected verdict and accepted signed callback; its authenticated version download returns 404; server history retains clean v2 as the only current version and its downloaded bytes still match v2.
+  - id: PC-FILES-PRIVATE
+    criterion: An anonymous request cannot download the private clean file that an authenticated organizer can download.
+    weight: 1
+    scenarios: [PC-FILES-ACCESS]
+    grader:
+      type: command
+      command: node evals/scripts/check-file-access.mjs anonymous
+      output: json
+      methodFiles: [evals/scripts/check-file-access.mjs, evals/scripts/file-access-checks.mjs, evals/fixtures/file-access-expected.json, evals/scripts/scan-receipt.mjs]
+    passCriteria: A fresh empty-cookie client receives an explicit access denial or the local sign-in redirect for the same exact URL whose authenticated control returns the expected v2 bytes. Server errors are execution failures; missing control evidence reduces coverage.

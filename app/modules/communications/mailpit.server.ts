@@ -65,7 +65,8 @@ export class MailpitEmailProvider implements EmailProvider {
   ) {}
 
   async send(input: SendEmailInput) {
-    const response = await this.fetcher(this.endpoint, {
+    const fetcher = this.fetcher;
+    const response = await fetcher(this.endpoint, {
       method: "POST",
       headers: {
         "content-type": "application/json",

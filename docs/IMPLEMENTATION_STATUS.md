@@ -2386,6 +2386,343 @@ The acceptance export briefly made production D1 unavailable and one minute of t
 
 ## Remaining acceptance work
 
+The application-owned AEK port is in `evals/` (see its README); the old standalone
+SBEK execution instructions are superseded. On 6 September 2026, a focused local
+mail pilot reproduced a native-fetch receiver failure in `MailpitEmailProvider`.
+A regression test failed before the receiver-free call fix and passed afterward.
+Four email-provider unit tests, seven communication-delivery Worker tests,
+generated TypeScript checks, four evaluator preservation/grader tests, and 36
+focused AEK auth/email/CLI tests passed. Fresh local reset/authentication and
+anonymous-public browsing passed without model calls. The bounded post-fix
+three-scenario mail pilot explicitly confirmed one delivery, observed durable
+Sent status, and independently captured its correlated Mailpit message with both
+required body passages: one criterion passed at 100% coverage. Its 71-artifact
+sealed report is retained locally at
+`evals/.agent-eval/runs/2026-09-06T10-02-13/report.html`. This is local working-tree
+evidence, not a deployed release or external-provider delivery claim. The apparently
+blank merged-email preview was subsequently traced to AEK masking opaque sandboxed
+iframes. Direct Playwright inspection verified visible recipient/body content in
+both desktop and mobile previews; the application sandbox remains unchanged.
+AEK now explains exclusions in snapshots, screenshot responses and retained
+observations rather than allowing blank masked regions to imply a product defect.
+No full 98-criterion run was performed.
+Historical SBEK scores remain non-comparable to AEK's explicit hybrid scoring;
+real signup, calendar/reminder and other independent manual checks remain pending.
+
+The bounded `npm run smoke:product` command in `evals/` passed preview rendering
+and the complete draft-isolation → approval-blocker → explicit publication →
+anonymous public-content workflow on fresh local state. Its default Worker has
+no upload/scanner credentials, so its file check still reports the explicit
+HTTP 503 prerequisite block. Its evidence remains in
+`evals/.agent-eval/product-smoke/`. All 33 AEK browser regressions passed,
+including frame containment and screenshot exclusion notes.
+
+On 6 September at 11:33 UTC, the separate `npm run smoke:files` command passed
+its complete browser journey on isolated local R2/D1 with real ClamAV 1.4.6,
+signature database 28115 (6 September). Two 604-byte PDFs received actual clean
+verdicts and HTTP 200 signed callbacks. The first version remained downloadable
+with its exact bytes; the confirmed single-entry ZIP contained only the second
+PDF's exact bytes. A valid 724-byte PDF containing an inert EICAR attachment
+received `infected` / `Eicar-Signature`; its version download returned 404 and
+version 2 remained current. Anonymous access to the clean download was denied.
+Results, ZIP, screenshot and scan receipts are in
+`evals/.agent-eval/file-smoke/` (one pass, no skips). The Worker, owned container,
+private configuration and local storage were removed afterward.
+
+The local adapter validates signed upload authority, writes real R2 multipart
+bytes, checks signed dispatch/object identity, runs the production Python
+ClamAV invocation and delivers the ordinary signed callback. Hosted S3/CORS,
+the scanner HTTP object proxy and Cloudflare Workflow/Container scheduling
+remain separate acceptance. No production credentials, simulated verdicts,
+external sends or full 98-criterion evaluation were used.
+
+This work also fixed a receiver-sensitive `fetch` invocation in R2 ListParts;
+a focused test failed before the fix and passed afterward. Validation passed:
+649 unit tests, 1,922 Worker tests, the Agent test, generated types and build;
+96 configuration tests, 14 Python scanner tests, migration/audit/recovery/OpenAPI
+checks; and five evaluator tests plus all three evaluator configurations.
+The initial core invocation failed its formatting and test-registration lanes;
+those issues were fixed and the affected lanes rerun successfully. The final
+14-case deployment-contract rerun also registers the evaluator's Node and browser
+projects, and pinned upstream fixtures are excluded from formatting to preserve
+their source hashes.
+
+At 12:05 UTC on 6 September, `npm run regression:files -- --agent codex --judge
+codex --max-turns 90 --fail-under-score 100 --fail-under-coverage 100` completed
+the AEK file workflow and independent scanner collection. The shared local
+Worker transport now accepts ordinary AEK and Playwright browser requests;
+the former Playwright-only routing hook is removed. Report:
+`evals/.agent-eval/runs/2026-09-06T11-59-52/report.html`.
+The ZIP and scan criteria passed. The version-history LLM gave partial credit,
+requesting byte verification and a separate v2 download outside its checkpoint
+evidence: 87.5% score, 100% coverage, and a failed 100% score gate.
+It reported no product defect. Independent inspection of the retained files
+confirmed exact v1 bytes and exactly one ZIP entry matching v2. Both distinct
+objects received real clean ClamAV results and HTTP 200 signed callbacks.
+All 75 sealed artifacts verified; the owned Worker, container and state were
+removed. Model identities were not pinned or resolved in the receipt; both
+roles used Codex CLI 0.153.4 defaults.
+
+An earlier attempt retained downloads but abstained because the browser had
+been instructed to inspect archive bytes without an archive tool, and its
+version checkpoint preceded the history/download evidence. The instructions
+now assign archive inspection to the command grader and record the checkpoint
+after the relevant evidence. The final partial grade remains visible; no
+manual score override was applied. The shared-transport Playwright file smoke
+passed with no skips, including EICAR quarantine and anonymous denial. Seven
+evaluator tests and all three config validations passed, as did a complete
+`check:core` run (649 unit, 1,922 Worker, one Agent, 96 configuration and 14
+scanner tests, plus types/build and contract checks). The full upstream suite
+and hosted storage/scanner acceptance remain unrun.
+
+At 12:22 UTC, the corrected file regression
+`evals/.agent-eval/runs/2026-09-06T12-18-03/report.html` passed all four criteria
+at 100% score and 100% coverage, including the strict score/coverage gates.
+The former version-history weight is now split equally between a visual
+history/latest-marker check and a deterministic check of both individually
+downloaded PDFs. Total file criterion weight remains 4. The actual v1 and v2
+downloads matched their independent fixture hashes, the ZIP contained exactly
+the selected v2 bytes, and both real ClamAV scans had accepted signed callbacks.
+All 73 sealed artifacts verified. No full upstream evaluation was run.
+
+The run used requested model `gpt-5.6-terra` with medium effort for both roles,
+through Codex CLI 0.153.4. Receipt, report and retained invocation arguments
+agree. AEK now displays requested model, reasoning effort and CLI version in
+its report table; Codex's JSON stream does not confirm the resolved provider
+model snapshot. The report passed a Chromium display check. Subsequent
+regression runs are configured for `gpt-6-astra` with medium effort for both
+roles; this future configuration is validated, not yet model-exercised, and
+the completed report retains its original Terra settings.
+
+Focused validation passed: 37 AEK receipt/report/provider/judge tests, eight
+Programcue evaluator tests (including wrong, swapped, missing and tampered
+download evidence), all three eval configs, both projects' relevant TypeScript
+checks, the AEK package build/install and a fresh production application build.
+The prior complete core result above remains the application-runtime check;
+this follow-up changes evaluator grading, model settings and reporting only.
+
+The Astra Medium configuration was exercised next in
+`evals/.agent-eval/runs/2026-09-06T12-42-16/report.html`: all four original file
+criteria passed at 100% score/coverage, and 82 sealed artifacts verified. The
+model and reasoning pins matched both actual CLI invocation argument lists.
+
+At 13:00 UTC the expanded file regression
+`evals/.agent-eval/runs/2026-09-06T12-51-42/report.html` passed all six criteria
+at 100% score and 100% coverage, including strict gates. Two new weight-1
+criteria extend the original weight-4 checks with EICAR quarantine and
+anonymous private-file denial; no upstream criteria changed. A second browser
+workflow uploaded the exact 724-byte EICAR PDF as v3. Real ClamAV 1.4.6 returned
+`infected` / `Eicar-Signature`, and the signed callback received HTTP 200.
+The independent collector retained scanner receipts, authenticated server
+version history, HTTP statuses and actual response bodies. History kept clean
+v2 as the only current version. An organizer download returned HTTP 200 and
+exact v2 bytes, the infected v3 URL returned HTTP 404, and an empty-cookie
+request to the same clean URL returned HTTP 302 to the local login page.
+
+All 139 sealed artifacts verified. Both browser invocations and the judge
+recorded `gpt-6-astra` with medium reasoning, matching the retained argument
+lists. The owned Worker/container, state and coordinator lock were removed.
+Eleven evaluator tests, all three eval configs, generated TypeScript checks,
+focused formatting/lint and a fresh production build passed. The changes are
+confined to Programcue's evaluator suite; no new AEK core or production
+application changes were required. Hosted storage/scanner scheduling and the
+full upstream evaluation remain outside this local acceptance.
+
+The bounded publication regression next exercised the browser's draft edit,
+anonymous isolation, disabled unapproved publication, explicit content approval,
+publication confirmation and anonymously visible changed title. The first run,
+`evals/.agent-eval/runs/2026-09-06T13-38-38/report.html`, reached the application
+flow but submitted 24 references to a checkpoint limited to 20. The browser
+finalized without retrying that rejected call. AEK correctly withheld the
+publication criterion and failed the strict coverage gate at 66.667%; all 66
+artifacts verify. That report is preserved. Instructions now require at most
+12 selected references and checking successful checkpoint submission before
+finalization. The fresh rerun,
+`evals/.agent-eval/runs/2026-09-06T13-47-35/report.html`, passed both criteria
+at 100% score and coverage; all three checkpoints and 63 artifacts verified.
+
+The shared isolated regression runtime now permits actual POST requests to only
+the fixed loopback Mailpit send endpoint alongside local storage and scanner
+requests. It rejects redirects and preserves actual provider responses and
+transport errors. `npm run regression:all` selects only the three Programcue
+areas, with eight scenarios and nine criteria. The fresh combined run,
+`evals/.agent-eval/runs/2026-09-06T13-55-39/report.html`, passed every criterion
+at 100% score and coverage with strict gates. Mailpit captured the newly
+correlated message and required passages. Both downloaded PDFs matched their
+distinct fixture hashes and the ZIP contained exactly v2. Real ClamAV classified
+v1/v2 clean and the 724-byte EICAR v3 infected with accepted callbacks. Independent
+probes retained exact clean v2 bytes (200), infected v3 denial (404), and an
+empty-cookie request redirected to local login (302); v2 remained current.
+Publication also passed after those mail and file mutations in the same state.
+
+All 256 combined artifacts verified, with root
+`368f038641cae3053393a568cd8ded8fac94f18e4269c93ab3ce1135da44b2b5`.
+All four browser and two judge invocations recorded requested `gpt-6-astra`
+with medium reasoning, matching actual argument lists and Codex CLI 0.153.4.
+The standalone publication agent and judge recorded the same settings. Owned
+Workers, scanner containers, state and coordinator locks were removed. Fourteen
+evaluator tests and all three configuration validations passed. `check:core`
+passed (649 unit, 1,922 Worker, one Agent, 96 configuration and 14 scanner tests,
+plus types, quality, production build, schema, recovery and OpenAPI checks).
+The model runs used that fresh production build. No new AEK core or production
+application change was needed for this turn. The 98 upstream criteria were
+validated structurally, not executed; hosted storage/scanner behavior, external
+mail delivery and calendar acceptance remain outside these local regressions.
+
+At 15:08 UTC, the updated AEK checkpoint handling passed the publication-only
+run `evals/.agent-eval/runs/2026-09-06T14-59-16/report.html` with both criteria
+at 100% score and coverage. The live MCP context contained the three required
+checkpoints, each was recorded before completed finalization, and all 63
+artifacts verified (root
+`3b3ed5136c6c894b70907065ce53a045b48281cc904a4ebf6c13c1660ba197be`).
+Agent and judge receipts and invocation arguments matched requested
+`gpt-6-astra`, medium reasoning and Codex CLI 0.153.4. The prior publication
+run and this run compared compatibly with zero score/coverage delta.
+
+AEK now retains rejected checkpoint arguments as transcript errors and refuses
+completed finalization until rubric-required checkpoints are recorded. Focused
+MCP tests exercise oversized, malformed, missing, duplicate and extra arguments,
+successful correction, and blocked/feature-not-found finalization with retained
+earlier evidence in both browser and workspace modes. Seventy-seven focused
+AEK tests passed across MCP, scenario context, evidence, receipt and baseline
+coverage, plus TypeScript, build and focused lint/format checks. The updated kit
+was packed and installed into `evals/`; all 14 evaluator tests, three config
+validations and the fresh application build passed. Owned runtime resources
+were removed. No new production application changes or full upstream run were
+needed.
+
+The verified combined run `2026-09-06T13-55-39` is promoted as
+`evals/baselines/regression/local-astra-medium/`, snapshot
+`2026-09-06T15-09-27-884Z-664bc209239e-446b9272`. It retains all nine passing
+criteria, requested models/efforts, CLI versions and source artifact provenance.
+Initial promotion correctly rejected the default all-splits policy against the
+development-split run. The explicit local policy now matches the development
+split containing all nine criteria and requires 100% score/coverage and complete
+required scenarios. Promotion passed that policy without a milestone override.
+Named baseline loading and self-comparison verified with zero drift. The source
+combined report remains unchanged; only publication was rerun with the updated
+checkpoint handling. See `evals/README.md` for future comparison commands.
+
+The subsequent review of both uncommitted worktrees fixed terminal workspace
+finalization, JSON report model/effort provenance, and local evaluator lifecycle
+cleanup. A successful workspace `done` now rejects later evidence/result changes;
+report providers follow retained receipts when configuration changes. The local
+coordinator cancels collection if its Worker exits, stops evaluator descendants
+after cancellation or early leader exit, and releases its lock when Docker
+cleanup fails. New lifecycle tests include real listeners whose processes ignore
+termination. Generated baseline snapshots are excluded from Biome to preserve
+their sealed bytes; loading and self-comparison still verify without drift.
+
+Review validation ran the full 450-test AEK suite: 447 passed initially, and
+three score-only fixtures required provider receipts after the provenance fix.
+All 38 tests in those affected test files passed after updating the fixtures;
+AEK types, build, lint and formatting passed. The rebuilt package was installed
+in `evals/`; all 18 evaluator tests and all three config validations passed.
+Programcue's core run passed its 649 unit, 1,922 Worker and one agent test plus
+types, build, configuration, scanner, schema, recovery and OpenAPI lanes. Its
+only failing lane was formatting the sealed baseline; the targeted quality
+rerun passed after the exclusion. The no-model real-file Playwright smoke passed
+with real uploads, ClamAV clean/infected results and latest-version ZIP bytes;
+its owned Worker, scanner container, state and lock were removed. No model eval
+or production acceptance run was performed during this review, and historical
+reports and the promoted baseline remain unchanged.
+
+The follow-up simplification makes malformed scanner receipts execution errors
+through one shared validator, narrows startup retries to expected conditions and
+bounds each ClamAV readiness command. AEK now supports validated
+`run --dry-run --json` plans. Programcue uses the selected executable scenario
+IDs before provisioning and enables storage/ClamAV only for file-integrity
+workflows. Publication and mail use the same isolated Worker without the scanner.
+The mailbox adapters share AEK's bounded JSON reader. Collector/grader method-file
+declarations include the new validator; upstream criteria remain unchanged.
+
+All 451 AEK tests passed, followed by the focused JSON-planning check after
+deduplicating selection logic; type, build, lint and format checks passed. The
+updated kit was installed into `evals/`. All 21 evaluator tests passed, including
+real CLI planning before provisioning, selected-service setup, malformed scan
+receipts and readiness failures. Three config validations and the suite tests
+passed after updating method-file declarations. The scanner-free product smoke
+passed email-preview and publication checks, with its unavailable file check
+explicitly skipped. The dedicated file smoke passed with real clean/infected
+ClamAV results, accepted callbacks and exact downloaded bytes. Both smokes
+cleaned up their owned resources. No model evaluation ran. The existing baseline
+is preserved as historical evidence; changed grading-method fingerprints require
+review before treating a future run as comparable or promoting a new baseline.
+Programcue's complete `check:core` also passed: 649 unit, 1,922 Worker and one
+agent test, plus quality, generated types, TypeScript, production build,
+configuration, scanner, migration, recovery and OpenAPI checks.
+
+The requested Astra/high `codex exec review --uncommitted` loop found two
+actionable issues in its first pass. AEK's runtime artifact schema stripped
+recorded effort during detached judging; a collect-to-judge regression reproduced
+the loss and now verifies receipt/report round trips retain both roles' effort.
+The file smoke accepted any non-2xx anonymous response as denial; it now shares
+the deterministic grader's explicit denial policy, checks authenticated v2 bytes
+at the same URL and rejects anonymous private bytes, server errors and unrelated
+redirects. All 46 focused AEK collection/schema/receipt tests, types, build and
+quality checks passed. The rebuilt kit was installed; 22 evaluator tests, three
+config validations and focused quality checks passed. The real-file smoke passed
+with the stricter assertion, real clean/EICAR scanning and owned-resource cleanup.
+No application model evaluation was run during this review/fix pass.
+
+On 7 September, the committed AEK checkout `673210a` was rebuilt and installed
+through `evals` setup. All 22 evaluator tests, three config validations and the
+fresh-build local preparation smoke passed. Direct checks against both installed
+MCP binaries verified that missing checkpoint lists fail startup, explicit empty
+lists are accepted, and missing required checkpoints remain recoverable as a
+blocked completion. The separate file smoke passed one test with no skips:
+two real clean ClamAV verdicts and one infected EICAR verdict, all with HTTP 200
+signed callbacks, plus latest-version ZIP byte checks and explicit anonymous
+download denial. Its Worker, container, state directory and coordinator lock
+were removed; ports 5188/15188 were free. Evidence remains in
+`evals/.agent-eval/local-smoke/` and `evals/.agent-eval/file-smoke/`, with scan
+receipts in `evals/.agent-eval/file-services.jsonl`. This used no application
+model evaluation and does not establish hosted-provider acceptance.
+
+A follow-up review fixed stale-build evaluation when the coordinator inherited
+`PROGRAM_CUE_E2E_SKIP_BUILD=1`. Both explicit preparation and ordinary Worker
+startup now override that setting and rebuild current source before evaluation.
+The subprocess regression reproduced the inherited override separately in both
+paths before the fixes, then passed with both overrides applied.
+All 22 evaluator tests and all three configuration validations passed.
+The complete `check:core` passed with 649 unit, 1,922 Worker and one Agent test,
+plus types, quality, build, configuration, scanner, recovery and API contracts.
+No model evaluation or new browser acceptance run was performed for this fix.
+
+The subsequent Astra/high review found one actionable evaluator issue: a blocked
+browser outcome could skip scanner collectors, while coordinator shutdown ignored
+the Worker's failure. Scan failures now wake the runtime immediately. Normal
+isolated shutdown uses IPC to drain services before terminating descendants, and
+the coordinator rejects unsuccessful or forced shutdown after resource cleanup.
+Focused regressions reproduced the failure before the fix. All 23 evaluator tests,
+three config validations and quality checks passed afterward. The core gate passed
+649 unit, 1,922 Worker and one Agent test plus types, build and repository contracts;
+its initial lint failure was corrected with a passing quality rerun.
+
+The ordinary local smoke and real-file smoke passed, including clean/EICAR scans,
+versioned ZIP bytes and anonymous denial. A separate injected scanner-command
+failure interrupted actual browser collection, exited 1 and removed its Worker,
+container, state, lock and listeners. The successful file evidence was copied
+before this negative smoke reset its capture directory. Logs and the per-finding
+assessment are retained in `.artifacts/review-fix-20260907-w60MFg/`. These are local
+evaluator checks, with no application model run or hosted-provider acceptance.
+
+The second Astra/high review reproduced a baseline-loading failure: the older
+sealed snapshot lacks method provenance required by locked AEK 0.4.0. A fresh
+combined local run, `evals/.agent-eval/runs/2026-09-07T02-12-32/report.html`, passed
+all nine criteria at 100% score and coverage using requested Astra/medium agent
+and judge settings. It exercised local Mailpit capture, real clean/EICAR scanning,
+versioned downloads and ZIP export, anonymous denial and publication. All 265
+artifacts verified, with root
+`5c7afb60bb4a86f5937aacdd786fe0de16ff5b0c5d798dc16517334b5b5c5415`.
+The public CLI promoted snapshot
+`2026-09-07T02-29-38-534Z-67a9d91b487d-ee63187c`; named baseline loading and
+self-comparison passed with zero score/coverage drift. The historical snapshot
+remains byte-for-byte unchanged. This replaces the active comparison baseline,
+without claiming execution of the 98 upstream criteria or hosted acceptance.
+All 24 evaluator tests, three configuration validations and repository quality
+checks passed, including the new public-CLI baseline-loading regression.
+
 The repository now contains production-safe evaluation-fixture tooling plus an
 explicit production-only evaluator access layer. When enabled, `/evaluate`
 accepts a private access code and issues a signed short-lived session for only

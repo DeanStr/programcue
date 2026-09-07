@@ -38,14 +38,18 @@ backup cron exist only in production because D1 export requires remote
 Cloudflare authority. Direct multipart upload, malware scanning, connected calendars,
 external integrations and non-Workers-AI providers remain unavailable locally
 until their optional `.dev.vars` credentials are supplied; they fail fast when
-selected. Local demo cookies and mutation routes exist only in the explicit
+selected. For isolated upload/scanner testing without provider credentials, run
+`npm run smoke:files` or the model-driven `npm run regression:files` from `evals/`.
+`npm run regression:all` also checks publication and captured local mail in the
+same isolated runtime. These commands require Docker; see the evaluation guide
+for the real ClamAV smoke and local transport boundaries. Local demo cookies and mutation routes exist only in the explicit
 development and demo profiles. Production evaluation uses the separately
 access-code-gated fixed fixture in the evaluation runbook and never enables `/demo`.
 
 Start at [the demo guide](http://127.0.0.1:5173/demo) to select an identity or
 reset the fixture. Without a selected identity, private routes remain anonymous.
 The populated showcase journeys and clean SBEK personas are described in the
-[evaluation runbook](docs/SBEK_EVALUATION.md).
+[evaluation guide](evals/README.md).
 
 Other entry points:
 
@@ -99,7 +103,7 @@ credentials, provisioning and the separate scanner/site releases.
 | [Deployment](docs/DEPLOYMENT.md) | Provisioning, application/scanner/site releases and credential rotation. |
 | [Recovery](docs/RECOVERY.md) | Backup operation and incident restore procedures. |
 | [Performance](docs/PERFORMANCE.md) | Repeatable local measurement method and interpretation. |
-| [SBEK evaluation](docs/SBEK_EVALUATION.md) | Local and production fixture setup, evaluator identities and harness procedure. |
+| [Application evaluations](evals/README.md) | AEK setup, isolated local smokes, upstream scoring policy and acceptance boundaries. |
 | [User guide source](site/public/guide.html) | Published role-based product help; maintained separately from engineering docs. |
 | [OpenAPI source](docs/openapi.yaml) | API contract; `npm run openapi:sync` updates the generated public JSON. |
 | [Film production notes](video/README.md) | Preview, render, validate and publish the six-minute Remotion film. |

@@ -159,7 +159,8 @@ export class MultipartR2Provider {
     });
     let response: Response;
     try {
-      response = await this.fetcher(url, {
+      const fetcher = this.fetcher;
+      response = await fetcher(url, {
         method: "GET",
         headers: { accept: "application/xml" },
         signal: AbortSignal.timeout(10_000),

@@ -24,6 +24,7 @@ const ignoredTestDiscoveryDirectories = new Set([
   ".claude",
   ".git",
   ".artifacts",
+  ".agent-eval",
   ".react-router",
   ".wrangler",
   "build",
@@ -45,7 +46,7 @@ async function discoverTestFiles(directory = repositoryRoot) {
         "\\",
         "/",
       );
-      return /(?:\.test\.(?:mjs|ts|tsx)|\.unit\.ts|\.lint\.ts|\.spec\.ts)$/u.test(
+      return /(?:\.test\.(?:mjs|ts|tsx)|\.unit\.ts|\.lint\.ts|\.spec\.(?:mjs|ts))$/u.test(
         repositoryPath,
       )
         ? [repositoryPath]
@@ -385,6 +386,24 @@ test("Deployment runbook secret commands and local example cannot drift from the
 });
 
 test("every test file is registered in an executable project", async () => {
+  const evaluator = JSON.parse(
+    await readFile(resolve(repositoryRoot, "evals/package.json"), "utf8"),
+  );
+  assert.equal(
+    evaluator.scripts.test,
+    "node --import tsx --test test/*.test.mjs",
+  );
+  assert.equal(
+    evaluator.scripts["smoke:product"],
+    "node scripts/local.mjs --smoke-product",
+  );
+  assert.match(
+    await readFile(
+      resolve(repositoryRoot, "evals/playwright.config.mjs"),
+      "utf8",
+    ),
+    /testDir: "\.\/smokes"/u,
+  );
   const testFiles = await discoverTestFiles();
   const nodeOnly = new Set(nodeOnlyTestFiles);
   assert.equal(nodeOnly.size, nodeOnlyTestFiles.length);
@@ -398,6 +417,8 @@ test("every test file is registered in an executable project", async () => {
     if (path === "app/modules/ai/program-cue-agent.test.ts") return false;
     if (path.startsWith("app/") && path.endsWith(".test.ts")) return false;
     if (/^scripts\/[^/]+\.test\.mjs$/u.test(path)) return false;
+    if (/^evals\/test\/[^/]+\.test\.mjs$/u.test(path)) return false;
+    if (/^evals\/smokes\/[^/]+\.spec\.mjs$/u.test(path)) return false;
     return !(
       (path.startsWith("e2e/") || path.startsWith("site/e2e/")) &&
       path.endsWith(".spec.ts")

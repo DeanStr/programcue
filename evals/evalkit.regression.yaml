@@ -1,0 +1,52 @@
+version: 1
+project:
+  name: Programcue — product regression requirements
+  root: ..
+target:
+  kind: web
+  url: http://127.0.0.1:5188
+  ready:
+    url: http://127.0.0.1:5188/demo
+    timeoutSeconds: 30
+agent:
+  provider: codex
+  model: gpt-6-astra
+  effort: medium
+  maxTurns: 120
+  timeoutSeconds: 1200
+judge:
+  provider: codex
+  model: gpt-6-astra
+  effort: medium
+  timeoutSeconds: 900
+paths:
+  specs: evals/specs/regression
+  fixtures: evals/fixtures/regression.yaml
+  runs: evals/.agent-eval/runs
+  auth: evals/.agent-eval/auth/local
+  baselines: evals/baselines/regression
+scoring:
+  partialCredit: 0.5
+  minimumCoverage: 60
+promotion:
+  split: development
+  minimumScore: 100
+  minimumCoverage: 100
+  includeOptional: false
+variables:
+  evaluationEnvironment: local
+  canonicalEvent: Future of Events 2027
+  canonicalPublicPath: /public/programme/future-of-events-2027
+instructions: "Evaluate Programcue by function and filled-state correctness, not
+  resemblance to SessionBoard. Use the real interface and the configured
+  non-secret fixture emails. Organizer navigation: Command Centre, Form builder,
+  Review & selection, Participants, Content, Schedule, Programme,
+  Communications, Speaker Network. Preserve explicit confirmation steps. A
+  roster record is not an invitation. Fixture login is not signup, email
+  verification, or proof of role authorization. Local demo evidence is local
+  evidence; never claim live AI, scanning, email delivery or calendar-provider
+  success from fixtures. Ordinary public session-content edits require
+  publishing; assess upstream no-republish requirements honestly. Manual checks
+  remain pending until independently verified. Do not reset data or select
+  another identity through the role picker during scenarios; use switch_persona.
+  Never copy capability links or credentials into outputs."

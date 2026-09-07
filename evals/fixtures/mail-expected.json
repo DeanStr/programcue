@@ -1,0 +1,4 @@
+{
+  "from": "notifications@example.invalid",
+  "bodyIncludes": ["Hello Priya", "Programcue local capture"]
+}

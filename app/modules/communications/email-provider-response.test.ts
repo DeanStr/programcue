@@ -29,6 +29,24 @@ describe("email provider response bounds", () => {
     });
   });
 
+  it("invokes the Mailpit fetch dependency without the provider as its receiver", async () => {
+    const fetcher = function (this: unknown) {
+      if (this !== undefined)
+        throw new TypeError("fetch received an invalid this reference");
+      return Promise.resolve(Response.json({ ID: "local-message-id" }));
+    } as typeof fetch;
+    const provider = new MailpitEmailProvider(
+      "http://localhost/api/v1/send",
+      undefined,
+      undefined,
+      fetcher,
+    );
+    await expect(provider.send(message)).resolves.toEqual({
+      provider: "mailpit",
+      messageId: "local-message-id",
+    });
+  });
+
   it("rejects an oversized Resend response before accepting its message id", async () => {
     const provider = new ResendEmailProvider(
       "provider-key",
