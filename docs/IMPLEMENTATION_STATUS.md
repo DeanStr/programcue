@@ -12,17 +12,15 @@ Git history retains earlier committed work logs.
 - The modular monolith has connected Worker/D1-backed product slices across the
   main application workflow. Repository coverage does not establish replacement
   readiness or live-provider acceptance.
-- Source `43bd670c` passed the full release gate and was deployed on 8 September.
-  A direct deployed check verified accepted-session detail HTTP 200 before and
-  after explicit draft creation, unchanged publication and missing-session 404.
-- The latest deployed evaluation completed CFP setup, submissions and reviewer
-  scoring, but reached only **11.579%** coverage. The score remains withheld below
-  the 60% gate; all 301 retained artifacts verified.
-- ABS-S1 tried to add a co-author after review had made the application immutable.
-  This remaining sequencing error blocked decisions and speaker/content/scheduling
-  scenarios. The current candidate moves co-author setup before review and reads
-  the scoped event timezone for unsaved forms; deployment and fresh evidence are pending.
-- The fixture was reset and checked after all work at **13:27 UTC**.
+- Source `b946bfd4` passed the full release gate and was deployed on 8 September.
+  It corrects unsaved-form timezone guidance and runs co-author setup before review.
+- The latest deployed evaluation completed four scenarios at **13.008%** coverage;
+  the score is withheld, and all **373 artifacts verified**. Co-author persistence
+  and real advancement into Initial Review succeeded. An approval-blocked optional
+  AI probe marked ABS-S2 blocked and stopped decisions/speaker/content/scheduling.
+- Anonymous production verification remains unavailable to automation. Exact 2:1
+  rubric weights are a product gap: only integer percentages saved.
+- The fixture was reset and session invalidation checked at **15:56 UTC**.
 
 Status terms:
 
@@ -114,7 +112,7 @@ change. The latest complete gate supersedes older test-count histories.
 
 | Scope | Recorded result | Limit |
 | --- | --- | --- |
-| `43bd670c`, 8 September | Ordered `npm run deploy` passed the full gate in 940.8 s: 651 unit, 1,928 Worker, one Agent, 96 configuration and 14 scanner tests; types, quality, build, schema/recovery/OpenAPI and dependency audit; 221 main browser, 11 evaluation and 16 website checks, including Firefox/WebKit smoke. Preflight/schema/health passed; no pending migrations. | First attempt stopped before deployment after a local Wrangler proxy lost its connection. Complete serial retry passed. Two opt-in performance measurements skipped. Worker version `d6443e2c-e526-405b-9efa-7b517956f6e2`. |
+| `b946bfd4`, 8 September | Ordered serial `npm run deploy` passed the full gate in 935.7 s: 651 unit, 1,929 Worker, one Agent, 96 configuration and 14 scanner tests; types, quality, build, schema/recovery/OpenAPI and dependency audit; 221 main browser, 11 evaluation and 16 website checks, including Firefox/WebKit smoke. Preflight/schema/health passed; 58 migrations applied, none pending. | Two opt-in performance measurements skipped. Worker version `39f5bd31-465e-47c6-a74b-e1daa7741d4f`. Two Astra/high reviews: one actionable browser-fixture issue fixed by configuring a track; final review clean. Focused evidence: 37 Worker, two browser and 28 evaluator tests plus three configurations. |
 | Production-health evaluator correction | Actual top-level health contract validated; 25 evaluator tests, three configurations and `check:core` passed (351.0 s). | Readiness does not prove product acceptance. |
 | Form-recovery fixes | Shared load/restore choice reconciliation preserves custom fields, stable routing/conditions and revision tokens; removed choices require repair. Validation returns 400; actual revision conflicts retain 409. Toolbar stays below topbar/banner. Focused checks and the full gate passed. Deployed rename → restore → mouse/keyboard save → reload → immutable publication passed. | Bounded production workflow; not full submission/provider acceptance. |
 | Follow-up Astra/high review | `codex exec review --uncommitted` reported no actionable findings. Focused tests/types/build passed, as did 25 evaluator tests, three configurations and a clean serial run of all six evaluation-browser tests. | An earlier browser run overlapped a rebuild and is invalid evidence; the serial rerun resolved it. No additional source fixes or deployment. |
@@ -145,6 +143,7 @@ Requested CLI model/effort receipts do not confirm a resolved provider snapshot.
 | Deployed `/evaluate` `2026-09-08T08-11-18` | Failed in CFP-S1 with `agent_error` / provider exit 1: Codex account usage limit. No completed judging or new acceptance score; the revised proposal handoff was not reached. | Same 21-scenario/98-criterion suite, 240 calls/scenario and 60% coverage gate. Deployed and evaluator source `0d612b82`. Fresh personas and four deployed toolbar checks passed before collection. Final reset and session invalidation verified. |
 | Deployed `/evaluate` `2026-09-08T08-23-15` | Score withheld at **16.692%** coverage; five scenarios completed, 16 blocked and 17 manual checks pending. The 60% coverage gate exited 2. CFP area: 89.655% at 76.316% coverage. | All **416 artifacts verified**. Application `0d612b82`, evaluator `65b8925e`; proposal handoff and reviewer scoring completed. Accepted-session HTTP 500 blocked speaker/content/schedule scenarios; ABS setup conflicted with completed reviews. Four deployed toolbar checks and final reset/session invalidation passed. |
 | Deployed `/evaluate` `2026-09-08T12-32-26` | Score withheld at **11.579%** coverage; three scenarios completed, one `feature_not_found`, 17 blocked and 17 manual checks pending. The 60% gate exited 2. CFP area: 84.091% at 57.895% coverage. | Application/evaluator `43bd670c`; all **301 artifacts verified**. Fresh DevFlow creation, proposal handoff and submitted/locked CFP review succeeded. Co-author editing after review blocked ABS-S1 and downstream scenarios. Accepted-session access was verified separately, not credited to this run. |
+| Deployed `/evaluate` `2026-09-08T14-46-23` | Score withheld at **13.008%** coverage; four scenarios completed, 17 blocked and 17 manual checks pending. The 60% gate exited 2; provisional 67.045% is not acceptance. | Application/evaluator `b946bfd4`; all **373 artifacts verified**. Co-author setup, CFP review and real advancement succeeded. Optional AI approval rejection blocked ABS-S2 and its dependants; speaker/content/scheduling were not exercised. Reset/session invalidation and exact deployed health verified. |
 
 The earlier recovery/save blocker is resolved: both the direct deployed smoke
 and independent evaluator published successfully. Anonymous Start application
@@ -170,58 +169,52 @@ The rejected URL was not published and the report was not regraded. The judge
 also recorded a minor sticky-toolbar obstruction; Control+Home restored access.
 The multi-event probe again created Forward Summit 2028 with a separate empty queue.
 
-Source `43bd670c` opens unsnapshotted sessions from Content without creating a
-schedule version; missing content in an existing draft remains an explicit
-invariant error. Two Astra/high reviews found no actionable findings. Local
-coverage includes 17 content Worker tests, nine round tests, 28 evaluator tests,
-three configurations, the new browser workflows and three canonical regressions.
+Release `b946bfd4` fixes the unsaved-form helper by reading the scoped event
+rather than defaulting to UTC. Deployed CFP-S1 recorded America/Los_Angeles before
+save and at publication. CFP-S2 → ABS-S1 → CFP-S3 now preserves editable proposals
+until Marcus is added: the CI proposal retained two speakers after reload, and
+all three proposals remained submitted before review. CFP Review then completed;
+ABS-S2 added distinct Initial/Final rounds, completed both source reviews and
+confirmed advancement of exactly CI and AI. After reload, CFP Review was closed
+at 2/2 and Initial Review active at 2 assigned/0 submitted; Docs stayed unassigned.
 
-The fresh deployed run created DevFlow and preserved CFP Review, but exposed a
-remaining setup conflict: ABS-S1 adds a co-author after CFP-S3 starts review.
-Submitted revisions intentionally freeze at that boundary. The new-draft form
-has Add co-speaker; the reviewed application is immutable. Run ABS-S1 after
-CFP-S2 and before CFP-S3 in the next configuration, then proceed through
-ABS-S2/S3 before CFP-S4. The current candidate implements that ordering. All 98 upstream
-criteria remain unchanged. The chain did not reach accepted-session detail.
+Remaining boundaries from this run:
 
-A separate deployed browser diagnostic accepted a controlled showcase proposal,
-opened its detail with HTTP 200 and confirmed through read-only D1 checks that
-opening it created no draft or snapshot. Explicit draft creation then exposed
-content approval with HTTP 200; the published version stayed unchanged and a
-missing session returned 404. Its initial five-second assertion expired while
-the draft was still creating; a fresh diagnostic with a bounded 30-second wait
-passed. These checks are not AEK acceptance or proof of notification delivery.
+- **Evaluation/approval:** automatic approval review rejected Review AI first pass
+  as possible private-proposal export to an unspecified provider. The rejected
+  button opens confirmation; source submits only after confirmation. No AI request
+  or result was observed. ABS-S2 nevertheless returned blocked, suppressing all
+  downstream work. Separate the optional AI probe from core setup dependencies;
+  retain the original AI criterion and unavailable evidence. Do not regrade this run.
+- **Product differences:** the requested 2:1 weights and decimal percentages did
+  not save; integer 67%/33% persisted and was labelled approximate. The protected
+  Tracks field uses checkboxes rather than the upstream dropdown. Neither is an
+  AEK runtime failure. The reminder record reached 1/1 sent and Delivered, but
+  inbox receipt was not independently verified; AEK masked its preview frame.
+- **Anonymous verification:** the fresh public scenario again stopped at Security
+  check in progress. A read-only probe loaded two challenge frames with no token
+  after 60 seconds and no invalid-key/domain error. Cloudflare [does not support
+  automated browsers for production challenges](https://developers.cloudflare.com/cloudflare-challenges/reference/supported-browsers/).
+  A specific deployment configuration defect is unproven; production security stays enforced.
 
-The judge also identified misleading new-form closing-date wording: the helper
-uses UTC before a saved workspace exists while publication confirmation uses the
-event timezone. The server save uses the event timezone, but actual cutoff
-behavior was not tested. The attempted read-only deadline query ran after the
-automatic reset and returned no rows. Anonymous application entry again remained
-at Security check in progress. A subsequent read-only Playwright probe loaded
-two challenge frames but received no token after 60 seconds; no invalid-key or
-unauthorised-domain error was emitted. Cloudflare explicitly [does not support
-automated browsers for production challenges](https://developers.cloudflare.com/cloudflare-challenges/reference/supported-browsers/).
-This is an automation/provider boundary; a specific deployed configuration
-defect is unproven. Production security remains enforced, and anonymous
-acceptance requires a supported real-browser check.
-A reviewer autosave conflict recovered through Save draft and did not block scoring.
+The earlier accepted-session fix remains separately verified on deployed
+`43bd670c`: detail returned 200 before/after explicit draft creation, GET created
+no draft or content snapshot, published data stayed unchanged, and missing detail
+returned 404. This fresh AEK run did not reach that path.
 
-The evaluation and both diagnostic attempts reset on completion. Final cleanup
-completed at **13:27:02 UTC**, with invalidation of the prior organiser session,
-clean applicant/reviewer baselines, no selected persona and healthy `43bd670c`
-verified. Do not reset while another evaluator uses the shared fixture; follow
-the evaluator README.
+Final cleanup completed at **15:56:00 UTC**, with old organiser session invalid,
+clean applicant/reviewer baselines, no selected persona and healthy `b946bfd4`
+verified. No production mutations followed that reset.
 
 Reports are retained under `evals/.agent-eval/runs/<run-id>/report.html`.
-Latest deployment and reset receipts are in `.artifacts/release-43bd670c/`,
-`.artifacts/deployed-evaluation-20260908-accepted/` and
-`.artifacts/deployed-accepted-session-smoke-20260908-retry/`. Earlier failed
-release/diagnostic attempts remain alongside their successful retries.
+Latest release/evaluation/reset receipts are in `.artifacts/coauthor-timezone-release/`;
+the review loop is in `.artifacts/coauthor-timezone-review/`. Earlier accepted-session
+diagnostics remain in `.artifacts/deployed-accepted-session-smoke-20260908-retry/`.
 Verified artifact roots:
 
 - Active local regression: `5c7afb60bb4a86f5937aacdd786fe0de16ff5b0c5d798dc16517334b5b5c5415`.
 - Local upstream: `86268503e077e1d7560fcf7d40b2cbb5babb7724e64995fe2b5276aef780d427`.
-- Latest deployed upstream: `1381a2df435221eaac526371372e71faa574c70d83b7516708660d1cf27e35a6`.
+- Latest deployed upstream: `d6b389a653452f198945e431c8cc83b2c0069c569e43630c69f87b86b2a83e03`.
 
 ## Deployment evidence
 
@@ -293,11 +286,11 @@ acknowledgement latency remain outstanding.
 
 ## Remaining acceptance work
 
-1. **Deployed evaluation:** move co-author setup (ABS-S1) before CFP-S3, validate
-   the complete dependency chain, then run a fresh evaluation to reach decisions,
-   speaker, content and scheduling scenarios. Prior runs cannot resume after reset.
-   Investigate anonymous verification and correct new-form timezone guidance;
-   reset after the next authorised run.
+1. **Deployed evaluation:** separate the optional AI probe from ABS-S2's core
+   prerequisite, retaining its criterion and blocked evidence. Identify the AI
+   destination before any authorised provider transfer. Run fresh to reach scoring,
+   decisions, speaker, content and scheduling; reset afterward. Exact relative
+   weights remain a product gap, and anonymous verification needs a supported browser.
 2. **Provider paths:** exercise Airtable authority/recovery, Accelevents live
    reconciliation, external AI/tool-loop/assessment and fresh provider-error
    callbacks. Verify newer schedule-change emails, reminder cron and controlled
