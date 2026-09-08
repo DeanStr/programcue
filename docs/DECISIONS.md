@@ -317,6 +317,7 @@ mutable queue record is introduced.
 
 | Decision | Outcome |
 | --- | --- |
+| Sessions awaiting a draft | A session accepted or created without an active schedule draft remains readable in Content from its event-owned session metadata, labelled as not yet in a draft. Opening it does not create a schedule version or alter published snapshots. The organiser starts the draft explicitly in the planner. Missing content in an existing draft is an invariant error, not permission to substitute an older published snapshot. |
 | Content history | Schedule-version content snapshots remain the current working record. Every change also appends an immutable attributed revision containing all fields needed for exact inspection and restoration; restoration from content history creates a new Draft revision and never rewrites history. A 30-second schedule placement undo is not content-history restoration: it reverses the last placement mutation by appending a restore revision that returns duration and the editorial approval provenance that placement invalidated. |
 | Publication boundary | Confirming schedule publication makes the exact immutable schedule-version content snapshot authoritative for public, API, Airtable and calendar consumers. Its confirmation previews added, removed, moved/resized and visibility-changed sessions, plus snapshotted public content changes to title, description, track, format and duration, against the current published version. Speaker identities and live room labels remain current published values, not this snapshot. The confirmation stays open until publication succeeds or fails, and lists every known conflict, content, confirmation and public-site blocker with a link or planner reveal to the owning record. Every scheduled public snapshot must be Approved; missing snapshots still block publication. Private or hidden snapshots are publishable without approval. These checks run before provider work and are rechecked in the atomic D1 write. The preview is guidance over the current revision, not a substitute for final fail-closed revalidation. A blocked draft never replaces the last published programme. Editing or restoring content from history returns only the draft revision to Draft, so organisers may continue working without withdrawing approved live content. An exact 30-second placement undo is an exception: it appends a restore revision that returns duration and editorial approval provenance to the pre-placement state. Content already published under the former advisory policy is retained with explicit `legacy_publication` provenance and no fabricated human approver. D1 rejects invalid publication transitions, entry insertion or reassignment into a published version, any approval, visibility or deletion change to a snapshot on a published version, and making an unapproved scheduled session public. Recovery may restore an empty published version first, but must restore coherent approval provenance before its public entries. Airtable staging applies the same approval boundary before provider writes. |
 | Central file library | The library is a tenant/event-scoped view over existing `file_assets`, `file_versions` and private R2 objects, not a second upload store. The initial read is limited to 50 assets and their current versions; retained history is loaded in separate 50-version pages. Downloads fail closed unless the selected version is current, released, signature-valid, scan-clean and ETag/size matched. ZIP export is bounded, previewed and explicitly confirmed; it preflights metadata before returning download headers, then conditionally opens and pull-streams only the current R2 body with cancellation. The confirmed binary download posts to a dedicated resource route so React Router never tries to deserialize ZIP bytes as document action data. |
@@ -2224,3 +2225,17 @@ controls cannot reduce the document to padding. Mobile preview remains above
 the application header. Short viewports scroll the frame as a unit
 to keep its panes usable when toolbar and navigation rows consume the height.
 This replaces independently pinning the toolbar over scrolling field controls.
+
+## 2026-09-08 — Complete review depth before releasing fixture decisions
+
+CFP-S1 creates a blank DevFlow Conf 2027 event for the run and explicitly reuses
+the configured verified sender when available. The populated showcase and its
+unfinished reviews remain intact. Existing DevFlow work blocks a fresh run;
+shared reset belongs to the operator between runs. The evaluator orders
+CFP-S3 → ABS-S1/S2/S3 → CFP-S4. CFP Review retains its
+submitted scorecards. ABS adds distinct rounds and explicitly advances the two
+reviewed proposals into Initial Review, producing fresh assignments without
+archiving the plan or rewriting old reviews. Both source proposals must complete
+the source round before advancement. Final decisions and CFP closure occur only
+after ABS scoring. Historical reviewer queue entries remain visible and must be
+identified honestly; upstream criteria and sealed earlier results are unchanged.

@@ -445,10 +445,14 @@ export default function AdminContent({ loaderData }: Route.ComponentProps) {
                         "No linked speaker"}
                     </span>
                   </div>
-                  <DomainStatusBadge
-                    domain="content"
-                    status={session.contentStatus}
-                  />
+                  {session.contentStatus === null ? (
+                    <span className="pill">Not in a draft</span>
+                  ) : (
+                    <DomainStatusBadge
+                      domain="content"
+                      status={session.contentStatus}
+                    />
+                  )}
                   {needsReview ? (
                     <Link className="content-text-action" to={sessionHref}>
                       Review

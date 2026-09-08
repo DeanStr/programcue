@@ -23,9 +23,9 @@ data:
       - Workshop Lab
   identities:
     organizer:
-      name: Jordan Alvarez
-      email: sbek-organizer@example.com
-      role: Event Organizer / Admin
+      name: Morgan Chen
+      email: morgan.owner@example.com
+      role: Organisation Owner / Event Organizer
     speaker:
       name: Priya Raman
       email: sbek-speaker@example.com

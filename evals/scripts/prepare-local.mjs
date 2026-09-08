@@ -3,7 +3,7 @@ import path from "node:path";
 import { chromium } from "playwright";
 import { origin, aek, root, run } from "./runtime.mjs";
 
-export async function prepareLocal() {
+export async function prepareLocal({ upstream = false } = {}) {
   // Only the coordinator starts this isolated loopback target. This helper never
   // accepts a remote URL or reads production credentials.
   const browser = await chromium.launch({ headless: true });
@@ -31,7 +31,7 @@ export async function prepareLocal() {
   }
   const sessions = {};
   for (const [persona, name] of [
-    ["organizer", "Jordan Alvarez"],
+    ["organizer", upstream ? "Morgan Chen" : "Jordan Alvarez"],
     ["speaker", "Priya Raman"],
     ["reviewer", "Sam Whitfield"],
     ["showcase_speaker", "Priya Shah"],

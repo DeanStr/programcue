@@ -306,14 +306,43 @@ export class ContentManagementService {
                         active.version_number DESC LIMIT 1
             )
           GROUP BY content.schedule_version_id, content.session_id
-          ORDER BY content.title COLLATE NOCASE, content.session_id`,
+          UNION ALL
+         SELECT session.id AS sessionId, session.title,
+                NULL AS contentStatus, NULL AS contentRevision,
+                session.visibility, session.updated_at AS updatedAt,
+                GROUP_CONCAT(person.display_name, '||') AS speakerNames,
+                0 AS scheduled
+           FROM sessions session
+           JOIN events event ON event.id = session.event_id
+                            AND event.organisation_id = ?
+           LEFT JOIN session_speakers relation
+             ON relation.event_id = session.event_id
+            AND relation.session_id = session.id
+           LEFT JOIN people person ON person.id = relation.person_id
+          WHERE session.event_id = ?
+            AND NOT EXISTS (
+              SELECT 1 FROM schedule_session_contents content
+              JOIN schedule_versions version
+                ON version.id = content.schedule_version_id
+               AND version.event_id = content.event_id
+              WHERE content.event_id = session.event_id
+                AND content.session_id = session.id
+                AND version.status IN ('draft','published')
+            )
+          GROUP BY session.id
+          ORDER BY title COLLATE NOCASE, sessionId`,
       )
-        .bind(viewer.organisationId, viewer.eventId)
+        .bind(
+          viewer.organisationId,
+          viewer.eventId,
+          viewer.organisationId,
+          viewer.eventId,
+        )
         .all<{
           sessionId: string;
           title: string;
-          contentStatus: ContentStatus;
-          contentRevision: number;
+          contentStatus: ContentStatus | null;
+          contentRevision: number | null;
           visibility: string;
           updatedAt: number;
           speakerNames: string | null;
@@ -637,9 +666,13 @@ export class ContentManagementService {
            ON event.id = content.event_id AND event.organisation_id = ?
          LEFT JOIN people approver ON approver.id = content.approved_by_person_id
         WHERE content.event_id = ? AND content.session_id = ?
-          AND version.status IN ('draft','published')
-        ORDER BY CASE version.status WHEN 'draft' THEN 0 ELSE 1 END,
-                 version.version_number DESC LIMIT 1`,
+          AND version.id = (
+            SELECT active.id FROM schedule_versions active
+             WHERE active.event_id = content.event_id
+               AND active.status IN ('draft','published')
+             ORDER BY CASE active.status WHEN 'draft' THEN 0 ELSE 1 END,
+                      active.version_number DESC LIMIT 1
+          )`,
     )
       .bind(viewer.organisationId, viewer.eventId, sessionId)
       .first<{
@@ -660,10 +693,58 @@ export class ContentManagementService {
         approvedByName: string | null;
       }>();
     if (!current) {
-      throw new ContentManagementStateError(
-        "Session content was not found.",
-        404,
-      );
+      const session = await this.env.DB.prepare(
+        `SELECT session.id AS sessionId, session.title, session.description,
+                event.timezone, session.format,
+                session.duration_minutes AS durationMinutes,
+                track.name AS trackName,
+                EXISTS (SELECT 1 FROM schedule_versions version
+                         WHERE version.event_id = session.event_id
+                           AND version.status = 'draft') AS hasDraft
+           FROM sessions session
+           JOIN events event ON event.id = session.event_id
+                            AND event.organisation_id = ?
+           LEFT JOIN tracks track ON track.id = session.track_id
+                                 AND track.event_id = session.event_id
+          WHERE session.event_id = ? AND session.id = ?`,
+      )
+        .bind(viewer.organisationId, viewer.eventId, sessionId)
+        .first<{
+          sessionId: string;
+          title: string;
+          description: string | null;
+          timezone: string;
+          format: string;
+          durationMinutes: number;
+          trackName: string | null;
+          hasDraft: number;
+        }>();
+      if (!session) {
+        throw new ContentManagementStateError("Session was not found.", 404);
+      }
+      if (session.hasDraft) {
+        throw new ContentManagementStateError(
+          "The session is missing content from the current schedule draft.",
+        );
+      }
+      return {
+        current: {
+          ...session,
+          scheduleVersionId: null,
+          scheduleVersionNumber: null,
+          scheduleVersionStatus: "not_started" as const,
+          scheduleRevision: null,
+          contentStatus: null,
+          contentRevision: null,
+          visibility: null,
+          approvedAt: null,
+          approvalSource: null,
+          approvedByPersonId: null,
+          approvedByName: null,
+        },
+        revisions: [],
+        nextHistoryCursor: null,
+      };
     }
     assertContentApprovalProvenance(current);
     const revisions = await this.env.DB.prepare(

@@ -34,6 +34,126 @@ async function placeSession(
 }
 
 describe("content management", () => {
+  it.each([false, true])(
+    "reads a new session before its first content draft (published schedule: %s)",
+    async (published) => {
+      const schedule = new ScheduleService(scheduleTestEnv);
+      const content = new ContentManagementService(scheduleTestEnv);
+      await env.DB.prepare(
+        "DELETE FROM sessions WHERE id = 'new-accepted-session' AND event_id = ?",
+      )
+        .bind(viewer.eventId)
+        .run();
+      if (published) {
+        const versionId = await schedule.createDraft(viewer);
+        await env.DB.prepare(
+          "UPDATE schedule_versions SET status = 'published', published_at = unixepoch() WHERE id = ?",
+        )
+          .bind(versionId)
+          .run();
+      }
+      await env.DB.prepare(
+        `INSERT INTO sessions (id, event_id, track_id, title, slug, description, format,
+         duration_minutes, status, visibility, revision, created_at, updated_at)
+       VALUES ('new-accepted-session', ?, 'schedule-test-track', 'New accepted session',
+         'new-accepted-session', 'Accepted proposal abstract', 'presentation', 45,
+         'unscheduled', 'public', 1, unixepoch(), unixepoch())`,
+      )
+        .bind(viewer.eventId)
+        .run();
+      const before = await env.DB.prepare(
+        "SELECT * FROM schedule_session_contents WHERE event_id = ? ORDER BY session_id",
+      )
+        .bind(viewer.eventId)
+        .all();
+      const detail = await content.getSession(viewer, "new-accepted-session");
+      expect(detail.current).toMatchObject({
+        title: "New accepted session",
+        description: "Accepted proposal abstract",
+        scheduleVersionStatus: "not_started",
+        contentStatus: null,
+      });
+      expect(detail.revisions).toEqual([]);
+      expect((await content.getDashboard(viewer)).sessions).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            sessionId: "new-accepted-session",
+            contentStatus: null,
+          }),
+        ]),
+      );
+      expect(
+        (
+          await env.DB.prepare(
+            "SELECT * FROM schedule_session_contents WHERE event_id = ? ORDER BY session_id",
+          )
+            .bind(viewer.eventId)
+            .all()
+        ).results,
+      ).toEqual(before.results);
+      await expect(
+        content.getSession(
+          { ...viewer, organisationId: "another-org" },
+          "new-accepted-session",
+        ),
+      ).rejects.toMatchObject({ status: 404 });
+      await expect(
+        content.getSession(
+          { ...viewer, eventId: "another-event" },
+          "new-accepted-session",
+        ),
+      ).rejects.toMatchObject({ status: 404 });
+      await expect(
+        content.getSession(
+          { ...viewer, role: "evaluator" },
+          "new-accepted-session",
+        ),
+      ).rejects.toMatchObject({ status: 403 });
+      await expect(
+        content.getSession(viewer, "missing-session"),
+      ).rejects.toMatchObject({ status: 404 });
+      await schedule.createDraft(viewer);
+      expect(
+        (await content.getSession(viewer, "new-accepted-session")).current,
+      ).toMatchObject({
+        scheduleVersionStatus: "draft",
+        contentStatus: "draft",
+        title: "New accepted session",
+      });
+      expect(
+        (await content.getDashboard(viewer)).sessions.filter(
+          (s) => s.sessionId === "new-accepted-session",
+        ),
+      ).toHaveLength(1);
+    },
+  );
+
+  it("fails explicitly when a current draft is missing its required session content", async () => {
+    const schedule = new ScheduleService(scheduleTestEnv);
+    const publishedId = await schedule.createDraft(viewer);
+    await env.DB.prepare(
+      "UPDATE schedule_versions SET status = 'published', published_at = unixepoch() WHERE id = ?",
+    )
+      .bind(publishedId)
+      .run();
+    const versionId = await schedule.createDraft(viewer);
+    await env.DB.prepare(
+      "DELETE FROM schedule_session_contents WHERE schedule_version_id = ? AND session_id = 'schedule-test-one'",
+    )
+      .bind(versionId)
+      .run();
+    await expect(
+      new ContentManagementService(scheduleTestEnv).getSession(
+        viewer,
+        "schedule-test-one",
+      ),
+    ).rejects.toMatchObject({
+      status: 409,
+      message:
+        "The session is missing content from the current schedule draft.",
+    });
+  });
+
   it("attributes a speaker task file to its one linked session", async () => {
     const content = new ContentManagementService(scheduleTestEnv);
     const personId = "content-session-speaker";

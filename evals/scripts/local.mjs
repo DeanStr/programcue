@@ -176,7 +176,7 @@ try {
   await waitForWorker(`${origin}/demo`, { worker, signal: startup.signal }).catch((error) => {
     throw new Error(`${error.message}; inspect ${logPath}`, { cause: error });
   });
-  await prepareLocal();
+  await prepareLocal({ upstream: !regression && !mode?.startsWith("--smoke") });
   if (mode === "--prepare-only") {
     console.log(
       "Local target is ready. Run aek in another terminal; Ctrl+C stops this Worker. Do not restart/reset it to resume a run.",

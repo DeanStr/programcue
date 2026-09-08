@@ -39,11 +39,22 @@ scenarios:
       from signup evidence.
 
 
-      Use the canonical Future of Events 2027 event when a pre-seeded event is
-      needed. Fixture emails override literal example addresses below. Record
-      actual dates, track/format names and any substituted fixture values.
-      Follow the original criterion: substitutions cannot hide a missing
-      capability.
+      Run the chained suite in the new DevFlow Conf 2027 event created by
+      CFP-S1, not the populated Future of Events 2027 showcase. After each
+      switch_persona, explicitly select DevFlow Conf 2027 through the event
+      picker when that role has event access; applicant pages use the observed
+      bound CFP URL. Accept the invitation to this event before opening its
+      reviewer workspace. Never substitute the showcase's form, schedule,
+      reviews or published programme. Fixture emails override literal example
+      addresses below. Record actual dates, track/format names and any
+      substituted fixture values. Follow the original criterion: substitutions
+      cannot hide a missing capability.
+
+
+      This scenario runs after CFP-S3 and before CFP-S4: both original proposals
+      are still undecided and the CFP is open. Reuse them, add the co-author and
+      third proposal, and leave all three undecided. Do not release decisions,
+      reset the fixture or archive a review cycle.
 
 
       ORIGINAL SCENARIO SCRIPT:
@@ -103,7 +114,7 @@ scenarios:
         role label
       - Screenshot of the co-author control in the submission form or edit view
     dependsOn:
-      - CFP-S4
+      - CFP-S3
   - id: ABS-S2
     name: Organizer configures rounds, pools, assignments, reminders
     kind: browser
@@ -123,11 +134,39 @@ scenarios:
       from signup evidence.
 
 
-      Use the canonical Future of Events 2027 event when a pre-seeded event is
-      needed. Fixture emails override literal example addresses below. Record
-      actual dates, track/format names and any substituted fixture values.
-      Follow the original criterion: substitutions cannot hide a missing
-      capability.
+      Run the chained suite in the new DevFlow Conf 2027 event created by
+      CFP-S1, not the populated Future of Events 2027 showcase. After each
+      switch_persona, explicitly select DevFlow Conf 2027 through the event
+      picker when that role has event access; applicant pages use the observed
+      bound CFP URL. Accept the invitation to this event before opening its
+      reviewer workspace. Never substitute the showcase's form, schedule,
+      reviews or published programme. Fixture emails override literal example
+      addresses below. Record actual dates, track/format names and any
+      substituted fixture values. Follow the original criterion: substitutions
+      cannot hide a missing capability.
+
+
+      Preserve the completed CFP Review. Do not use Start new review cycle,
+      replace the active plan, reset data or release decisions. For original
+      steps 4-5, use Round progression > Add next round to add Initial Review
+      and then Final Review to the same plan, each with its own new scorecard.
+      Use Edit unassigned round and rubric to configure the exact requested
+      fields, weights, dates and anonymity before assigning work. The original
+      script's Round 1 and Round 2 refer to these named ABS rounds; CFP Review
+      is their earlier prerequisite. Add Sam to Initial Review's pool and leave
+      Final Review's pool distinct. Before original step 7, complete the real
+      progression prerequisite: in the still-active CFP Review, assign the AI
+      Pair Programmer proposal to Sam, switch to reviewer, fill its existing
+      numeric criteria with 4 and the fixture review comment, and explicitly
+      submit it. Keep the earlier CI review unchanged. Switch back to organizer
+      and use Review advancement to shortlist exactly CI and AI into Initial
+      Review, confirming the two affected proposals and Sam. This closes the
+      completed CFP round, activates Initial Review and creates its two fresh
+      assignments together; no cycle is archived. Verify Initial Review shows 2
+      assigned and 0 completed, with Docs unassigned; exercise track filtering
+      and reminders in that round. Preserve screenshots of the progression and
+      the round-scoped baseline. If progression is unavailable, record the
+      specific blocker instead of clearing prior work.
 
 
       ORIGINAL SCENARIO SCRIPT:
@@ -226,16 +265,29 @@ scenarios:
       from signup evidence.
 
 
-      Use the canonical Future of Events 2027 event when a pre-seeded event is
-      needed. Fixture emails override literal example addresses below. Record
-      actual dates, track/format names and any substituted fixture values.
-      Follow the original criterion: substitutions cannot hide a missing
-      capability.
+      Run the chained suite in the new DevFlow Conf 2027 event created by
+      CFP-S1, not the populated Future of Events 2027 showcase. After each
+      switch_persona, explicitly select DevFlow Conf 2027 through the event
+      picker when that role has event access; applicant pages use the observed
+      bound CFP URL. Accept the invitation to this event before opening its
+      reviewer workspace. Never substitute the showcase's form, schedule,
+      reviews or published programme. Fixture emails override literal example
+      addresses below. Record actual dates, track/format names and any
+      substituted fixture values. Follow the original criterion: substitutions
+      cannot hide a missing capability.
 
 
-      For weighted arithmetic, record the complete set of included reviews; do
-      not ignore earlier CFP reviews. Use download for CSV exports and retain
-      actual bytes.
+      In the reviewer queue, open the two Assigned entries and verify the
+      Initial Review rubric before scoring. Completed CFP Review entries remain
+      available as history; record them explicitly rather than claiming they
+      disappeared or counting them as new assignments. Inspect the stored
+      Initial Review scorecards after submission. Select Initial Review in the
+      organizer results and progress views. Preserve completed CFP Review
+      records; do not reopen or replace them. For weighted arithmetic, record
+      the selected round and complete set of included reviews; if the displayed
+      aggregate includes earlier CFP reviews, include them in the arithmetic. Do
+      not release decisions or advance into Final Review here; CFP-S4 follows
+      these checks. Use download for CSV exports and retain actual bytes.
 
 
       ORIGINAL SCENARIO SCRIPT:

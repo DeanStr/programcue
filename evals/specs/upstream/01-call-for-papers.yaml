@@ -40,20 +40,34 @@ scenarios:
       from signup evidence.
 
 
-      Use the canonical Future of Events 2027 event when a pre-seeded event is
-      needed. Fixture emails override literal example addresses below. Record
-      actual dates, track/format names and any substituted fixture values.
-      Follow the original criterion: substitutions cannot hide a missing
-      capability.
+      Run the chained suite in the new DevFlow Conf 2027 event created by
+      CFP-S1, not the populated Future of Events 2027 showcase. After each
+      switch_persona, explicitly select DevFlow Conf 2027 through the event
+      picker when that role has event access; applicant pages use the observed
+      bound CFP URL. Accept the invitation to this event before opening its
+      reviewer workspace. Never substitute the showcase's form, schedule,
+      reviews or published programme. Fixture emails override literal example
+      addresses below. Record actual dates, track/format names and any
+      substituted fixture values. Follow the original criterion: substitutions
+      cannot hide a missing capability.
 
 
-      This scenario owns original CFP-S1 steps 1–8 and 12. Anonymous steps 9–11
-      run separately in CFP-S1-PUBLIC; do not perform them here or treat their
-      unavailable evidence as a publication failure. Verify the published
-      version and publish portalUrl only from observed evidence. After the
-      multi-event probe, restore the organizer's canonical event before
-      finishing. Completion here proves neither anonymous access nor applicant
-      validation.
+      At original steps 1-2, create a blank DevFlow Conf 2027 event using
+      Program Cue as its data repository, the fixture dates and public slug
+      devflow-conf-2027. Reuse the configured verified evaluation sender from
+      the showcase event through the explicit Reuse verified sender choice when
+      available; missing sender capability stays an honest provider blocker. Do
+      not clone the showcase or archive its review cycle. If DevFlow Conf 2027
+      already exists before this run, report blocked and request an
+      operator-owned fresh fixture rather than reusing or clearing unknown work.
+      Verify the new event has no proposals or existing review assignments
+      before continuing; create its CFP with New form if needed. This scenario
+      owns original CFP-S1 steps 1–8 and 12. Anonymous steps 9–11 run separately
+      in CFP-S1-PUBLIC; do not perform them here or treat their unavailable
+      evidence as a publication failure. Verify the published version and
+      publish portalUrl only from observed evidence. After the multi-event
+      probe, restore the organizer's canonical event before finishing.
+      Completion here proves neither anonymous access nor applicant validation.
 
 
       ORIGINAL SCENARIO SCRIPT:
@@ -144,11 +158,16 @@ scenarios:
       from signup evidence.
 
 
-      Use the canonical Future of Events 2027 event when a pre-seeded event is
-      needed. Fixture emails override literal example addresses below. Record
-      actual dates, track/format names and any substituted fixture values.
-      Follow the original criterion: substitutions cannot hide a missing
-      capability.
+      Run the chained suite in the new DevFlow Conf 2027 event created by
+      CFP-S1, not the populated Future of Events 2027 showcase. After each
+      switch_persona, explicitly select DevFlow Conf 2027 through the event
+      picker when that role has event access; applicant pages use the observed
+      bound CFP URL. Accept the invitation to this event before opening its
+      reviewer workspace. Never substitute the showcase's form, schedule,
+      reviews or published programme. Fixture emails override literal example
+      addresses below. Record actual dates, track/format names and any
+      substituted fixture values. Follow the original criterion: substitutions
+      cannot hide a missing capability.
 
 
       This scenario owns original CFP-S1 steps 9–11. Use the bound published
@@ -220,11 +239,16 @@ scenarios:
       from signup evidence.
 
 
-      Use the canonical Future of Events 2027 event when a pre-seeded event is
-      needed. Fixture emails override literal example addresses below. Record
-      actual dates, track/format names and any substituted fixture values.
-      Follow the original criterion: substitutions cannot hide a missing
-      capability.
+      Run the chained suite in the new DevFlow Conf 2027 event created by
+      CFP-S1, not the populated Future of Events 2027 showcase. After each
+      switch_persona, explicitly select DevFlow Conf 2027 through the event
+      picker when that role has event access; applicant pages use the observed
+      bound CFP URL. Accept the invitation to this event before opening its
+      reviewer workspace. Never substitute the showcase's form, schedule,
+      reviews or published programme. Fixture emails override literal example
+      addresses below. Record actual dates, track/format names and any
+      substituted fixture values. Follow the original criterion: substitutions
+      cannot hide a missing capability.
 
 
       Saved fixture access does not prove ordinary signup or email verification.
@@ -354,17 +378,25 @@ scenarios:
       from signup evidence.
 
 
-      Use the canonical Future of Events 2027 event when a pre-seeded event is
-      needed. Fixture emails override literal example addresses below. Record
-      actual dates, track/format names and any substituted fixture values.
-      Follow the original criterion: substitutions cannot hide a missing
-      capability.
+      Run the chained suite in the new DevFlow Conf 2027 event created by
+      CFP-S1, not the populated Future of Events 2027 showcase. After each
+      switch_persona, explicitly select DevFlow Conf 2027 through the event
+      picker when that role has event access; applicant pages use the observed
+      bound CFP URL. Accept the invitation to this event before opening its
+      reviewer workspace. Never substitute the showcase's form, schedule,
+      reviews or published programme. Fixture emails override literal example
+      addresses below. Record actual dates, track/format names and any
+      substituted fixture values. Follow the original criterion: substitutions
+      cannot hide a missing capability.
 
 
+      Before assigning any reviews, name the initial round CFP Review (create or
+      edit the still-unassigned round). Keep its original numeric scorecard.
       Sam's saved identity grants no reviewer membership. Perform Jordan's
       invitation, then switch to reviewer and explicitly accept the pending
       invitation. Capture both states. Do not publish invitation or magic-link
-      credentials.
+      credentials. Leave the completed CFP Review intact; final decisions and
+      CFP closure run only after ABS-S3.
 
 
       Use the bound proposalUrl from CFP-S2; verify the record before
@@ -449,11 +481,23 @@ scenarios:
       from signup evidence.
 
 
-      Use the canonical Future of Events 2027 event when a pre-seeded event is
-      needed. Fixture emails override literal example addresses below. Record
-      actual dates, track/format names and any substituted fixture values.
-      Follow the original criterion: substitutions cannot hide a missing
-      capability.
+      Run the chained suite in the new DevFlow Conf 2027 event created by
+      CFP-S1, not the populated Future of Events 2027 showcase. After each
+      switch_persona, explicitly select DevFlow Conf 2027 through the event
+      picker when that role has event access; applicant pages use the observed
+      bound CFP URL. Accept the invitation to this event before opening its
+      reviewer workspace. Never substitute the showcase's form, schedule,
+      reviews or published programme. Fixture emails override literal example
+      addresses below. Record actual dates, track/format names and any
+      substituted fixture values. Follow the original criterion: substitutions
+      cannot hide a missing capability.
+
+
+      ABS-S3 has now completed the deeper review checks. In original step 1,
+      select the historical CFP Review results to inspect Sam's original all-4
+      scorecard and comment; do not overwrite the later Initial Review scores.
+      Return to the current round for decisions. Release decisions and close the
+      CFP only in this scenario.
 
 
       ORIGINAL SCENARIO SCRIPT:
@@ -524,6 +568,7 @@ scenarios:
         locked
     dependsOn:
       - CFP-S3
+      - ABS-S3
     outputs:
       sessionUrl:
         type: url

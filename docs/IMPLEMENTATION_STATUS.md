@@ -18,9 +18,10 @@ Git history retains earlier committed work logs.
 - The latest deployed evaluation verified the proposal handoff, reviewer scoring
   and persisted decisions. Overall coverage reached **16.692%**; the score remains
   withheld below the 60% gate. All 416 retained artifacts verified.
-- An accepted session missing its schedule content record returned HTTP 500,
-  blocking downstream scenarios. Review-cycle setup also conflicted with earlier
-  completed work. The fixture was reset and checked at **09:30 UTC**.
+- The deployed run exposed accepted-session content access and review-sequencing
+  blockers. Local fixes now open sessions awaiting a draft and advance preserved
+  CFP reviews before final decisions; deployment/rerun remains outstanding.
+  The fixture was reset and checked at **09:30 UTC**.
 
 Status terms:
 
@@ -178,6 +179,16 @@ automatic approval review rejected archiving active work for a new cycle.
 Some CFP checkpoints lacked usable excerpts/screenshots for judging; later
 captures cannot satisfy those checkpoint-scoped criteria. These are evaluation
 evidence/setup gaps, not additional established product defects.
+
+Local follow-up: unsnapshotted sessions appear in Content and open before an
+explicit planner draft is created; invalid draft snapshots fail explicitly.
+The accepted-session and fresh-event browser workflows, three canonical browser
+regressions, core gate, 28 evaluator tests and all three configurations passed.
+Focused Worker coverage includes 17 content tests and nine round tests. The
+suite creates a fresh DevFlow event, leaving protected showcase reviews intact,
+and orders CFP-S3 → ABS-S1/S2/S3 → CFP-S4. Confirmed advancement preserves CFP
+reviews while creating Initial Review's fresh assignments. All 98
+upstream criteria are unchanged. These fixes are not yet deployed.
 
 The deployed fixture was reset before and after the authorised run. Final checks
 proved the old organiser session invalid and clean applicant/reviewer baselines

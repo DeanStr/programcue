@@ -190,6 +190,10 @@ test("profiles share fresh local personas but keep regression results separate a
   const local = loadConfig(path.join(root, "evalkit.local.yaml"));
   const regression = loadConfig(path.join(root, "evalkit.regression.yaml"));
   const production = loadConfig(path.join(root, "evalkit.production.yaml"));
+  for (const config of [local, production]) {
+    assert.equal(config.variables.canonicalEvent, "DevFlow Conf 2027");
+    assert.equal(config.variables.canonicalPublicPath, "/public/programme/devflow-conf-2027");
+  }
   assert.equal(local.project.root, "..");
   assert.equal(local.paths.auth, regression.paths.auth);
   assert.notEqual(local.paths.baselines, regression.paths.baselines);
@@ -197,6 +201,10 @@ test("profiles share fresh local personas but keep regression results separate a
   for (const name of ["local", "production", "regression"]) {
     const data = YAML.parse(fs.readFileSync(path.join(root, `fixtures/${name}.yaml`), "utf8"));
     assert.ok(Object.values(data.data.identities).every((identity) => !("password" in identity)));
+    assert.equal(
+      data.data.identities.organizer.name,
+      name === "local" ? "Morgan Chen" : "Jordan Alvarez",
+    );
   }
   const specs = loadSpecs(path.resolve(project, local.paths.specs));
   assert.equal(
@@ -274,5 +282,106 @@ test("blocked observation reduces coverage while a missing completed receipt is 
     }
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("AEK runs abstract reviews before decisions and blocks decisions when review setup is unavailable", () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "programcue-review-sequence-"));
+  try {
+    const specs = loadSpecs(path.join(root, "specs/upstream"));
+    const selected = specs.filter((s) =>
+      ["call-for-papers", "abstract-management", "speaker-management"].includes(s.id),
+    );
+    const declarations = Object.fromEntries(
+      selected.flatMap((s) => s.scenarios.map((scenario) => [scenario.id, scenario])),
+    );
+    fs.writeFileSync(path.join(directory, "declarations.json"), JSON.stringify(declarations));
+    fs.writeFileSync(
+      path.join(directory, "collect.mjs"),
+      `
+      import fs from 'node:fs';
+      const id = process.argv[2];
+      const declarations = JSON.parse(fs.readFileSync('declarations.json', 'utf8'));
+      const prior = fs.existsSync('order.json') ? JSON.parse(fs.readFileSync('order.json', 'utf8')) : [];
+      if (id === 'ABS-S1' && prior.includes('CFP-S4')) throw new Error('Decisions preceded abstract review');
+      if (id === 'CFP-S4' && !prior.includes('ABS-S3')) throw new Error('Abstract scoring did not precede decisions');
+      prior.push(id); fs.writeFileSync('order.json', JSON.stringify(prior));
+      const blocked = id === 'CFP-S1-PUBLIC' || (id === 'ABS-S2' && process.env.SEQUENCE_BLOCK_SETUP === '1');
+      const outputs = Object.fromEntries(Object.keys(declarations[id].outputs ?? {}).map(name => [name, {value: 'https://example.com/' + name, evidenceRefs: ['step:1']}]));
+      console.log(JSON.stringify({version: 1, outcome: blocked ? 'blocked' : 'completed',
+        summary: 'Synthetic ordering evidence; not product acceptance', observations: [], ...(blocked ? {} : {outputs})}));
+    `,
+    );
+    fs.mkdirSync(path.join(directory, "specs"));
+    for (const [index, spec] of selected.entries()) {
+      fs.writeFileSync(
+        path.join(directory, "specs", `${index}.yaml`),
+        YAML.stringify({
+          id: spec.id,
+          title: spec.title,
+          weight: index === 0 ? 34 : 33,
+          description: "Synthetic dependency contract",
+          scenarios: spec.scenarios.map((s) => ({
+            id: s.id,
+            name: s.name,
+            instructions: s.instructions,
+            dependsOn: s.dependsOn,
+            inputs: s.inputs,
+            outputs: s.outputs,
+            kind: "command",
+            requiresAuth: false,
+            collect: {
+              command: `node collect.mjs ${s.id}`,
+              methodFiles: ["collect.mjs", "declarations.json"],
+            },
+          })),
+          rubric: [
+            {
+              id: `SYNTHETIC-${index}`,
+              criterion: "Synthetic order only",
+              passCriteria: "Required collection order is preserved",
+              weight: 1,
+              scenarios: spec.scenarios.map((s) => s.id),
+              grader: { type: "llm" },
+            },
+          ],
+        }),
+      );
+    }
+    for (const blocked of [false, true]) {
+      const runs = blocked ? "blocked-runs" : "complete-runs";
+      fs.rmSync(path.join(directory, "order.json"), { force: true });
+      fs.writeFileSync(
+        path.join(directory, "config.yaml"),
+        YAML.stringify({
+          version: 1,
+          project: { name: "Synthetic review sequencing", root: "." },
+          target: { kind: "repository" },
+          agent: { provider: "mock" },
+          judge: { provider: "mock" },
+          paths: { specs: "specs", runs },
+        }),
+      );
+      const result = spawnSync(process.execPath, [aek, "collect", "--config", "config.yaml"], {
+        cwd: directory,
+        encoding: "utf8",
+        timeout: 30_000,
+        env: { ...process.env, SEQUENCE_BLOCK_SETUP: blocked ? "1" : "0" },
+      });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      const run = path.join(directory, runs, fs.readdirSync(path.join(directory, runs))[0]);
+      const evidence = (id) =>
+        JSON.parse(fs.readFileSync(path.join(run, id, "evidence.json"), "utf8"));
+      const order = JSON.parse(fs.readFileSync(path.join(directory, "order.json"), "utf8"));
+      assert.ok(order.indexOf("CFP-S3") < order.indexOf("ABS-S1"));
+      assert.equal(evidence("CFP-S4").outcome, blocked ? "blocked" : "completed");
+      assert.equal(evidence("SPK-S1").outcome, blocked ? "blocked" : "completed");
+      if (!blocked) {
+        assert.ok(order.indexOf("ABS-S3") < order.indexOf("CFP-S4"));
+        assert.equal(evidence("SPK-S1").inputs.sessionUrl.value, "https://example.com/sessionUrl");
+      }
+    }
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
   }
 });

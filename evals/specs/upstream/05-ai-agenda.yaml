@@ -34,11 +34,16 @@ scenarios:
       from signup evidence.
 
 
-      Use the canonical Future of Events 2027 event when a pre-seeded event is
-      needed. Fixture emails override literal example addresses below. Record
-      actual dates, track/format names and any substituted fixture values.
-      Follow the original criterion: substitutions cannot hide a missing
-      capability.
+      Run the chained suite in the new DevFlow Conf 2027 event created by
+      CFP-S1, not the populated Future of Events 2027 showcase. After each
+      switch_persona, explicitly select DevFlow Conf 2027 through the event
+      picker when that role has event access; applicant pages use the observed
+      bound CFP URL. Accept the invitation to this event before opening its
+      reviewer workspace. Never substitute the showcase's form, schedule,
+      reviews or published programme. Fixture emails override literal example
+      addresses below. Record actual dates, track/format names and any
+      substituted fixture values. Follow the original criterion: substitutions
+      cannot hide a missing capability.
 
 
       ORIGINAL SCENARIO SCRIPT:
@@ -145,11 +150,16 @@ scenarios:
       from signup evidence.
 
 
-      Use the canonical Future of Events 2027 event when a pre-seeded event is
-      needed. Fixture emails override literal example addresses below. Record
-      actual dates, track/format names and any substituted fixture values.
-      Follow the original criterion: substitutions cannot hide a missing
-      capability.
+      Run the chained suite in the new DevFlow Conf 2027 event created by
+      CFP-S1, not the populated Future of Events 2027 showcase. After each
+      switch_persona, explicitly select DevFlow Conf 2027 through the event
+      picker when that role has event access; applicant pages use the observed
+      bound CFP URL. Accept the invitation to this event before opening its
+      reviewer workspace. Never substitute the showcase's form, schedule,
+      reviews or published programme. Fixture emails override literal example
+      addresses below. Record actual dates, track/format names and any
+      substituted fixture values. Follow the original criterion: substitutions
+      cannot hide a missing capability.
 
 
       ORIGINAL SCENARIO SCRIPT:

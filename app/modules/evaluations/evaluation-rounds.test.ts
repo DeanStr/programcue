@@ -889,6 +889,144 @@ describe("evaluation vertical slice", () => {
       }
     });
 
+    it("preserves CFP reviews while opening two fresh Initial Review assignments before decisions", async () => {
+      await resetEvaluationFixture();
+      const service = new EvaluationService(
+        env as unknown as CloudflareEnvironment,
+      );
+      const planId = await service.savePlan(admin, {
+        revision: 0,
+        name: "Chained review plan",
+        status: "active",
+        rounds: [
+          {
+            id: "cfp-review-round",
+            name: "CFP Review",
+            anonymous: false,
+            recommendationChoices: defaultRecommendationChoices(),
+            criteria,
+          },
+        ],
+      });
+      await addRoundReviewer("cfp-review-round");
+      await env.DB.prepare(`INSERT INTO submissions (
+        id, event_id, form_version_id, submitter_person_id, submitter_email,
+        public_reference, title, category, format, status, answers_json,
+        submitted_snapshot_json, revision, submitted_at, created_at, updated_at
+      ) SELECT 'eval-multi-round-not-advanced', event_id, form_version_id,
+        submitter_person_id, submitter_email, 'SUB-SECOND-REVIEW', 'Second proposal',
+        category, format, 'submitted', answers_json, submitted_snapshot_json, 1,
+        unixepoch(), unixepoch(), unixepoch() FROM submissions WHERE id = 'eval-test-submission' AND event_id = ?`)
+        .bind(admin.eventId)
+        .run();
+      await env.DB.prepare(`INSERT INTO submission_track_selections
+        (submission_id, event_id, track_id, track_name_snapshot, position)
+        SELECT 'eval-multi-round-not-advanced', event_id, track_id, track_name_snapshot, position
+        FROM submission_track_selections WHERE submission_id = 'eval-test-submission' AND event_id = ?`)
+        .bind(admin.eventId)
+        .run();
+      const targets = ["eval-test-submission", "eval-multi-round-not-advanced"];
+      for (const target of targets) {
+        await service.assign(admin, {
+          roundId: "cfp-review-round",
+          targetType: "submission",
+          targetIds: [target],
+          evaluatorPersonIds: [evaluator.personId],
+        });
+        const queue = await service.getReviewerWorkspace(evaluator);
+        const workspace = await service.getReviewerWorkspace(
+          evaluator,
+          queue.assignments.find((a) => a.submissionId === target)!.id,
+        );
+        await service.saveReview(
+          evaluator,
+          {
+            assignmentId: workspace.selected!.id,
+            revision: 0,
+            scores: Object.fromEntries(
+              workspace.criteria.map((c) => [c.id, 4]),
+            ),
+            recommendation: "accept",
+            confidence: 4,
+            submitterFeedback: "CFP review retained.",
+            privateNotes: "",
+            conflictAffirmed: true,
+            intent: "submit",
+          },
+          "participant_ui",
+        );
+      }
+      const initialId = await service.addNextRound(admin, {
+        planId,
+        planRevision: 1,
+        name: "Initial Review",
+        cloneRoundId: "cfp-review-round",
+        anonymous: true,
+      });
+      await addRoundReviewer(initialId);
+      const plan = (await service.getAdminWorkspace(admin)).plan!;
+      const finalId = await service.addNextRound(admin, {
+        planId,
+        planRevision: plan.revision,
+        name: "Final Review",
+        cloneRoundId: initialId,
+      });
+      const rounds = (await service.getAdminWorkspace(admin)).plan!.rounds;
+      await expect(
+        service.advanceRound(admin, {
+          fromRoundId: "cfp-review-round",
+          fromRoundRevision: rounds.find((r) => r.id === "cfp-review-round")!
+            .revision,
+          toRoundId: initialId,
+          toRoundRevision: rounds.find((r) => r.id === initialId)!.revision,
+          submissionIds: targets,
+          evaluatorPersonIds: [evaluator.personId],
+          teamId: null,
+          confirmed: true,
+        }),
+      ).resolves.toMatchObject({
+        advancedSubmissionCount: 2,
+        assignmentCount: 2,
+      });
+      const initial = await env.DB.prepare(
+        "SELECT status FROM evaluator_assignments WHERE round_id = ? AND event_id = ?",
+      )
+        .bind(initialId, admin.eventId)
+        .all();
+      expect(initial.results).toEqual([
+        { status: "assigned" },
+        { status: "assigned" },
+      ]);
+      expect(
+        (
+          await env.DB.prepare(
+            "SELECT review.status FROM reviews review JOIN evaluator_assignments assignment ON assignment.id = review.assignment_id AND assignment.event_id = review.event_id WHERE assignment.round_id = ? AND review.event_id = ?",
+          )
+            .bind("cfp-review-round", admin.eventId)
+            .all()
+        ).results,
+      ).toEqual([{ status: "locked" }, { status: "locked" }]);
+      expect(
+        await env.DB.prepare("SELECT status FROM evaluation_plans WHERE id = ?")
+          .bind(planId)
+          .first(),
+      ).toEqual({ status: "active" });
+      expect(
+        await env.DB.prepare(
+          "SELECT COUNT(*) AS count FROM evaluator_assignments WHERE round_id = ?",
+        )
+          .bind(finalId)
+          .first(),
+      ).toEqual({ count: 0 });
+      expect(
+        await env.DB.prepare(
+          "SELECT COUNT(*) AS count FROM submission_decisions WHERE event_id = ?",
+        )
+          .bind(admin.eventId)
+          .first(),
+      ).toEqual({ count: 0 });
+    });
+
     it("closes a completed round, locks its review and advances a shortlist atomically", async () => {
       await resetEvaluationFixture();
       const service = new EvaluationService(

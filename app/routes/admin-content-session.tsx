@@ -36,15 +36,22 @@ async function administrator(
 export async function loader({ request, context, params }: Route.LoaderArgs) {
   const { env, viewer } = await administrator(request, context);
   const historyCursor = new URL(request.url).searchParams.get("history");
-  const [content, customFields] = await Promise.all([
-    new ContentManagementService(env).getSession(
-      viewer,
-      params.sessionId,
-      historyCursor,
-    ),
-    new EventFieldService(env).values(viewer, "session", params.sessionId),
-  ]);
-  return { ...content, customFields };
+  try {
+    const [content, customFields] = await Promise.all([
+      new ContentManagementService(env).getSession(
+        viewer,
+        params.sessionId,
+        historyCursor,
+      ),
+      new EventFieldService(env).values(viewer, "session", params.sessionId),
+    ]);
+    return { ...content, customFields };
+  } catch (error) {
+    if (error instanceof ContentManagementStateError) {
+      throw new Response(error.message, { status: error.status });
+    }
+    throw error;
+  }
 }
 
 export async function action({ request, context, params }: Route.ActionArgs) {
@@ -161,6 +168,39 @@ export default function AdminContentSession({
 }: Route.ComponentProps) {
   const actionData = useActionData<typeof action>();
   const current = loaderData.current;
+  if (current.contentStatus === null) {
+    return (
+      <div className="content-library">
+        <div className="page-head pc-page-header">
+          <div>
+            <h1>{current.title}</h1>
+            <p>This session is ready to enter programme planning.</p>
+          </div>
+          <Link className="content-text-action" to="/admin/content">
+            Content &amp; files
+          </Link>
+        </div>
+        <section className="card pad" aria-labelledby="start-content-title">
+          <h2 id="start-content-title">Start a content draft</h2>
+          <p>{current.description || "No description has been written."}</p>
+          <p>
+            {current.trackName ?? "No track"} · {current.format} ·{" "}
+            {current.durationMinutes} minutes
+          </p>
+          <p>
+            Open the schedule and create a draft to edit and review this
+            session. The published programme stays unchanged until you publish.
+          </p>
+          <ButtonLink
+            variant="primary"
+            to={`/admin/schedule?session=${encodeURIComponent(current.sessionId)}`}
+          >
+            Open schedule
+          </ButtonLink>
+        </section>
+      </div>
+    );
+  }
   const editable = current.scheduleVersionStatus === "draft";
   return (
     <div className="content-library">

@@ -26,8 +26,8 @@ scoring:
   minimumCoverage: 60
 variables:
   evaluationEnvironment: local
-  canonicalEvent: Future of Events 2027
-  canonicalPublicPath: /public/programme/future-of-events-2027
+  canonicalEvent: DevFlow Conf 2027
+  canonicalPublicPath: /public/programme/devflow-conf-2027
 instructions: "Evaluate Programcue by function and filled-state correctness, not
   resemblance to SessionBoard. Use the real interface and the configured
   non-secret fixture emails. Organizer navigation: Command Centre, Form builder,

@@ -33,6 +33,27 @@ scenarios. Authenticated evidence does not prove anonymous verification or
 ordinary signup. Missing public evidence remains unavailable to the judge.
 The split changes the evaluation fingerprint and requires a fresh run.
 
+CFP-S1 creates a blank DevFlow Conf 2027 event for the chained run, with explicit
+reuse of the configured evaluation sender where available. The populated Future
+of Events 2027 showcase retains its protected review work. A pre-existing DevFlow
+event blocks a fresh run; only the operator resets shared state between runs.
+Every persona selects the new event after gaining access, and applicant/public
+checks follow observed output URLs. This is ordinary event creation, not cloned
+review evidence or a reset inside a scenario.
+Local upstream collection uses the existing organisation-owner persona Morgan
+Chen for event creation; production Jordan already has organisation-administrator
+access. Local regression and bounded smokes retain Jordan and the showcase.
+
+Review sequencing is CFP-S3 → ABS-S1/S2/S3 → CFP-S4. The first round is named
+CFP Review before assignment. ABS adds Initial Review and Final Review to that
+plan, completes the remaining source-round review, then explicitly advances the
+two proposals into Initial Review. This gives the required 2-assigned/0-completed
+baseline without archiving a cycle or releasing decisions early. Historical CFP
+reviews remain inspectable; current and historical evidence must be labelled by
+round. Only CFP-S4 releases decisions and closes the CFP. This ordering requires
+the abstract-management prerequisites when selecting CFP-S4, including a
+CFP-only run. Existing sealed runs are unchanged; use a fresh evaluation.
+
 ## Install and validate
 
 Use Node 24.11+ and the installed subscription CLIs. Local execution requires
@@ -73,7 +94,8 @@ npm run local -- --smoke
 The coordinator checks ports 5188/15188 and rebuilds Programcue even when
 `PROGRAM_CUE_E2E_SKIP_BUILD=1` is inherited. It starts a Worker in a
 new `.wrangler/e2e-state-aek-<uuid>` directory, resets that fixture through the
-real demo UI and captures organizer Jordan Alvarez, speaker Priya Raman,
+real demo UI and captures organizer Morgan Chen for upstream runs (Jordan Alvarez for regression
+and bounded smokes), speaker Priya Raman,
 showcase speaker Priya Shah and reviewer Sam Whitfield. Anonymous browsing has no persona cookie. The smoke
 retains screenshots and results in `.agent-eval/local-smoke`; it invokes no model
 and claims no signup, provider or delivery acceptance. The coordinator stops its
