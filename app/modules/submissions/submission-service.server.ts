@@ -128,6 +128,12 @@ export class SubmissionService {
   ) {
     return this.forms.defaultFormInput(...args);
   }
+  getFormEventTimezone(
+    ...args: Parameters<SubmissionFormWorkflows["getFormEventTimezone"]>
+  ) {
+    return this.forms.getFormEventTimezone(...args);
+  }
+
   getDefaultFormInput(
     ...args: Parameters<SubmissionFormWorkflows["getDefaultFormInput"]>
   ) {

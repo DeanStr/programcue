@@ -98,6 +98,34 @@ describe("Submissions D1 vertical slice", () => {
       ).rejects.toMatchObject({ status: 404 });
     });
 
+    it("reads form timezone from its scoped event before a form exists", async () => {
+      const testEnv = env as unknown as CloudflareEnvironment;
+      await ensureDemoData(testEnv);
+      const service = new SubmissionService(testEnv);
+      const eventId = crypto.randomUUID();
+      await env.DB.prepare(
+        `INSERT INTO events (id, organisation_id, name, slug, timezone, starts_at, ends_at, file_policy_json)
+         SELECT ?, organisation_id, 'Timezone test', ?, 'Asia/Kathmandu', starts_at, ends_at, file_policy_json
+           FROM events WHERE id = ?`,
+      )
+        .bind(eventId, eventId, viewer.eventId)
+        .run();
+      const scoped = { ...viewer, eventId };
+      await expect(service.getAdminWorkspace(scoped)).resolves.toBeNull();
+      await expect(service.getFormEventTimezone(scoped)).resolves.toBe(
+        "Asia/Kathmandu",
+      );
+      await expect(
+        service.getFormEventTimezone({
+          ...scoped,
+          organisationId: "foreign-org",
+        }),
+      ).rejects.toMatchObject({ status: 404 });
+      await expect(
+        service.getFormEventTimezone({ ...viewer, eventId: "missing-event" }),
+      ).rejects.toMatchObject({ status: 404 });
+    });
+
     it("uses the event access policy for a new form", async () => {
       const testEnv = env as unknown as CloudflareEnvironment;
       await ensureDemoData(testEnv);

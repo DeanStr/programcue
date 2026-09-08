@@ -51,10 +51,14 @@ scenarios:
       cannot hide a missing capability.
 
 
-      This scenario runs after CFP-S3 and before CFP-S4: both original proposals
-      are still undecided and the CFP is open. Reuse them, add the co-author and
-      third proposal, and leave all three undecided. Do not release decisions,
-      reset the fixture or archive a review cycle.
+      This scenario runs after CFP-S2 and before any review assignment in
+      CFP-S3: both original proposals are submitted, editable and undecided, and
+      the CFP is open. Reuse them, add and save the co-author on the CI
+      proposal, verify that participant persisted after reload, and submit the
+      third proposal. Leave all three undecided. Review assignment locks
+      applicant revisions, so complete this setup before switching to review
+      work. Do not release decisions, reset the fixture or archive a review
+      cycle.
 
 
       ORIGINAL SCENARIO SCRIPT:
@@ -114,7 +118,7 @@ scenarios:
         role label
       - Screenshot of the co-author control in the submission form or edit view
     dependsOn:
-      - CFP-S3
+      - CFP-S2
   - id: ABS-S2
     name: Organizer configures rounds, pools, assignments, reminders
     kind: browser
@@ -245,7 +249,7 @@ scenarios:
       - Progress dashboard shows 2 assigned / 0 complete for Sam
       - Reminder-sent confirmation captured
     dependsOn:
-      - ABS-S1
+      - CFP-S3
   - id: ABS-S3
     name: Reviewer scores blind; organizer checks aggregates and export
     kind: browser

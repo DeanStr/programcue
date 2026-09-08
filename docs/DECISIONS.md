@@ -2232,10 +2232,12 @@ CFP-S1 creates a blank DevFlow Conf 2027 event for the run and explicitly reuses
 the configured verified sender when available. The populated showcase and its
 unfinished reviews remain intact. Existing DevFlow work blocks a fresh run;
 shared reset belongs to the operator between runs. The evaluator orders
-CFP-S3 → ABS-S1/S2/S3 → CFP-S4. CFP Review retains its
+CFP-S2 → ABS-S1 → CFP-S3 → ABS-S2/S3 → CFP-S4. CFP Review retains its
 submitted scorecards. ABS adds distinct rounds and explicitly advances the two
 reviewed proposals into Initial Review, producing fresh assignments without
 archiving the plan or rewriting old reviews. Both source proposals must complete
 the source round before advancement. Final decisions and CFP closure occur only
 after ABS scoring. Historical reviewer queue entries remain visible and must be
 identified honestly; upstream criteria and sealed earlier results are unchanged.
+
+Co-author revisions in ABS-S1 must be persisted before CFP-S3 assigns any review: the production review freeze remains enforced. New and saved form builders display the current scoped event timezone; UTC is not a substitute for a missing saved form.

@@ -14,10 +14,10 @@ for (const [name, hash] of Object.entries(provenance.sha256)) {
 const dependencies = {
   "CFP-S1-PUBLIC": ["CFP-S1"],
   "CFP-S2": ["CFP-S1"],
-  "CFP-S3": ["CFP-S2"],
+  "CFP-S3": ["CFP-S2", "ABS-S1"],
   "CFP-S4": ["CFP-S3", "ABS-S3"],
-  "ABS-S1": ["CFP-S3"],
-  "ABS-S2": ["ABS-S1"],
+  "ABS-S1": ["CFP-S2"],
+  "ABS-S2": ["CFP-S3"],
   "ABS-S3": ["ABS-S2"],
   "SPK-S1": ["CFP-S4"],
   "SPK-S2": ["SPK-S1"],
@@ -95,7 +95,7 @@ const notices = {
   "CFP-S4":
     "ABS-S3 has now completed the deeper review checks. In original step 1, select the historical CFP Review results to inspect Sam's original all-4 scorecard and comment; do not overwrite the later Initial Review scores. Return to the current round for decisions. Release decisions and close the CFP only in this scenario.",
   "ABS-S1":
-    "This scenario runs after CFP-S3 and before CFP-S4: both original proposals are still undecided and the CFP is open. Reuse them, add the co-author and third proposal, and leave all three undecided. Do not release decisions, reset the fixture or archive a review cycle.",
+    "This scenario runs after CFP-S2 and before any review assignment in CFP-S3: both original proposals are submitted, editable and undecided, and the CFP is open. Reuse them, add and save the co-author on the CI proposal, verify that participant persisted after reload, and submit the third proposal. Leave all three undecided. Review assignment locks applicant revisions, so complete this setup before switching to review work. Do not release decisions, reset the fixture or archive a review cycle.",
   "ABS-S2":
     "Preserve the completed CFP Review. Do not use Start new review cycle, replace the active plan, reset data or release decisions. For original steps 4-5, use Round progression > Add next round to add Initial Review and then Final Review to the same plan, each with its own new scorecard. Use Edit unassigned round and rubric to configure the exact requested fields, weights, dates and anonymity before assigning work. The original script's Round 1 and Round 2 refer to these named ABS rounds; CFP Review is their earlier prerequisite. Add Sam to Initial Review's pool and leave Final Review's pool distinct. Before original step 7, complete the real progression prerequisite: in the still-active CFP Review, assign the AI Pair Programmer proposal to Sam, switch to reviewer, fill its existing numeric criteria with 4 and the fixture review comment, and explicitly submit it. Keep the earlier CI review unchanged. Switch back to organizer and use Review advancement to shortlist exactly CI and AI into Initial Review, confirming the two affected proposals and Sam. This closes the completed CFP round, activates Initial Review and creates its two fresh assignments together; no cycle is archived. Verify Initial Review shows 2 assigned and 0 completed, with Docs unassigned; exercise track filtering and reminders in that round. Preserve screenshots of the progression and the round-scoped baseline. If progression is unavailable, record the specific blocker instead of clearing prior work.",
   "ABS-S3":

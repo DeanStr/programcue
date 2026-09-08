@@ -16,6 +16,18 @@ import {
 import { SubmissionServiceFoundation } from "./submission-service-foundation.server";
 
 export class SubmissionFormWorkflows extends SubmissionServiceFoundation {
+  async getFormEventTimezone(viewer: Viewer) {
+    await this.airtable.assertReadable(viewer);
+    const event = await this.env.DB.prepare(
+      "SELECT timezone FROM events WHERE id = ? AND organisation_id = ?",
+    )
+      .bind(viewer.eventId, viewer.organisationId)
+      .first<{ timezone: string }>();
+    if (!event)
+      throw new Response("This event could not be found.", { status: 404 });
+    return event.timezone;
+  }
+
   async getAdminWorkspace(viewer: Viewer, formId?: string) {
     await this.airtable.assertReadable(viewer);
     return this.repository.getAdminWorkspace(

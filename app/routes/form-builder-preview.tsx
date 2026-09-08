@@ -58,16 +58,23 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const requestedFormId = url.searchParams.get("form");
   const creating = url.searchParams.get("new") === "1";
-  const [workspace, forms, routingTeams, routingTracks, sessionFormats] =
-    await Promise.all([
-      creating
-        ? Promise.resolve(null)
-        : service.getAdminWorkspace(viewer, requestedFormId ?? undefined),
-      service.listAdminForms(viewer),
-      service.listRoutingTeams(viewer),
-      service.listRoutingTracks(viewer),
-      service.getConfiguredSessionFormats(viewer),
-    ]);
+  const [
+    workspace,
+    forms,
+    routingTeams,
+    routingTracks,
+    sessionFormats,
+    eventTimezone,
+  ] = await Promise.all([
+    creating
+      ? Promise.resolve(null)
+      : service.getAdminWorkspace(viewer, requestedFormId ?? undefined),
+    service.listAdminForms(viewer),
+    service.listRoutingTeams(viewer),
+    service.listRoutingTracks(viewer),
+    service.getConfiguredSessionFormats(viewer),
+    service.getFormEventTimezone(viewer),
+  ]);
   if (requestedFormId !== null && !workspace) {
     throw new Response("Form not found", { status: 404 });
   }
@@ -104,6 +111,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     : await service.getDefaultFormInput(viewer);
   return {
     workspace: browserWorkspace,
+    eventTimezone,
     forms,
     routingTeams,
     routingTracks,
@@ -327,7 +335,7 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
   const publicUrl = publishedPublicSlug
     ? `/apply/${publishedPublicSlug}`
     : null;
-  const eventTimezone = loaderData.workspace?.eventTimezone ?? "UTC";
+  const eventTimezone = loaderData.eventTimezone;
   const publishedCloseDate = loaderData.workspace?.publishedVersion
     ? closeDateFromEpoch(
         loaderData.workspace.publishedVersion.settings.closesAt ?? null,

@@ -458,6 +458,7 @@ scenarios:
       - Filled scorecard (rating 4 + comment) and post-submit completed state
     dependsOn:
       - CFP-S2
+      - ABS-S1
     inputs:
       proposalUrl:
         from: CFP-S2

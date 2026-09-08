@@ -20,7 +20,8 @@ Git history retains earlier committed work logs.
   the 60% gate; all 301 retained artifacts verified.
 - ABS-S1 tried to add a co-author after review had made the application immutable.
   This remaining sequencing error blocked decisions and speaker/content/scheduling
-  scenarios. Anonymous verification and new-form timezone wording also need follow-up.
+  scenarios. The current candidate moves co-author setup before review and reads
+  the scoped event timezone for unsaved forms; deployment and fresh evidence are pending.
 - The fixture was reset and checked after all work at **13:27 UTC**.
 
 Status terms:
@@ -180,7 +181,7 @@ remaining setup conflict: ABS-S1 adds a co-author after CFP-S3 starts review.
 Submitted revisions intentionally freeze at that boundary. The new-draft form
 has Add co-speaker; the reviewed application is immutable. Run ABS-S1 after
 CFP-S2 and before CFP-S3 in the next configuration, then proceed through
-ABS-S2/S3 before CFP-S4. This correction is not yet implemented. All 98 upstream
+ABS-S2/S3 before CFP-S4. The current candidate implements that ordering. All 98 upstream
 criteria remain unchanged. The chain did not reach accepted-session detail.
 
 A separate deployed browser diagnostic accepted a controlled showcase proposal,
@@ -196,7 +197,13 @@ uses UTC before a saved workspace exists while publication confirmation uses the
 event timezone. The server save uses the event timezone, but actual cutoff
 behavior was not tested. The attempted read-only deadline query ran after the
 automatic reset and returned no rows. Anonymous application entry again remained
-at Security check in progress; its root cause is not established by this run.
+at Security check in progress. A subsequent read-only Playwright probe loaded
+two challenge frames but received no token after 60 seconds; no invalid-key or
+unauthorised-domain error was emitted. Cloudflare explicitly [does not support
+automated browsers for production challenges](https://developers.cloudflare.com/cloudflare-challenges/reference/supported-browsers/).
+This is an automation/provider boundary; a specific deployed configuration
+defect is unproven. Production security remains enforced, and anonymous
+acceptance requires a supported real-browser check.
 A reviewer autosave conflict recovered through Save draft and did not block scoring.
 
 The evaluation and both diagnostic attempts reset on completion. Final cleanup

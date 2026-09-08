@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { acceptConfirm } from "./support/confirm-dialog";
 import { openEvaluationView } from "./support/evaluation-admin";
+import { openRecordPanel } from "./support/open-record-panel";
 import { resetDemoEvent } from "./support/reset-demo-event";
 
 test.afterEach(async ({ request }) => {
@@ -129,6 +130,7 @@ test("a fresh evaluation event starts without showcase review assignments", asyn
   const name = `DevFlow review setup ${suffix}`;
   expect((await page.goto("/admin/events/new"))?.status()).toBe(200);
   await page.getByLabel("Event name").fill(name);
+  await page.locator("#event-new-timezone").fill("Asia/Kathmandu");
   await page.getByLabel("Public slug").fill(`devflow-review-setup-${suffix}`);
   await page.getByRole("button", { name: "Create blank event" }).click();
   await acceptConfirm(page);
@@ -158,9 +160,42 @@ test("a fresh evaluation event starts without showcase review assignments", asyn
       exact: true,
     }),
   ).toBeVisible();
+  await page.goto("/admin/event");
+  await openRecordPanel(page, "Programme tracks");
+  await page.getByLabel("New track").fill("Developer experience");
+  await page.getByRole("button", { name: "Add track", exact: true }).click();
+  await page.getByRole("button", { name: "Save event", exact: true }).click();
+  await expect(
+    page.getByText("Event settings saved.", { exact: true }),
+  ).toBeVisible();
   expect((await page.goto("/admin/submissions/form"))?.status()).toBe(200);
   await expect(
     page.getByRole("button", { name: "Save draft", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByText("Form properties", { exact: true }).click();
+  await expect(
+    page.getByText("Applications close at 11:59 PM in Asia/Kathmandu.", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Save draft", exact: true }).click();
+  await expect(page).toHaveURL(/form=/);
+  await page.reload();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByText("Form properties", { exact: true }).click();
+  await expect(
+    page.getByText("Applications close at 11:59 PM in Asia/Kathmandu.", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await page.goto("/admin/submissions/form?new=1");
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByText("Form properties", { exact: true }).click();
+  await expect(
+    page.getByText("Applications close at 11:59 PM in Asia/Kathmandu.", {
+      exact: true,
+    }),
   ).toBeVisible();
   await context.addCookies([
     {

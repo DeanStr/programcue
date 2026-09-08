@@ -101,7 +101,8 @@ test("AEK binds the organiser proposal handoff after blocked anonymous checks an
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "programcue-dependencies-"));
   try {
     const source = loadConfig(path.join(root, "specs/upstream/01-call-for-papers.yaml"));
-    const ids = ["CFP-S1", "CFP-S1-PUBLIC", "CFP-S2", "CFP-S3"];
+    const abstract = loadConfig(path.join(root, "specs/upstream/02-abstract-management.yaml"));
+    const ids = ["CFP-S1", "CFP-S1-PUBLIC", "CFP-S2", "ABS-S1", "CFP-S3"];
     // Exercise the installed public CLI with explicit synthetic command evidence.
     // This tests orchestration only; it never opens a browser or claims acceptance.
     fs.writeFileSync(
@@ -116,12 +117,12 @@ test("AEK binds the organiser proposal handoff after blocked anonymous checks an
       const proposalUrl = 'https://example.com/admin/submissions/synthetic-proposal';
       if (id === 'CFP-S3') {
         if (context.inputs.proposalUrl.value !== proposalUrl) throw new Error('Lost organiser proposal binding');
-      } else if (id !== 'CFP-S1' && context.inputs.portalUrl.value !== portalUrl) throw new Error('Lost portal binding');
+      } else if (['CFP-S1-PUBLIC', 'CFP-S2'].includes(id) && context.inputs.portalUrl.value !== portalUrl) throw new Error('Lost portal binding');
       const url = id === 'CFP-S1' ? portalUrl : proposalUrl;
       const name = id === 'CFP-S1' ? 'portalUrl' : 'proposalUrl';
       console.log(JSON.stringify({version: 1, outcome: blocked ? 'blocked' : 'completed',
         summary: 'Synthetic dependency test, not product evidence', observations: [],
-        ...(blocked || id === 'CFP-S3' ? {} : {outputs: {[name]: {value: url, evidenceRefs: ['step:1']}}})}));
+        ...(blocked || !['CFP-S1', 'CFP-S2'].includes(id) ? {} : {outputs: {[name]: {value: url, evidenceRefs: ['step:1']}}})}));
     `,
     );
     fs.writeFileSync(
@@ -129,7 +130,7 @@ test("AEK binds the organiser proposal handoff after blocked anonymous checks an
       YAML.stringify({
         ...source,
         weight: 100,
-        scenarios: source.scenarios
+        scenarios: [...source.scenarios, ...abstract.scenarios]
           .filter((s) => ids.includes(s.id))
           .map((s) => ({
             id: s.id,
@@ -303,7 +304,8 @@ test("AEK runs abstract reviews before decisions and blocks decisions when revie
       const id = process.argv[2];
       const declarations = JSON.parse(fs.readFileSync('declarations.json', 'utf8'));
       const prior = fs.existsSync('order.json') ? JSON.parse(fs.readFileSync('order.json', 'utf8')) : [];
-      if (id === 'ABS-S1' && prior.includes('CFP-S4')) throw new Error('Decisions preceded abstract review');
+      if (id === 'CFP-S3' && !prior.includes('ABS-S1')) throw new Error('Review locked revisions before co-author setup');
+      if (id === 'ABS-S2' && !prior.includes('CFP-S3')) throw new Error('Round progression preceded source review');
       if (id === 'CFP-S4' && !prior.includes('ABS-S3')) throw new Error('Abstract scoring did not precede decisions');
       prior.push(id); fs.writeFileSync('order.json', JSON.stringify(prior));
       const blocked = id === 'CFP-S1-PUBLIC' || (id === 'ABS-S2' && process.env.SEQUENCE_BLOCK_SETUP === '1');
@@ -373,7 +375,9 @@ test("AEK runs abstract reviews before decisions and blocks decisions when revie
       const evidence = (id) =>
         JSON.parse(fs.readFileSync(path.join(run, id, "evidence.json"), "utf8"));
       const order = JSON.parse(fs.readFileSync(path.join(directory, "order.json"), "utf8"));
-      assert.ok(order.indexOf("CFP-S3") < order.indexOf("ABS-S1"));
+      assert.ok(order.indexOf("CFP-S2") < order.indexOf("ABS-S1"));
+      assert.ok(order.indexOf("ABS-S1") < order.indexOf("CFP-S3"));
+      assert.ok(order.indexOf("CFP-S3") < order.indexOf("ABS-S2"));
       assert.equal(evidence("CFP-S4").outcome, blocked ? "blocked" : "completed");
       assert.equal(evidence("SPK-S1").outcome, blocked ? "blocked" : "completed");
       if (!blocked) {

@@ -44,7 +44,7 @@ Local upstream collection uses the existing organisation-owner persona Morgan
 Chen for event creation; production Jordan already has organisation-administrator
 access. Local regression and bounded smokes retain Jordan and the showcase.
 
-Review sequencing is CFP-S3 → ABS-S1/S2/S3 → CFP-S4. The first round is named
+Review sequencing is CFP-S2 → ABS-S1 → CFP-S3 → ABS-S2/S3 → CFP-S4. The first round is named
 CFP Review before assignment. ABS adds Initial Review and Final Review to that
 plan, completes the remaining source-round review, then explicitly advances the
 two proposals into Initial Review. This gives the required 2-assigned/0-completed
