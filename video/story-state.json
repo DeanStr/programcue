@@ -36,7 +36,7 @@
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/evaluation-admin-desktop-chromium-linux.png",
-      "sha256": "5379da5dc2a1d3822609ec1a59e7b9a5b2dba872eb1a7534cc6376e6595072bb"
+      "sha256": "ce7190461db1da3339f4dc8361bd63c5b340c3d2754b38ea967bcf9abaa28c9e"
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/event-setup-data-desktop-chromium-linux.png",
