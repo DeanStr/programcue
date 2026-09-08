@@ -9,6 +9,10 @@ import {
 } from "~/modules/evaluations/evaluation-service.server";
 import { ResourceService } from "~/modules/resources/resource-service.server";
 import { ensureDemoSubmissionForm } from "~/modules/submissions/demo-submissions.server";
+import {
+  SubmissionRevisionConflictError,
+  SubmissionStateError,
+} from "~/modules/submissions/submission-repository.server";
 import { SubmissionService } from "~/modules/submissions/submission-service.server";
 import { cloudflareContext } from "~/platform/cloudflare-context";
 import { ensureDemoData } from "~/platform/demo/seed.server";
@@ -285,6 +289,46 @@ describe("frontend route fail-fast boundaries", () => {
     expect(responseStatus(result)).toBe(400);
     expect(save).not.toHaveBeenCalled();
   });
+
+  it.each([
+    {
+      error: new SubmissionStateError(
+        "Track “Leadership” is not configured for this event.",
+      ),
+      status: 400,
+      conflict: undefined,
+    },
+    {
+      error: new SubmissionRevisionConflictError(),
+      status: 409,
+      conflict: true,
+    },
+  ])(
+    "distinguishes form validation from revision conflicts: $status",
+    async ({ error, status, conflict }) => {
+      vi.spyOn(SubmissionService.prototype, "saveForm").mockRejectedValueOnce(
+        error,
+      );
+      const result = await formBuilderAction({
+        request: formRequest("http://localhost/admin/submissions/form", {
+          _intent: "save",
+          _clientReady: "1",
+          schema: "{}",
+          routing: "{}",
+        }),
+        params: {},
+        context: context(),
+      } as never);
+
+      expect(responseStatus(result)).toBe(status);
+      expect(result).toMatchObject({
+        data: { ok: false, message: error.message },
+      });
+      expect((result as { data: { conflict?: boolean } }).data.conflict).toBe(
+        conflict,
+      );
+    },
+  );
 
   it("rethrows unexpected service failures instead of labelling them validation errors", async () => {
     const formFailure = new Error("synthetic form database failure");

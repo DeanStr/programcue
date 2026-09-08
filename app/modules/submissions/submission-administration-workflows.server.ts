@@ -1,10 +1,8 @@
 import { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
 import { SubmissionAdministrationQueries } from "./submission-administration-queries.server";
 import { SubmissionDirectSessionCommands } from "./submission-direct-session-commands.server";
-import {
-  submissionFormWorkspaceToInput,
-  synchronizeSubmissionFormEventChoices,
-} from "./submission-form-choice-synchronization.server";
+import { synchronizeSubmissionFormEventChoices } from "./submission-form-choice-synchronization";
+import { submissionFormWorkspaceToInput } from "./submission-form-choice-synchronization.server";
 import { SubmissionManualApplicationCommands } from "./submission-manual-application-commands.server";
 
 /** Stable administration façade over queries and independent command workflows. */

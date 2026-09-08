@@ -2169,3 +2169,19 @@ schema validation. The active `local-astra-medium` baseline now uses the verifie
 nine-criterion run `2026-09-07T02-12-32` with AEK 0.4.0, under the same strict
 promotion policy. A suite test exercises named baseline loading with the locked
 evaluator so dependency/schema changes cannot silently break comparison.
+
+## 2026-09-07 — Reconcile browser form recovery with current event choices
+
+Form-builder loading and explicit browser-draft restoration share the same pure
+choice reconciliation. Track IDs and session-format keys preserve routing and
+conditional fields across label changes, while custom fields and the recovered
+form/draft revisions remain intact. Restoration must not adopt newer server
+revisions: concurrent server edits still require explicit conflict resolution.
+Conditions whose choices were removed stay visible and block saving until the
+organiser repairs them; recovery does not silently remove their conditions.
+
+The form action reports domain validation failures as 400 responses with their
+specific repair message. Only a revision mismatch activates the 409 draft
+conflict controls. The builder toolbar remains below the fixed admin topbar and
+evaluation banner while the page scrolls, keeping save and publication controls
+reachable by pointer and keyboard.

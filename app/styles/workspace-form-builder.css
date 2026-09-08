@@ -28,7 +28,7 @@
 }
 
 .fb-stage {
-  overflow: hidden;
+  overflow: clip;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
@@ -36,6 +36,9 @@
 }
 
 .fb-toolbar {
+  position: sticky;
+  top: calc(var(--eval-banner-offset, 0px) + var(--topbar));
+  z-index: 20;
   display: flex;
   align-items: center;
   flex-wrap: wrap;

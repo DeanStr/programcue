@@ -107,6 +107,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     forms,
     routingTeams,
     routingTracks,
+    sessionFormats,
     passwordConfigured: Boolean(workspace?.draftVersion.routing.passwordHash),
     recoveryScope: {
       eventId: viewer.eventId,
@@ -226,16 +227,16 @@ export async function action({ request, context }: Route.ActionArgs) {
         { status: 400 },
       );
     }
-    if (error instanceof InvalidFormPayloadError) {
+    if (
+      error instanceof InvalidFormPayloadError ||
+      error instanceof SubmissionStateError
+    ) {
       return data<FormBuilderActionResult>(
         { ok: false, message: error.message },
         { status: 400 },
       );
     }
-    if (
-      error instanceof SubmissionRevisionConflictError ||
-      error instanceof SubmissionStateError
-    ) {
+    if (error instanceof SubmissionRevisionConflictError) {
       return data<FormBuilderActionResult>(
         { ok: false, message: error.message, conflict: true },
         { status: 409 },

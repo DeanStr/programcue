@@ -9,11 +9,109 @@ import {
   insertFormFieldAtTarget,
   moveFormFieldToTarget,
 } from "./form-builder-fields";
+import { synchronizeSubmissionFormEventChoices } from "./submission-form-choice-synchronization";
 import {
   DEFAULT_FORM_SCHEMA,
   type FormField,
   MAX_FORM_FIELDS,
+  saveFormSchema,
 } from "./submission-schema";
+
+describe("restored form event choices", () => {
+  function savedDraft() {
+    const schema = structuredClone(DEFAULT_FORM_SCHEMA);
+    schema.fields.find((field) => field.id === "category")!.options = [
+      "Leadership",
+    ];
+    schema.fields.find((field) => field.id === "format")!.options = [
+      "Workshop",
+    ];
+    schema.fields.push({
+      ...createFormField(schema.fields, "long_text", "proposal"),
+      id: "leadership_outcomes",
+      label: "Leadership outcomes",
+      condition: { fieldId: "category", equals: "Leadership" },
+    });
+    return saveFormSchema.parse({
+      id: "form-recovery",
+      revision: 3,
+      draftRevision: 7,
+      name: "Recovery form",
+      kind: "submission",
+      publicSlug: "recovery-form",
+      closeDate: null,
+      submissionLimit: null,
+      minSpeakers: 1,
+      maxSpeakers: null,
+      accessMode: "email_verified",
+      accessPassword: "",
+      schema,
+      routing: {
+        categories: { Leadership: "team-leadership" },
+        trackIds: { Leadership: "track-leadership" },
+        trackNames: { "track-leadership": "Leadership" },
+        formatKeys: { Workshop: "workshop" },
+        teamNames: { "team-leadership": "Leadership reviewers" },
+        directSessionDurationMinutes: 30,
+        passwordHash: null,
+      },
+    });
+  }
+
+  it("preserves local edits and revisions while mapping renamed choices, routes and conditions by stable identity", () => {
+    const draft = savedDraft();
+    const original = structuredClone(draft);
+    const restored = synchronizeSubmissionFormEventChoices(
+      draft,
+      [{ id: "track-leadership", name: "Strategy" }],
+      [{ key: "workshop", label: "Hands-on lab" }],
+    );
+    expect(saveFormSchema.safeParse(restored).success).toBe(true);
+    expect(restored).toMatchObject({
+      id: draft.id,
+      revision: 3,
+      draftRevision: 7,
+    });
+    expect(
+      restored.schema.fields.find((field) => field.id === "category")?.options,
+    ).toEqual(["Strategy"]);
+    expect(
+      restored.schema.fields.find((field) => field.id === "format")?.options,
+    ).toEqual(["Hands-on lab"]);
+    expect(
+      restored.schema.fields.find((field) => field.id === "materials")
+        ?.condition,
+    ).toEqual({ fieldId: "format", equals: "Hands-on lab" });
+    expect(restored.schema.fields.at(-1)).toEqual({
+      ...draft.schema.fields.at(-1),
+      condition: { fieldId: "category", equals: "Strategy" },
+    });
+    expect(restored.routing.categories).toEqual({
+      Strategy: "team-leadership",
+    });
+    expect(restored.routing.trackIds).toEqual({ Strategy: "track-leadership" });
+    expect(restored.routing.formatKeys).toEqual({ "Hands-on lab": "workshop" });
+    expect(draft).toEqual(original);
+  });
+
+  it("retains conditions for removed choices so the organiser must repair them before saving", () => {
+    const restored = synchronizeSubmissionFormEventChoices(
+      savedDraft(),
+      [{ id: "track-new", name: "Strategy" }],
+      [{ key: "talk", label: "Talk" }],
+    );
+    expect(restored.schema.fields.at(-1)?.condition).toEqual({
+      fieldId: "category",
+      equals: "Leadership",
+    });
+    expect(
+      restored.schema.fields.find((field) => field.id === "materials")
+        ?.condition,
+    ).toEqual({ fieldId: "format", equals: "Workshop" });
+    expect(restored.routing.categories).toEqual({});
+    expect(saveFormSchema.safeParse(restored).success).toBe(false);
+  });
+});
 
 describe("form builder field rules", () => {
   it("uses exhaustive labels for every supported field type", () => {

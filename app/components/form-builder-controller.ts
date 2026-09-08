@@ -16,8 +16,8 @@ import {
   useWatch,
 } from "react-hook-form";
 import { useNavigation, useSubmit } from "react-router";
-
 import { conditionalFieldOrderIssue } from "~/modules/submissions/form-builder-fields";
+import { synchronizeSubmissionFormEventChoices } from "~/modules/submissions/submission-form-choice-synchronization";
 import {
   type FormField,
   formFieldsInDisplayOrder,
@@ -39,6 +39,8 @@ export type FormBuilderActionResult = {
 
 type ControllerInput = {
   input: SaveFormInput;
+  routingTracks: Array<{ id: string; name: string }>;
+  sessionFormats: Array<{ key: string; label: string }>;
   recoveryScope: { eventId: string; personId: string };
   createdFromLocalDraft: boolean;
 };
@@ -126,11 +128,15 @@ export function useFormBuilderController(
   }, [input]);
   const restoreDraft = useCallback(
     (recoverable: typeof recoveryPayload) => {
-      const restored = { ...recoverable, accessPassword: "" } as SaveFormInput;
+      const restored = synchronizeSubmissionFormEventChoices(
+        { ...recoverable, accessPassword: "" },
+        loaderData.routingTracks,
+        loaderData.sessionFormats,
+      );
       reset(restored, { keepDefaultValues: true });
       setSelectedId(formFieldsInDisplayOrder(restored.schema)[0]?.id ?? "");
     },
-    [reset],
+    [reset, loaderData.routingTracks, loaderData.sessionFormats],
   );
   const recovery = useDraftRecovery({
     scope: {
