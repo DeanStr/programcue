@@ -12,19 +12,15 @@ Git history retains earlier committed work logs.
 - The modular monolith has connected Worker/D1-backed product slices across the
   main application workflow. Repository coverage does not establish replacement
   readiness or live-provider acceptance.
-- Source `b946bfd4` passed the full release gate and was deployed on 8 September.
-  It corrects unsaved-form timezone guidance and runs co-author setup before review.
-- The latest deployed evaluation completed four scenarios at **13.008%** coverage;
-  the score is withheld, and all **373 artifacts verified**. Co-author persistence
-  and real advancement into Initial Review succeeded. An approval-blocked optional
-  AI probe marked ABS-S2 blocked and stopped decisions/speaker/content/scheduling.
-- Anonymous production verification remains unavailable to automation. The current
-  candidate adds exact relative rubric weights, explicit AI destination confirmation
-  and an independent AI scenario (22 executable scenarios, 98 criteria). Focused
-  scoring, D1 persistence, API and evaluation-sequencing tests pass; release and
-  fresh deployed evaluation evidence are pending. The deployed release still has
-  the integer-percentage limitation.
-- The fixture was reset and session invalidation checked at **15:56 UTC**.
+- Source `b2335e77` passed the full release gate and was deployed on 8 September.
+  Exact relative rubric weights and explicit AI destination confirmation are live.
+- The latest deployed evaluation completed seven scenarios at **28.346%** coverage;
+  the score is withheld, and all **481 artifacts verified**. Saved 2:1 weights,
+  blind scoring, round progression, AI generation and a persisted override passed.
+- Decisions stopped at missing evaluation setup: no active decision-email template
+  and an unclaimed co-speaker. Speaker/content/scheduling remain unexercised.
+  Anonymous verification is still unavailable; expanded AI-result text clips.
+- The fixture was reset and old-session invalidation checked at **19:19 UTC**.
 
 Status terms:
 
@@ -41,7 +37,7 @@ Status terms:
 
 | Surface | Latest retained evidence | Boundary |
 | --- | --- | --- |
-| Application | `0d612b82cec952dcf6e1483bc8382ef86624992a`, Worker `a18346c2-4982-40e2-90fc-ab881444acd0`, deployed 8 September; health matched before smoke and after final reset. | Supersedes `f3f0b887`. Health and bounded workflows do not verify every feature or provider path. |
+| Application | `b2335e77784689c7d49eede66be9ef755919427e`, Worker `8261f589-1b93-4988-9100-b18bcee7ed7d`, deployed 8 September; health matched before evaluation and after final reset. | Exact relative scoring and explicit AI assessment confirmation verified in deployed `/evaluate`; later workflows still have acceptance gaps. |
 | Public website | Bundle `67d5b4b4`, Worker `e9398ee9-5a85-4c73-b751-0de7468c0032`, deployed and exercised on 5 September. | Separate website release; includes the approved film and guide pages. |
 | Scanner | Source `ae6133c`, deployed on 17 August with upload, scan, shutdown and erasure acceptance. | Later scanner changes and sustained burst capacity need separate acceptance. |
 
@@ -116,7 +112,7 @@ change. The latest complete gate supersedes older test-count histories.
 
 | Scope | Recorded result | Limit |
 | --- | --- | --- |
-| `b946bfd4`, 8 September | Ordered serial `npm run deploy` passed the full gate in 935.7 s: 651 unit, 1,929 Worker, one Agent, 96 configuration and 14 scanner tests; types, quality, build, schema/recovery/OpenAPI and dependency audit; 221 main browser, 11 evaluation and 16 website checks, including Firefox/WebKit smoke. Preflight/schema/health passed; 58 migrations applied, none pending. | Two opt-in performance measurements skipped. Worker version `39f5bd31-465e-47c6-a74b-e1daa7741d4f`. Two Astra/high reviews: one actionable browser-fixture issue fixed by configuring a track; final review clean. Focused evidence: 37 Worker, two browser and 28 evaluator tests plus three configurations. |
+| `b2335e77`, 8 September | Ordered serial `npm run deploy` passed the full gate in 949.2 s: 661 unit, 1,936 Worker, one Agent, 96 configuration and 14 scanner tests; types, quality, build, schema/recovery/OpenAPI and dependency audit; 221 main browser, 11 evaluation and 16 website checks, including Firefox/WebKit smoke. Preflight/schema/health passed; 58 migrations applied, none pending. | Two opt-in performance measurements skipped. First gate exposed queue-heading navigation and changed visuals; both fixed and browser-tested. Next gate found a stale film screenshot hash, refreshed after inspection. Astra/high review caught prompt-hash retry incompatibility; unnecessary prompt edit removed. Final code and follow-up reviews clean. Evaluation guidance: 29 tests and all three configurations pass. |
 | Production-health evaluator correction | Actual top-level health contract validated; 25 evaluator tests, three configurations and `check:core` passed (351.0 s). | Readiness does not prove product acceptance. |
 | Form-recovery fixes | Shared load/restore choice reconciliation preserves custom fields, stable routing/conditions and revision tokens; removed choices require repair. Validation returns 400; actual revision conflicts retain 409. Toolbar stays below topbar/banner. Focused checks and the full gate passed. Deployed rename → restore → mouse/keyboard save → reload → immutable publication passed. | Bounded production workflow; not full submission/provider acceptance. |
 | Follow-up Astra/high review | `codex exec review --uncommitted` reported no actionable findings. Focused tests/types/build passed, as did 25 evaluator tests, three configurations and a clean serial run of all six evaluation-browser tests. | An earlier browser run overlapped a rebuild and is invalid evidence; the serial rerun resolved it. No additional source fixes or deployment. |
@@ -148,6 +144,8 @@ Requested CLI model/effort receipts do not confirm a resolved provider snapshot.
 | Deployed `/evaluate` `2026-09-08T08-23-15` | Score withheld at **16.692%** coverage; five scenarios completed, 16 blocked and 17 manual checks pending. The 60% coverage gate exited 2. CFP area: 89.655% at 76.316% coverage. | All **416 artifacts verified**. Application `0d612b82`, evaluator `65b8925e`; proposal handoff and reviewer scoring completed. Accepted-session HTTP 500 blocked speaker/content/schedule scenarios; ABS setup conflicted with completed reviews. Four deployed toolbar checks and final reset/session invalidation passed. |
 | Deployed `/evaluate` `2026-09-08T12-32-26` | Score withheld at **11.579%** coverage; three scenarios completed, one `feature_not_found`, 17 blocked and 17 manual checks pending. The 60% gate exited 2. CFP area: 84.091% at 57.895% coverage. | Application/evaluator `43bd670c`; all **301 artifacts verified**. Fresh DevFlow creation, proposal handoff and submitted/locked CFP review succeeded. Co-author editing after review blocked ABS-S1 and downstream scenarios. Accepted-session access was verified separately, not credited to this run. |
 | Deployed `/evaluate` `2026-09-08T14-46-23` | Score withheld at **13.008%** coverage; four scenarios completed, 17 blocked and 17 manual checks pending. The 60% gate exited 2; provisional 67.045% is not acceptance. | Application/evaluator `b946bfd4`; all **373 artifacts verified**. Co-author setup, CFP review and real advancement succeeded. Optional AI approval rejection blocked ABS-S2 and its dependants; speaker/content/scheduling were not exercised. Reset/session invalidation and exact deployed health verified. |
+| Deployed `/evaluate` `2026-09-08T17-27-38` | Aborted after CFP-S1; CFP-S2 ended `agent_error` when approval rejected output recording and inaccurate completion claims. No completed grading or acceptance score. | Application/evaluator `b2335e77`. The observed organizer URL was valid; clarified its opaque ID and queue context before a fresh run. Integrity verification reports unindexed aborted-scenario artifacts; retained only as diagnostics. Reset/session invalidation verified at 17:50 UTC. |
+| Deployed `/evaluate` `2026-09-08T17-55-36` | Score withheld at **28.346%** coverage; seven scenarios completed, 15 blocked and 17 manual checks pending. The 60% gate exited 2; provisional 93.655% is not acceptance. | Application `b2335e77`, evaluator `1d3b00bb`; all **481 artifacts verified**. Exact 2:1 scoring and AI generation/override passed. CFP-S4 lacked an active decision template and claimed co-speaker; downstream workflows blocked. Final reset/session invalidation and deployed health verified. |
 
 The earlier recovery/save blocker is resolved: both the direct deployed smoke
 and independent evaluator published successfully. Anonymous Start application
@@ -161,7 +159,7 @@ CFP-S1-PUBLIC allowed CFP-S2 to run: draft/resume, required-field errors,
 Workshop/Talk conditional visibility, two submitted proposals and a persisted
 abstract revision were observed. That run did not prove ordinary signup, verification,
 email delivery or organiser-side revision visibility. All original steps,
-success signals and 98 criteria remain across 21 executable scenarios.
+success signals and 98 criteria remain across 22 executable scenarios.
 
 In the earlier `02-33-47` run, automatic approval review rejected CFP-S2's
 observed draft-specific proposal URL as a potential capability link. The evaluator left its required output unpublished,
@@ -173,46 +171,56 @@ The rejected URL was not published and the report was not regraded. The judge
 also recorded a minor sticky-toolbar obstruction; Control+Home restored access.
 The multi-event probe again created Forward Summit 2028 with a separate empty queue.
 
-Release `b946bfd4` fixes the unsaved-form helper by reading the scoped event
-rather than defaulting to UTC. Deployed CFP-S1 recorded America/Los_Angeles before
-save and at publication. CFP-S2 → ABS-S1 → CFP-S3 now preserves editable proposals
-until Marcus is added: the CI proposal retained two speakers after reload, and
-all three proposals remained submitted before review. CFP Review then completed;
-ABS-S2 added distinct Initial/Final rounds, completed both source reviews and
-confirmed advancement of exactly CI and AI. After reload, CFP Review was closed
-at 2/2 and Initial Review active at 2 assigned/0 submitted; Docs stayed unassigned.
+Release `b2335e77` and evaluator `1d3b00bb` resolved the relative-weight and
+optional-AI blockers. The fresh run preserved co-author setup before assignment,
+retained both CFP Review scorecards and advanced exactly two proposals into
+Initial Review. Both new round configurations survived reload: blind Initial
+Review with Originality weight 2 and Relevance weight 1; identity-visible Final
+Review with a separate 1–10 scorecard. CI's submitted result was **3.33/5** from
+`(4×2 + 2)/3`; the second proposal scored **5.00/5**. Initial results excluded
+historical CFP reviews, and CSV bytes were downloaded. The reminder's application
+record reported delivery; inbox receipt was not independently verified.
+
+The independent ABS-S2-AI scenario inspected Workers AI, its configured model and
+Cloudflare binding before confirmation. The application saved a **3.8/5** AI
+advisory, then a separately confirmed **4.2/5** human assessment. Reload retained
+both and the unchanged canonical human score of **3.33/5**. Abstract-management
+judging reported 97.727% at 78.571% coverage, with four manual checks pending.
+This is observed application evidence, not an independent provider-side audit.
 
 Remaining boundaries from this run:
 
-- **Evaluation/approval:** automatic approval review rejected Review AI first pass
-  as possible private-proposal export to an unspecified provider. The rejected
-  button opens confirmation; source submits only after confirmation. No AI request
-  or result was observed. ABS-S2 nevertheless returned blocked, suppressing all
-  downstream work. Separate the optional AI probe from core setup dependencies;
-  retain the original AI criterion and unavailable evidence. Do not regrade this run.
-- **Product differences:** the requested 2:1 weights and decimal percentages did
-  not save; integer 67%/33% persisted and was labelled approximate. The protected
-  Tracks field uses checkboxes rather than the upstream dropdown. Neither is an
-  AEK runtime failure. The reminder record reached 1/1 sent and Delivered, but
-  inbox receipt was not independently verified; AEK masked its preview frame.
-- **Anonymous verification:** the fresh public scenario again stopped at Security
-  check in progress. A read-only probe loaded two challenge frames with no token
-  after 60 seconds and no invalid-key/domain error. Cloudflare [does not support
-  automated browsers for production challenges](https://developers.cloudflare.com/cloudflare-challenges/reference/supported-browsers/).
-  A specific deployment configuration defect is unproven; production security stays enforced.
+- **Evaluation setup:** blank-event setup omitted active decision-email templates
+  and co-speaker claim completion. Acceptance preview required the claim; release
+  returned HTTP 422 requiring a published active template. No accepted session or
+  decision notification was observed. Submission-confirmation configuration was
+  also reported missing in communications history. Configure these prerequisites;
+  do not remove the product's identity or notification checks. CFP closure passed.
+- **Product UI:** expanded result cards clipped long AI rationale text at the
+  collected viewport. Generation, override persistence and scores worked; text
+  readability needs a separate fix. Tracks still uses multiple choice rather
+  than the upstream dropdown.
+- **Anonymous verification:** the security check remained unavailable to the
+  evaluator. This did not gate core review or decisions. A specific deployment
+  configuration defect is unproven; production verification remains enforced.
+- **Unexercised downstream work:** speaker, content and scheduling scenarios were
+  blocked by the missing accepted-session handoff. The earlier accepted-session
+  detail fix remains separately verified; this run did not reach that route.
 
-The earlier accepted-session fix remains separately verified on deployed
-`43bd670c`: detail returned 200 before/after explicit draft creation, GET created
-no draft or content snapshot, published data stayed unchanged, and missing detail
-returned 404. This fresh AEK run did not reach that path.
+The earlier handoff rejection was evaluation guidance/approval interaction:
+observed organiser URLs legitimately retain `draft-` IDs and `?queue=1`. Source
+and installed-CLI tests confirmed those semantics. The fresh run recorded the
+handoff successfully after clarification, with approval checks still enabled.
+The aborted run's later claims that recording succeeded were correctly rejected.
 
-Final cleanup completed at **15:56:00 UTC**, with old organiser session invalid,
-clean applicant/reviewer baselines, no selected persona and healthy `b946bfd4`
-verified. No production mutations followed that reset.
+Final cleanup completed at **19:19:27 UTC**. Old organiser sessions were invalid,
+applicant/reviewer baselines clean, no persona selected and deployed `b2335e77`
+healthy. Integrity root: `4bdfb809bf5be2c0109430fc03f7a55264553d46185d9cf3bfef23c5ab683e45`.
 
 Reports are retained under `evals/.agent-eval/runs/<run-id>/report.html`.
-Latest release/evaluation/reset receipts are in `.artifacts/coauthor-timezone-release/`;
-the review loop is in `.artifacts/coauthor-timezone-review/`. Earlier accepted-session
+Latest release receipts are in `.artifacts/relative-weights-ai-release/`, the
+completed evaluation/reset in `.artifacts/relative-weights-ai-rerun/`, and the
+review loop in `.artifacts/relative-weights-ai-review/`. Earlier accepted-session
 diagnostics remain in `.artifacts/deployed-accepted-session-smoke-20260908-retry/`.
 Verified artifact roots:
 
@@ -290,11 +298,10 @@ acknowledgement latency remain outstanding.
 
 ## Remaining acceptance work
 
-1. **Deployed evaluation:** separate the optional AI probe from ABS-S2's core
-   prerequisite, retaining its criterion and blocked evidence. Identify the AI
-   destination before any authorised provider transfer. Run fresh to reach scoring,
-   decisions, speaker, content and scheduling; reset afterward. Exact relative
-   weights remain a product gap, and anonymous verification needs a supported browser.
+1. **Deployed evaluation:** configure required submission/decision templates and
+   complete the co-speaker claim before acceptance. Run fresh to reach decisions,
+   speaker, content and scheduling, then reset. Fix expanded AI-result text clipping.
+   Anonymous verification still needs a supported browser.
 2. **Provider paths:** exercise Airtable authority/recovery, Accelevents live
    reconciliation, external AI/tool-loop/assessment and fresh provider-error
    callbacks. Verify newer schedule-change emails, reminder cron and controlled
