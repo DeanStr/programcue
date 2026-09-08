@@ -12,14 +12,15 @@ Git history retains earlier committed work logs.
 - The modular monolith has connected Worker/D1-backed product slices across the
   main application workflow. Repository coverage does not establish replacement
   readiness or live-provider acceptance.
-- Source `f3f0b887` passed the full release gate and was deployed on 8 September.
-  Recovery, mouse/keyboard saving and publication passed on deployed `/evaluate`.
+- Source `0d612b82` passed the full release gate and was deployed on 8 September.
+  The toolbar fix passed four viewport checks on deployed `/evaluate`; earlier
+  recovery, mouse/keyboard saving and publication evidence remains valid.
 - The revised deployed evaluation continued into authenticated submissions
   despite blocked anonymous checks. Coverage reached **7.368%**, with the score
   withheld below the 60% gate. Its fixture was reset.
-- Local changes address the proposal-URL handoff and toolbar overlap. Deployment
-  and a fresh independent run remain necessary; provider, operational and manual
-  acceptance gaps remain below.
+- The latest run stopped in CFP-S1 when the Codex provider hit its usage limit.
+  The revised proposal handoff remains unverified by a deployed evaluation. The
+  fixture was reset and checked at 08:12 UTC; further acceptance gaps remain below.
 
 Status terms:
 
@@ -36,7 +37,7 @@ Status terms:
 
 | Surface | Latest retained evidence | Boundary |
 | --- | --- | --- |
-| Application | `f3f0b88746c299e1ec220c3fc49dce7c4e0db7dd`, Worker `bf46ce32-a46b-4f56-959b-602328f9a8ce`, deployed 8 September; health matched before smoke and after final reset. | Supersedes `6e0d77da`. Health and bounded workflows do not verify every feature or provider path. |
+| Application | `0d612b82cec952dcf6e1483bc8382ef86624992a`, Worker `a18346c2-4982-40e2-90fc-ab881444acd0`, deployed 8 September; health matched before smoke and after final reset. | Supersedes `f3f0b887`. Health and bounded workflows do not verify every feature or provider path. |
 | Public website | Bundle `67d5b4b4`, Worker `e9398ee9-5a85-4c73-b751-0de7468c0032`, deployed and exercised on 5 September. | Separate website release; includes the approved film and guide pages. |
 | Scanner | Source `ae6133c`, deployed on 17 August with upload, scan, shutdown and erasure acceptance. | Later scanner changes and sustained burst capacity need separate acceptance. |
 
@@ -111,13 +112,13 @@ change. The latest complete gate supersedes older test-count histories.
 
 | Scope | Recorded result | Limit |
 | --- | --- | --- |
-| `f3f0b887`, 8 September | Ordered `npm run deploy` passed the full gate in 782.4 s: 651 unit, 1,924 Worker, one Agent, 96 configuration and 14 scanner tests; types, quality, build, schema/recovery/OpenAPI, zero dependency vulnerabilities; 219 main browser, six evaluation and 16 website checks, including Firefox/WebKit smoke. Preflight/schema/health passed; no pending migrations. | Two explicit performance-measurement checks skipped. Two browser shards used after the first attempt's local server exit and scan timeout. |
+| `0d612b82`, 8 September | Ordered `npm run deploy` passed the full gate in 730.0 s: 651 unit, 1,924 Worker, one Agent, 96 configuration and 14 scanner tests; types, quality, build, schema/recovery/OpenAPI and dependency audit; 219 main browser, 11 evaluation and 16 website checks, including Firefox/WebKit smoke. Preflight/schema/health passed; no pending migrations. | Two explicit performance-measurement checks skipped; two isolated browser shards. |
 | Production-health evaluator correction | Actual top-level health contract validated; 25 evaluator tests, three configurations and `check:core` passed (351.0 s). | Readiness does not prove product acceptance. |
 | Form-recovery fixes | Shared load/restore choice reconciliation preserves custom fields, stable routing/conditions and revision tokens; removed choices require repair. Validation returns 400; actual revision conflicts retain 409. Toolbar stays below topbar/banner. Focused checks and the full gate passed. Deployed rename → restore → mouse/keyboard save → reload → immutable publication passed. | Bounded production workflow; not full submission/provider acceptance. |
 | Follow-up Astra/high review | `codex exec review --uncommitted` reported no actionable findings. Focused tests/types/build passed, as did 25 evaluator tests, three configurations and a clean serial run of all six evaluation-browser tests. | An earlier browser run overlapped a rebuild and is invalid evidence; the serial rerun resolved it. No additional source fixes or deployment. |
 | Release-gate accessibility fix | Event Setup's section anchor could falsely announce a page change after validation. Route announcements now ignore anchor-only changes. Astra/high review found no actionable issues; typecheck/build/Biome, three serial browser repeats and the full gate passed. | A concurrent review rebuild invalidated one initial browser attempt; retained separately from passing evidence. |
 | Evaluation dependency split | 27 evaluator tests and all three configurations passed. Installed AEK CLI tests cover publication/anonymous dependencies; importer regeneration is identical; Astra/high reviews found no actionable issues; `check:core` passed (366.6 s). The deployed run below verified CFP-S2 starts after blocked anonymous checks. | Evaluator commit `4bc7825b`; application remains `f3f0b887`. Starting a scenario does not establish full acceptance. |
-| Proposal handoff and toolbar follow-up | 27 evaluator tests, three configurations, six focused evaluation-browser checks and eight submission/visual checks passed. Review/fix loop repaired canvas collapse and test dependence; final Astra/high review found no actionable issues. Core types, quality, build, 651 unit, 1,924 Worker and one Agent test passed; the full configuration/contracts lane passed on rerun after refreshing the visually reviewed film snapshot pin. | Source only. The initial `check:core` aggregate failed the stale pin; its failed lane was rerun separately. Observed organiser URLs reopen revised proposals and deny gate-only/reviewer access; a fresh deployed evaluation must verify the actual output handoff. |
+| Proposal handoff and toolbar follow-up | 27 evaluator tests, three configurations, six focused evaluation-browser checks and eight submission/visual checks passed. Review/fix loop repaired canvas collapse and test dependence; final Astra/high review found no actionable issues. Core types, quality, build, 651 unit, 1,924 Worker and one Agent test passed; the full configuration/contracts lane passed on rerun after refreshing the visually reviewed film snapshot pin. | Released as `0d612b82`; the subsequent full gate passed. Deployed toolbar checks passed at 1280×720, 1024×601, 390×700 and 844×390. Local organiser URLs reopen revised proposals and deny gate-only/reviewer access; the actual evaluator handoff remains unverified. |
 
 Latest local evidence locations:
 
@@ -139,6 +140,7 @@ Requested CLI model/effort receipts do not confirm a resolved provider snapshot.
 | Local regression `2026-09-07T02-12-32` | Nine criteria, 100% score and coverage with requested Astra/medium agent and judge; 265 artifacts verified. | Mailpit capture, real ClamAV clean/EICAR scans, versioned downloads/ZIP, anonymous denial and publication. Active baseline `2026-09-07T02-29-38-534Z-67a9d91b487d-ee63187c`; self-comparison has zero drift. Not the 98-criterion upstream suite or hosted-provider acceptance. |
 | Local upstream `2026-09-07T11-12-08` | Score withheld at 4.737% coverage; CFP-S1 completed, CFP-S2 blocked at applicant verification, 18 dependent scenarios blocked, 17 manual checks pending. | CLI exit 0 was completion without a coverage gate. Provisional 61.111% is not an acceptance score. Earlier `10-54-20` failed judge OAuth refresh and exhausted its setup call budget. |
 | Deployed `/evaluate` `2026-09-08T02-33-47` | Score withheld at 7.368% coverage; CFP-S1 completed, anonymous checks blocked, CFP-S2 ran but its required URL output was blocked, 18 downstream scenarios blocked, 17 manual checks pending. The 60% coverage gate exited 2. | Codex collection and requested Astra judging, 240 calls/scenario and 1,200 s deadline. All 202 artifacts verified. Provisional 89.286% is not an acceptance score. Health matched `f3f0b887` before and after reset. |
+| Deployed `/evaluate` `2026-09-08T08-11-18` | Failed in CFP-S1 with `agent_error` / provider exit 1: Codex account usage limit. No completed judging or new acceptance score; the revised proposal handoff was not reached. | Same 21-scenario/98-criterion suite, 240 calls/scenario and 60% coverage gate. Deployed and evaluator source `0d612b82`. Fresh personas and four deployed toolbar checks passed before collection. Final reset and session invalidation verified. |
 
 The earlier recovery/save blocker is resolved: both the direct deployed smoke
 and independent evaluator published successfully. Anonymous Start application
@@ -164,7 +166,7 @@ The rejected URL was not published and the report was not regraded. The judge
 also recorded a minor sticky-toolbar obstruction; Control+Home restored access.
 The multi-event probe again created Forward Summit 2028 with a separate empty queue.
 
-The follow-up source change directs CFP-S2 to verify the revised proposal as
+The deployed follow-up change directs CFP-S2 to verify the revised proposal as
 organiser and hand off its observed authenticated detail route. The form builder
 reserves toolbar space above independently scrolling panes; short viewports can
 scroll the frame as a unit. These changes do not alter the sealed run or prove
@@ -172,13 +174,15 @@ that a future deployed handoff will clear approval review.
 
 The deployed fixture was reset before and after the authorised run. Final checks
 proved the old organiser session invalid and clean applicant/reviewer baselines
-with no selected persona. The latest reset completed at 03:05:56 UTC on
-8 September; the earlier direct smoke also reset its fixture on completion.
+with no selected persona. The latest reset completed at 08:12:44 UTC on
+8 September, after the provider-limited run; its initial reset completed at
+08:10:53 UTC. Earlier authorised runs also reset their fixture on completion.
 The shared fixture must not be reset while another evaluator is using it; follow
 [SBEK evaluation](SBEK_EVALUATION.md) and the evaluator README.
 
 Reports are retained under `evals/.agent-eval/runs/<run-id>/report.html`.
 Deployment health/reset/session receipts are in
+`.artifacts/release-0d612b82/` and
 `.artifacts/deployed-evaluation-20260908-revised/`; earlier release/smoke evidence
 is in `.artifacts/release-85204439/`, and local upstream attempts are in
 `.artifacts/full-validation-20260907/`. Verified artifact roots:
@@ -257,9 +261,10 @@ acknowledgement latency remain outstanding.
 
 ## Remaining acceptance work
 
-1. **Deployed evaluation:** release the reviewed toolbar fix, then repeat the
-   revised proposal-link handoff with fresh personas and the coverage gate. Reset
-   the fixture after the authorised run. Anonymous verification remains unproven.
+1. **Deployed evaluation:** restore Codex provider capacity, then start a fresh
+   run with new personas and the coverage gate to verify the proposal handoff.
+   The failed run cannot resume after the fixture reset. Reset after the next
+   authorised run; anonymous verification remains unproven.
 2. **Provider paths:** exercise Airtable authority/recovery, Accelevents live
    reconciliation, external AI/tool-loop/assessment and fresh provider-error
    callbacks. Verify newer schedule-change emails, reminder cron and controlled
