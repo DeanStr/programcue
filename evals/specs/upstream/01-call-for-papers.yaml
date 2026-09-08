@@ -330,12 +330,19 @@ scenarios:
       abstract. Publish that observed authenticated organiser detail URL
       (/admin/submissions/:submissionId) as proposalUrl for CFP-S3. This is an
       ordinary record route requiring organiser access, not a credential or
-      capability link. Do not use the applicant portal's draft query URL,
-      construct a URL from a record ID, or substitute the queue URL. If the
-      detail page cannot be opened and verified, report the handoff blocked.
-      Call publish_output with successful evidence step references. Use only
-      ordinary non-secret HTTP(S) URLs. If it cannot be observed, report
-      blocked; never invent a URL.
+      capability link. Submission IDs are opaque and retain their draft- prefix
+      after submission; a detail URL such as
+      /admin/submissions/draft-<opaque-id>?queue=1 is valid when it is the exact
+      observed organiser record. The queue query only preserves navigation
+      context; it does not make a detail route the queue itself. Copy the
+      observed URL including its query. Do not use /apply/...?...draft=...
+      applicant links, construct a URL from a record ID, or substitute
+      /admin/submissions without a record ID. Only claim publication after
+      publish_output returns success. If verification or output recording fails,
+      preserve that failure and report the handoff blocked without claiming it
+      was published. Call publish_output with successful evidence step
+      references. Use only ordinary non-secret HTTP(S) URLs. If it cannot be
+      observed, report blocked; never invent a URL.
 
 
       Missing optional features are findings: record them and continue the

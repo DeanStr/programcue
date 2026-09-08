@@ -2265,3 +2265,10 @@ abstract management first so human scoring and the independent AI branch run
 before CFP decisions close review; preserve all upstream criteria and sealed
 historical evidence. A suite test checks this order and proves a blocked AI
 scenario does not prevent the downstream core workflow.
+
+Observed organiser submission URLs can retain a `draft-` record ID after
+submission and include `?queue=1` navigation context. Neither changes the
+authenticated detail route into an applicant draft link or a capability URL.
+The evaluation must copy that observed URL after verifying the title and revision,
+check that output publication succeeded and report any rejected recording as
+blocked. It must never claim a failed output was published.

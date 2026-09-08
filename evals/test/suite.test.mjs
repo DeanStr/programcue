@@ -138,7 +138,7 @@ test("AEK binds the organiser proposal handoff after blocked anonymous checks an
       const publicationBlocked = process.env.DEPENDENCY_TEST_BLOCK_PUBLICATION === '1';
       const blocked = id === 'CFP-S1-PUBLIC' || (id === 'CFP-S1' && publicationBlocked);
       const portalUrl = 'https://example.com/apply';
-      const proposalUrl = 'https://example.com/admin/submissions/synthetic-proposal';
+      const proposalUrl = 'https://example.com/admin/submissions/draft-synthetic-proposal?queue=1';
       if (id === 'CFP-S3') {
         if (context.inputs.proposalUrl.value !== proposalUrl) throw new Error('Lost organiser proposal binding');
       } else if (['CFP-S1-PUBLIC', 'CFP-S2'].includes(id) && context.inputs.portalUrl.value !== portalUrl) throw new Error('Lost portal binding');
@@ -202,7 +202,7 @@ test("AEK binds the organiser proposal handoff after blocked anonymous checks an
         assert.equal(evidence("CFP-S2").inputs.portalUrl.value, "https://example.com/apply");
         assert.equal(
           evidence("CFP-S3").inputs.proposalUrl.value,
-          "https://example.com/admin/submissions/synthetic-proposal",
+          "https://example.com/admin/submissions/draft-synthetic-proposal?queue=1",
         );
       }
     }
