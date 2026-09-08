@@ -2,6 +2,12 @@
 
 This file records durable decisions. It does not imply that every decided capability is implemented; verified delivery status lives in `IMPLEMENTATION_STATUS.md`.
 
+## Page announcements and section anchors — 8 September 2026
+
+Route progress and page announcements compare the pathname and query string.
+An anchor-only change stays within the page, including when Event Setup returns
+validation errors to a section, and must not announce a new page title.
+
 ## Source quality tooling
 
 Biome is the repository formatter and baseline JavaScript, TypeScript, JSX,

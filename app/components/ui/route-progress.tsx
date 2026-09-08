@@ -1,12 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigation } from "react-router";
 
-function locationKey(location: {
-  pathname: string;
-  search: string;
-  hash: string;
-}) {
-  return `${location.pathname}${location.search}${location.hash}`;
+function locationKey(location: { pathname: string; search: string }) {
+  // Section anchors move within the current page, including after form errors.
+  return `${location.pathname}${location.search}`;
 }
 
 /**

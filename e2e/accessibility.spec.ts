@@ -184,6 +184,15 @@ test("route announcements describe page changes but ignore same-page actions", a
   await expect(page.getByRole("alert")).toContainText(
     "End date cannot be before the start date",
   );
+  await expect(page).toHaveURL(/\/admin\/event#event-setup-identity$/);
+  // Give the frame-scheduled page announcement time to commit, so this does
+  // not pass merely because its initial empty state was observed first.
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
   await expect(announcement).toBeEmpty();
 
   await page.getByRole("link", { name: "Home", exact: true }).click();
