@@ -15,12 +15,12 @@ Git history retains earlier committed work logs.
 - Source `0d612b82` passed the full release gate and was deployed on 8 September.
   The toolbar fix passed four viewport checks on deployed `/evaluate`; earlier
   recovery, mouse/keyboard saving and publication evidence remains valid.
-- The revised deployed evaluation continued into authenticated submissions
-  despite blocked anonymous checks. Coverage reached **7.368%**, with the score
-  withheld below the 60% gate. Its fixture was reset.
-- The latest run stopped in CFP-S1 when the Codex provider hit its usage limit.
-  The revised proposal handoff remains unverified by a deployed evaluation. The
-  fixture was reset and checked at 08:12 UTC; further acceptance gaps remain below.
+- The latest deployed evaluation verified the proposal handoff, reviewer scoring
+  and persisted decisions. Overall coverage reached **16.692%**; the score remains
+  withheld below the 60% gate. All 416 retained artifacts verified.
+- An accepted session missing its schedule content record returned HTTP 500,
+  blocking downstream scenarios. Review-cycle setup also conflicted with earlier
+  completed work. The fixture was reset and checked at **09:30 UTC**.
 
 Status terms:
 
@@ -118,7 +118,7 @@ change. The latest complete gate supersedes older test-count histories.
 | Follow-up Astra/high review | `codex exec review --uncommitted` reported no actionable findings. Focused tests/types/build passed, as did 25 evaluator tests, three configurations and a clean serial run of all six evaluation-browser tests. | An earlier browser run overlapped a rebuild and is invalid evidence; the serial rerun resolved it. No additional source fixes or deployment. |
 | Release-gate accessibility fix | Event Setup's section anchor could falsely announce a page change after validation. Route announcements now ignore anchor-only changes. Astra/high review found no actionable issues; typecheck/build/Biome, three serial browser repeats and the full gate passed. | A concurrent review rebuild invalidated one initial browser attempt; retained separately from passing evidence. |
 | Evaluation dependency split | 27 evaluator tests and all three configurations passed. Installed AEK CLI tests cover publication/anonymous dependencies; importer regeneration is identical; Astra/high reviews found no actionable issues; `check:core` passed (366.6 s). The deployed run below verified CFP-S2 starts after blocked anonymous checks. | Evaluator commit `4bc7825b`; application remains `f3f0b887`. Starting a scenario does not establish full acceptance. |
-| Proposal handoff and toolbar follow-up | 27 evaluator tests, three configurations, six focused evaluation-browser checks and eight submission/visual checks passed. Review/fix loop repaired canvas collapse and test dependence; final Astra/high review found no actionable issues. Core types, quality, build, 651 unit, 1,924 Worker and one Agent test passed; the full configuration/contracts lane passed on rerun after refreshing the visually reviewed film snapshot pin. | Released as `0d612b82`; the subsequent full gate passed. Deployed toolbar checks passed at 1280×720, 1024×601, 390×700 and 844×390. Local organiser URLs reopen revised proposals and deny gate-only/reviewer access; the actual evaluator handoff remains unverified. |
+| Proposal handoff and toolbar follow-up | 27 evaluator tests, three configurations, six focused evaluation-browser checks and eight submission/visual checks passed. Review/fix loop repaired canvas collapse and test dependence; final Astra/high review found no actionable issues. Core types, quality, build, 651 unit, 1,924 Worker and one Agent test passed; the full configuration/contracts lane passed on rerun after refreshing the visually reviewed film snapshot pin. | Released as `0d612b82`; the subsequent full gate passed. Deployed toolbar checks passed at 1280×720, 1024×601, 390×700 and 844×390. Local organiser URLs reopen revised proposals and deny gate-only/reviewer access. Deployed CFP-S2 verified the revised abstract as organiser, published its observed detail URL and unblocked CFP-S3. |
 
 Latest local evidence locations:
 
@@ -141,6 +141,7 @@ Requested CLI model/effort receipts do not confirm a resolved provider snapshot.
 | Local upstream `2026-09-07T11-12-08` | Score withheld at 4.737% coverage; CFP-S1 completed, CFP-S2 blocked at applicant verification, 18 dependent scenarios blocked, 17 manual checks pending. | CLI exit 0 was completion without a coverage gate. Provisional 61.111% is not an acceptance score. Earlier `10-54-20` failed judge OAuth refresh and exhausted its setup call budget. |
 | Deployed `/evaluate` `2026-09-08T02-33-47` | Score withheld at 7.368% coverage; CFP-S1 completed, anonymous checks blocked, CFP-S2 ran but its required URL output was blocked, 18 downstream scenarios blocked, 17 manual checks pending. The 60% coverage gate exited 2. | Codex collection and requested Astra judging, 240 calls/scenario and 1,200 s deadline. All 202 artifacts verified. Provisional 89.286% is not an acceptance score. Health matched `f3f0b887` before and after reset. |
 | Deployed `/evaluate` `2026-09-08T08-11-18` | Failed in CFP-S1 with `agent_error` / provider exit 1: Codex account usage limit. No completed judging or new acceptance score; the revised proposal handoff was not reached. | Same 21-scenario/98-criterion suite, 240 calls/scenario and 60% coverage gate. Deployed and evaluator source `0d612b82`. Fresh personas and four deployed toolbar checks passed before collection. Final reset and session invalidation verified. |
+| Deployed `/evaluate` `2026-09-08T08-23-15` | Score withheld at **16.692%** coverage; five scenarios completed, 16 blocked and 17 manual checks pending. The 60% coverage gate exited 2. CFP area: 89.655% at 76.316% coverage. | All **416 artifacts verified**. Application `0d612b82`, evaluator `65b8925e`; proposal handoff and reviewer scoring completed. Accepted-session HTTP 500 blocked speaker/content/schedule scenarios; ABS setup conflicted with completed reviews. Four deployed toolbar checks and final reset/session invalidation passed. |
 
 The earlier recovery/save blocker is resolved: both the direct deployed smoke
 and independent evaluator published successfully. Anonymous Start application
@@ -152,12 +153,12 @@ verification remains enforced. This is unavailable interaction evidence, not
 proof of absent form capabilities. Splitting anonymous steps 9–11 into
 CFP-S1-PUBLIC allowed CFP-S2 to run: draft/resume, required-field errors,
 Workshop/Talk conditional visibility, two submitted proposals and a persisted
-abstract revision were observed. These do not prove ordinary signup, verification,
+abstract revision were observed. That run did not prove ordinary signup, verification,
 email delivery or organiser-side revision visibility. All original steps,
 success signals and 98 criteria remain across 21 executable scenarios.
 
-Automatic approval review rejected CFP-S2's observed draft-specific proposal URL
-as a potential capability link. The evaluator left its required output unpublished,
+In the earlier `02-33-47` run, automatic approval review rejected CFP-S2's
+observed draft-specific proposal URL as a potential capability link. The evaluator left its required output unpublished,
 blocking later scenarios. A separate read-only check showed the applicant could
 see the proposal through that URL while anonymous and reviewer sessions could
 not; source selects the record from the authenticated applicant's applications.
@@ -166,30 +167,37 @@ The rejected URL was not published and the report was not regraded. The judge
 also recorded a minor sticky-toolbar obstruction; Control+Home restored access.
 The multi-event probe again created Forward Summit 2028 with a separate empty queue.
 
-The deployed follow-up change directs CFP-S2 to verify the revised proposal as
-organiser and hand off its observed authenticated detail route. The form builder
-reserves toolbar space above independently scrolling panes; short viewports can
-scroll the frame as a unit. These changes do not alter the sealed run or prove
-that a future deployed handoff will clear approval review.
+The latest run verified the follow-up: CFP-S2 checked the revised abstract as
+organiser, published the observed authenticated detail route, and CFP-S3 completed
+reviewer assignment and scoring. Four viewport checks passed for the toolbar.
+The next product blocker is accepted-session editorial access: the new session
+exists but has no `schedule_session_contents` row, is absent from the content
+index and returns HTTP 500 from its detail route. Separately, ABS-S2 expected
+open assignments and zero completed reviews after CFP had already completed them;
+automatic approval review rejected archiving active work for a new cycle.
+Some CFP checkpoints lacked usable excerpts/screenshots for judging; later
+captures cannot satisfy those checkpoint-scoped criteria. These are evaluation
+evidence/setup gaps, not additional established product defects.
 
 The deployed fixture was reset before and after the authorised run. Final checks
 proved the old organiser session invalid and clean applicant/reviewer baselines
-with no selected persona. The latest reset completed at 08:12:44 UTC on
-8 September, after the provider-limited run; its initial reset completed at
-08:10:53 UTC. Earlier authorised runs also reset their fixture on completion.
+with no selected persona. The latest reset completed at **09:30:26 UTC** on
+8 September, after the completed retry; its initial reset completed at
+08:22:49 UTC. Earlier authorised runs also reset their fixture on completion.
 The shared fixture must not be reset while another evaluator is using it; follow
 [SBEK evaluation](SBEK_EVALUATION.md) and the evaluator README.
 
 Reports are retained under `evals/.agent-eval/runs/<run-id>/report.html`.
 Deployment health/reset/session receipts are in
-`.artifacts/release-0d612b82/` and
+`.artifacts/release-0d612b82/`,
+`.artifacts/deployed-evaluation-20260908-retry/` and
 `.artifacts/deployed-evaluation-20260908-revised/`; earlier release/smoke evidence
 is in `.artifacts/release-85204439/`, and local upstream attempts are in
 `.artifacts/full-validation-20260907/`. Verified artifact roots:
 
 - Active local regression: `5c7afb60bb4a86f5937aacdd786fe0de16ff5b0c5d798dc16517334b5b5c5415`.
 - Local upstream: `86268503e077e1d7560fcf7d40b2cbb5babb7724e64995fe2b5276aef780d427`.
-- Deployed upstream: `ba217e54c57db71afa3c28d3a82c3facc0a5d935278f8b351f3258515878cd6a`.
+- Latest deployed upstream: `3869a6ae3f5d855800eee77bd45efe0c47aba1d0855ade7a5aab36cfbece33f8`.
 
 ## Deployment evidence
 
