@@ -1,6 +1,6 @@
 # Verified implementation status
 
-Evidence recorded through **7 September 2026**; condensed on 8 September.
+Evidence recorded through **8 September 2026**.
 This is the current capability,
 requirements and acceptance index; consolidation does not constitute a new
 verification or deployment. The [product specification](../sessionboard-replacement-full-scope-implementation-specification-with-competition-ux.md)
@@ -12,13 +12,13 @@ Git history retains earlier committed work logs.
 - The modular monolith has connected Worker/D1-backed product slices across the
   main application workflow. Repository coverage does not establish replacement
   readiness or live-provider acceptance.
-- Committed source `02ace5d8` passed the full release gate on 7 September. Later
-  form-recovery fixes have focused evidence and remain undeployed.
-- The latest deployed `/evaluate` run was blocked at form authoring, with **0%
-  coverage and no acceptance score**. Its fixture was reset after the run.
-- Next: release the form-recovery fixes, resolve the anonymous security-check
-  evaluation boundary, and repeat deployed acceptance with an explicit coverage
-  gate. Provider, operational and manual acceptance gaps remain below.
+- Source `f3f0b887` passed the full release gate and was deployed on 8 September.
+  Recovery, mouse/keyboard saving and publication passed on deployed `/evaluate`.
+- The latest independent run published the CFP but was blocked at anonymous
+  interaction, with **0% coverage and no acceptance score**. Its fixture was reset.
+- Next: resolve the anonymous security-check/dependency boundary and repeat
+  deployed acceptance with an explicit coverage gate. Provider, operational and
+  manual acceptance gaps remain below.
 
 Status terms:
 
@@ -35,7 +35,7 @@ Status terms:
 
 | Surface | Latest retained evidence | Boundary |
 | --- | --- | --- |
-| Application | Health identified `6e0d77dac1600e529a14b9507da8c3e298c85010` before and after the 7 September deployed evaluation. | Supersedes the older `1ba0531` observation. Health and a bounded evaluation do not verify every source feature or provider path. |
+| Application | `f3f0b88746c299e1ec220c3fc49dce7c4e0db7dd`, Worker `bf46ce32-a46b-4f56-959b-602328f9a8ce`, deployed 8 September; health matched before smoke and after final reset. | Supersedes `6e0d77da`. Health and bounded workflows do not verify every feature or provider path. |
 | Public website | Bundle `67d5b4b4`, Worker `e9398ee9-5a85-4c73-b751-0de7468c0032`, deployed and exercised on 5 September. | Separate website release; includes the approved film and guide pages. |
 | Scanner | Source `ae6133c`, deployed on 17 August with upload, scan, shutdown and erasure acceptance. | Later scanner changes and sustained burst capacity need separate acceptance. |
 
@@ -51,7 +51,7 @@ acceptance sections qualify their live evidence.
 | --- | --- | --- |
 | Runtime and persistence | **Production foundation.** React Router/TypeScript Worker monolith; D1 control plane, explicit D1/Airtable domain authority, R2, Queues, Workflows and event-scoped Durable Objects. | Live Airtable authority/recovery acceptance. |
 | Authentication and events | **Production slice.** Identity creation, invitations, tenant/event roles, provisioning, switching and cloning. Signup alone grants no organisation or event access. | Fresh identity/provider-error exercises and production security-hardening acceptance. |
-| Forms and submissions | **Production slice.** Immutable form versions, conditional/stepped intake, event-owned tracks/formats, opening/closing dates and caps, anonymous/verified drafts, co-speaker claims, proposal revisions, direct-session intake and administration. | Latest browser-recovery fix is local; deployed authoring and subsequent acceptance must be repeated. |
+| Forms and submissions | **Production slice.** Immutable form versions, conditional/stepped intake, event-owned tracks/formats, opening/closing dates and caps, anonymous/verified drafts, co-speaker claims, proposal revisions, direct-session intake and administration. | Deployed recovery/save/publication verified; anonymous interaction and subsequent independent acceptance remain blocked. |
 | Evaluation and decisions | **Production slice.** Rounds, reviewer pools, mixed rubrics, blind review, assignments, abstention, review recovery, committee discussion, moderation/reopen and atomic decision/onboarding/notification intent. | Independent end-to-end acceptance; committee editing, notifications and realtime chat are not implemented. |
 | Participants and tasks | **Production slice.** Independent Speaker/Moderator/Chair responses, participant workspace, availability, reusable event fields, task evidence snapshots, comments, dependencies, roster CSV and read-only organiser preview. | Custom fields have fixed types, without formulas or conditional rules; newer reminder paths need live evidence. |
 | Speaker Network | **Optional competition production slice.** Organisation-scoped history, contacts, tags, segments, sourcing/imports and event outreach at `/admin/crm`. | General CRM is excluded; participant adoption is deferred and the newer organiser-created mutation lacks live acceptance. |
@@ -110,10 +110,11 @@ change. The latest complete gate supersedes older test-count histories.
 
 | Scope | Recorded result | Limit |
 | --- | --- | --- |
-| `02ace5d8`, 7 September | Full `npm run check` passed in 603.7 s: 649 unit, 1,922 Worker, one Agent, 96 configuration and 14 scanner tests; types, quality, build, schema/recovery/OpenAPI, zero dependency vulnerabilities; 219 main browser, five evaluation and 16 website checks, including Firefox/WebKit smoke. | Two explicit performance-measurement checks skipped. Later working-tree fixes are not covered by this release gate. |
+| `f3f0b887`, 8 September | Ordered `npm run deploy` passed the full gate in 782.4 s: 651 unit, 1,924 Worker, one Agent, 96 configuration and 14 scanner tests; types, quality, build, schema/recovery/OpenAPI, zero dependency vulnerabilities; 219 main browser, six evaluation and 16 website checks, including Firefox/WebKit smoke. Preflight/schema/health passed; no pending migrations. | Two explicit performance-measurement checks skipped. Two browser shards used after the first attempt's local server exit and scan timeout. |
 | Production-health evaluator correction | Actual top-level health contract validated; 25 evaluator tests, three configurations and `check:core` passed (351.0 s). | Readiness does not prove product acceptance. |
-| Local form-recovery fixes | Shared load/restore choice reconciliation preserves custom fields, stable routing/conditions and revision tokens; removed choices require repair. Validation returns 400; actual revision conflicts retain 409. Toolbar stays below topbar/banner. Ten unit and 49 Worker tests, regenerated types, build, Biome, design-system and OpenAPI checks passed; five existing recovery/visual checks plus the new recovery-to-publication browser workflow passed. | Undeployed; full release gate not rerun. |
+| Form-recovery fixes | Shared load/restore choice reconciliation preserves custom fields, stable routing/conditions and revision tokens; removed choices require repair. Validation returns 400; actual revision conflicts retain 409. Toolbar stays below topbar/banner. Focused checks and the full gate passed. Deployed rename → restore → mouse/keyboard save → reload → immutable publication passed. | Bounded production workflow; not full submission/provider acceptance. |
 | Follow-up Astra/high review | `codex exec review --uncommitted` reported no actionable findings. Focused tests/types/build passed, as did 25 evaluator tests, three configurations and a clean serial run of all six evaluation-browser tests. | An earlier browser run overlapped a rebuild and is invalid evidence; the serial rerun resolved it. No additional source fixes or deployment. |
+| Release-gate accessibility fix | Event Setup's section anchor could falsely announce a page change after validation. Route announcements now ignore anchor-only changes. Astra/high review found no actionable issues; typecheck/build/Biome, three serial browser repeats and the full gate passed. | A concurrent review rebuild invalidated one initial browser attempt; retained separately from passing evidence. |
 
 Latest local evidence locations:
 
@@ -134,30 +135,35 @@ Requested CLI model/effort receipts do not confirm a resolved provider snapshot.
 | --- | --- | --- |
 | Local regression `2026-09-07T02-12-32` | Nine criteria, 100% score and coverage with requested Astra/medium agent and judge; 265 artifacts verified. | Mailpit capture, real ClamAV clean/EICAR scans, versioned downloads/ZIP, anonymous denial and publication. Active baseline `2026-09-07T02-29-38-534Z-67a9d91b487d-ee63187c`; self-comparison has zero drift. Not the 98-criterion upstream suite or hosted-provider acceptance. |
 | Local upstream `2026-09-07T11-12-08` | Score withheld at 4.737% coverage; CFP-S1 completed, CFP-S2 blocked at applicant verification, 18 dependent scenarios blocked, 17 manual checks pending. | CLI exit 0 was completion without a coverage gate. Provisional 61.111% is not an acceptance score. Earlier `10-54-20` failed judge OAuth refresh and exhausted its setup call budget. |
-| Deployed `/evaluate` `2026-09-07T14-17-09` | Score withheld at 0% coverage; CFP-S1 blocked, 19 dependent scenarios blocked, 17 manual checks pending. The explicit 60% coverage gate exited 2. | Codex collection/judging with requested Astra, 240 calls/scenario and 1,200 s deadline. All 136 artifacts verified. Health retained the deployed revision listed above. |
+| Deployed `/evaluate` `2026-09-08T01-11-18` | Score withheld at 0% coverage; CFP-S1 blocked, 19 dependent scenarios blocked, 17 manual checks pending. The explicit 60% coverage gate exited 2. | Codex collection and requested Astra judging, 240 calls/scenario and 1,200 s deadline. All 148 artifacts verified. Health matched the deployed revision above. |
 
-The deployed blocker was stale track/format choices after browser-draft recovery,
-misreported as “Draft conflict”; the header also obstructed Save draft. The local
-fix is recorded above. Anonymous Start application remained disabled during a
-security check while the harness excluded two child frames: this is unavailable
-interaction evidence, not proof of absent form capabilities. The organiser did
-create Forward Summit 2028 and observe its separate empty queue; the local
-persona's event-creation `not_found` does not describe deployed behavior.
+The earlier recovery/save blocker is resolved: both the direct deployed smoke
+and independent evaluator published successfully. Anonymous Start application
+remained disabled while the harness excluded two verification frames. A separate
+Playwright probe loaded those frames but received no token within 30 seconds.
+[Cloudflare documents automated-browser blocking](https://developers.cloudflare.com/turnstile/troubleshooting/testing/);
+observed 401 responses alone do not identify a configuration defect. Production
+verification remains enforced. This is unavailable interaction evidence, not
+proof of absent form capabilities. The activated applicant exposed Start
+application, but CFP-S2 could not run after CFP-S1 was marked blocked. Review the
+upstream permission to defer authenticated form checks before another campaign.
+The evaluator also created Forward Summit 2028 with a separate empty queue and
+reported a recoverable form-properties toolbar obstruction for focused follow-up.
 
 The deployed fixture was reset before and after the authorised run. Final checks
 proved the old organiser session invalid and clean applicant/reviewer baselines
-with no selected persona. Subsequent local fixes/review did not modify production.
+with no selected persona. The direct smoke also reset its fixture on completion.
 The shared fixture must not be reset while another evaluator is using it; follow
 [SBEK evaluation](SBEK_EVALUATION.md) and the evaluator README.
 
 Reports are retained under `evals/.agent-eval/runs/<run-id>/report.html`.
 Deployment health/reset/session receipts are in
-`.artifacts/deployed-evaluation-20260907/`; local upstream attempts are in
+`.artifacts/release-85204439/`; local upstream attempts are in
 `.artifacts/full-validation-20260907/`. Verified artifact roots:
 
 - Active local regression: `5c7afb60bb4a86f5937aacdd786fe0de16ff5b0c5d798dc16517334b5b5c5415`.
 - Local upstream: `86268503e077e1d7560fcf7d40b2cbb5babb7724e64995fe2b5276aef780d427`.
-- Deployed upstream: `7e2ba9f0090953f899618543b39d337f1afe991f30ec3aa68e23ecf7c48b7a35`.
+- Deployed upstream: `3a0405fac7a54da6f42819be14746843c3ff116644c33f7d4e12e0c46a1b828d`.
 
 ## Deployment evidence
 
@@ -229,10 +235,10 @@ acknowledgement latency remain outstanding.
 
 ## Remaining acceptance work
 
-1. **Release and deployed evaluation:** run the release gate for the final
-   candidate, deploy, exercise recovery/publication on `/evaluate`, investigate
-   its anonymous security-check boundary, then repeat the upstream selection
-   with valid judge authentication and explicit score/coverage gates.
+1. **Deployed evaluation:** resolve the anonymous security-check/dependency
+   boundary without weakening production verification or claiming unobserved
+   behavior. Check the reported form-properties toolbar obstruction, then repeat
+   acceptance with fresh personas and an explicit coverage gate.
 2. **Provider paths:** exercise Airtable authority/recovery, Accelevents live
    reconciliation, external AI/tool-loop/assessment and fresh provider-error
    callbacks. Verify newer schedule-change emails, reminder cron and controlled
