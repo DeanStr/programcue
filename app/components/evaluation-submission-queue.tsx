@@ -44,12 +44,6 @@ export function EvaluationSubmissionQueue() {
   return (
     <section className="card pad pc-eval-queue" id="evaluation-proposals">
       {dialog}
-      {loaderData.canManageAiAssessments ? (
-        <p className="help">
-          AI first-pass destination: {providerDescription}. Opening the request
-          details sends nothing; generation requires confirmation.
-        </p>
-      ) : null}
       <div className="card-title">
         <div>
           <h2>Proposal assignments and decisions</h2>
@@ -82,6 +76,12 @@ export function EvaluationSubmissionQueue() {
           ) : null}
         </div>
       </div>
+      {loaderData.canManageAiAssessments ? (
+        <p className="help">
+          AI first-pass destination: {providerDescription}. Opening the request
+          details sends nothing; generation requires confirmation.
+        </p>
+      ) : null}
       {loaderData.submissions.length ? (
         <section
           className="table-wrap pc-responsive-table-wrap"
