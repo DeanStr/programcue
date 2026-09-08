@@ -2204,3 +2204,23 @@ specific repair message. Only a revision mismatch activates the 409 draft
 conflict controls. The builder toolbar remains below the fixed admin topbar and
 evaluation banner while the page scrolls, keeping save and publication controls
 reachable by pointer and keyboard.
+
+## 2026-09-08 — Use the organiser record for proposal handoffs
+
+CFP-S2 completes its applicant checks and checkpoints before switching to the
+organiser. It opens the CI proposal from the canonical event's Applications
+queue, verifies the title and revised abstract, then publishes the observed
+authenticated `/admin/submissions/:submissionId` URL for CFP-S3. Missing access
+or a mismatched record blocks the handoff. The evaluator must not construct a
+URL from an applicant draft ID or substitute a queue link. Existing organiser
+authorisation and event isolation remain the authority for this record route.
+
+The form builder reserves toolbar space within one viewport-sized editor frame;
+its panes scroll below the toolbar, including when the evaluation banner or
+wrapped mobile controls change the available height. Version history has bounded
+scrolling so older publications cannot consume the workbench. The canvas retains
+a minimum height at every screen size and scrolls within its pane so wrapped
+controls cannot reduce the document to padding. Mobile preview remains above
+the application header. Short viewports scroll the frame as a unit
+to keep its panes usable when toolbar and navigation rows consume the height.
+This replaces independently pinning the toolbar over scrolling field controls.

@@ -822,6 +822,16 @@ test.describe
       ).toHaveAttribute("aria-current", "page");
       await expect(page).toHaveTitle(`${title} · Application · Program Cue`);
       await expect(page.locator("body")).toContainText(revisionSentence);
+      // CFP-S2 hands this observed organiser route to CFP-S3 after verifying
+      // the revised proposal. Reopening it must preserve the same record.
+      const proposalUrl = page.url();
+      expect(new URL(proposalUrl).pathname).toMatch(
+        /^\/admin\/submissions\/[^/]+$/u,
+      );
+      expect(new URL(proposalUrl).searchParams.has("draft")).toBe(false);
+      await page.goto(proposalUrl);
+      await expect(page.getByRole("heading", { name: title })).toBeVisible();
+      await expect(page.locator("body")).toContainText(revisionSentence);
       await expect(
         page.getByRole("heading", { name: "Status history" }),
       ).toBeVisible();

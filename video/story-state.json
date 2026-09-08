@@ -48,7 +48,7 @@
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/form-builder-desktop-chromium-linux.png",
-      "sha256": "1d123043bff1446e0b875c425c6b3c76e4e2b1615dd9b11b41e5bb879b44f5cf"
+      "sha256": "55ca3e4966b2be31e71cd75acb7058420884fb8c33fb76e3a79aff8eff85f9f9"
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/form-builder-laptop-chromium-linux.png",

@@ -288,6 +288,160 @@ test("accepted speaker saves a new anonymous application from the participant wo
   ).toBeVisible();
 });
 
+test("observed organiser proposal links require private access", async ({
+  browser,
+  page,
+}) => {
+  test.setTimeout(90_000);
+  page.setDefaultTimeout(10_000);
+  await page.goto("/evaluate");
+  await page.getByRole("textbox", { name: "Access code" }).fill(accessCode);
+  await page.getByRole("button", { name: "Unlock evaluation" }).click();
+  await page
+    .getByRole("button", {
+      name: "Create evaluator submitter account",
+      exact: true,
+    })
+    .click();
+  await expect(page).toHaveURL(/\/apply\/form/u);
+  await page.getByRole("button", { name: "Start application" }).click();
+  const title = "Private proposal handoff";
+  await page.getByLabel("Session title").fill(title);
+  await page.getByRole("button", { name: "Save draft", exact: true }).click();
+  await expect(
+    page.getByText("Your draft has been saved.", { exact: true }),
+  ).toBeVisible();
+  await page.goto("/evaluate");
+  await page
+    .getByRole("button", { name: "Open as Event organiser", exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/admin\/command$/u);
+  await page.goto("/admin/submissions");
+  const proposal = page.getByRole("link", { name: title, exact: true });
+  await proposal.click();
+  await expect(
+    page.getByRole("heading", { name: title, exact: true }),
+  ).toBeVisible();
+  const proposalUrl = page.url();
+  expect(new URL(proposalUrl).pathname).toMatch(
+    /^\/admin\/submissions\/[^/]+$/u,
+  );
+  expect(new URL(proposalUrl).searchParams.has("draft")).toBe(false);
+  await page.goto(proposalUrl);
+  await expect(
+    page.getByRole("heading", { name: title, exact: true }),
+  ).toBeVisible();
+
+  const unprivileged = await browser.newContext();
+  try {
+    const visitor = await unprivileged.newPage();
+    await visitor.goto(new URL("/evaluate", proposalUrl).href);
+    await visitor
+      .getByRole("textbox", { name: "Access code" })
+      .fill(accessCode);
+    await visitor.getByRole("button", { name: "Unlock evaluation" }).click();
+    await expect(
+      visitor.getByText("No persona selected", { exact: true }),
+    ).toBeVisible();
+    await visitor.goto(proposalUrl);
+    await expect(visitor).toHaveURL(/\/evaluate(?:\?|$)/u);
+    await expect(visitor.getByText(title, { exact: true })).toHaveCount(0);
+    await visitor
+      .getByRole("button", { name: "Open as Reviewer", exact: true })
+      .click();
+    await expect(visitor).toHaveURL(/\/review\/workbench$/u);
+    const denied = await visitor.goto(proposalUrl);
+    expect(denied?.status()).toBe(403);
+    await expect(visitor.getByText(title, { exact: true })).toHaveCount(0);
+  } finally {
+    await unprivileged.close();
+  }
+});
+
+for (const viewport of [
+  { width: 1280, height: 720 },
+  { width: 1024, height: 601 },
+  { width: 390, height: 700 },
+  { width: 844, height: 390 },
+]) {
+  test(`form settings remain clickable after scrolling at ${viewport.width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    await page.goto("/evaluate");
+    await page.getByRole("textbox", { name: "Access code" }).fill(accessCode);
+    await page.getByRole("button", { name: "Unlock evaluation" }).click();
+    await page
+      .getByRole("button", { name: "Open as Organisation owner" })
+      .click();
+    await expect(page).toHaveURL(/\/admin\/files\/retention$/u);
+    await page.goto("/admin/submissions/form");
+    await page.locator("body[data-hydrated='true']").waitFor();
+    if (viewport.width < 1000) {
+      await page
+        .getByRole("button", { name: "Settings", exact: true })
+        .first()
+        .click();
+    }
+    const properties = page.locator(".fb-inspector summary").filter({
+      hasText: "Form properties",
+    });
+    for (const hideBanner of [false, true]) {
+      if (hideBanner) {
+        await page.getByRole("button", { name: "Hide evaluation bar" }).click();
+      }
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+      // Match the evaluator's normal scroll-then-hit-test interaction. A sticky
+      // toolbar must not obscure a control that the browser considers visible.
+      await properties.scrollIntoViewIfNeeded();
+      await expect
+        .poll(() =>
+          properties.evaluate((element) => {
+            const bounds = element.getBoundingClientRect();
+            return element.contains(
+              document.elementFromPoint(
+                bounds.x + bounds.width / 2,
+                bounds.y + bounds.height / 2,
+              ),
+            );
+          }),
+        )
+        .toBe(true);
+      await properties.click();
+      await page.getByRole("textbox", { name: "Form name" }).click();
+      await properties.click();
+      const save = page.getByRole("button", {
+        name: "Save draft",
+        exact: true,
+      });
+      await save.focus();
+      await expect(save).toBeFocused();
+      await expect(save).toBeInViewport();
+      const canvas = page.locator(".fb-canvas-page");
+      await page.getByRole("button", { name: "Preview", exact: true }).click();
+      if (viewport.width < 1000) {
+        await page.getByRole("button", { name: "Close preview" }).click();
+        await page.getByRole("button", { name: "Canvas", exact: true }).click();
+      }
+      await expect
+        .poll(() => canvas.evaluate((element) => element.clientHeight))
+        .toBeGreaterThanOrEqual(200);
+      const titleField = canvas
+        .locator(".fb-canvas-field")
+        .first()
+        .getByRole("button");
+      await titleField.click();
+      await page
+        .getByRole("button", { name: "Settings", exact: true })
+        .first()
+        .click();
+      await expect(page.getByLabel("Label", { exact: true })).toHaveValue(
+        "Session title",
+      );
+    }
+  });
+}
+
 test("form recovery reconciles renamed event choices and stays saveable beneath the evaluation header", async ({
   page,
 }) => {

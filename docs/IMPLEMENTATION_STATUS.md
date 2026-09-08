@@ -14,11 +14,12 @@ Git history retains earlier committed work logs.
   readiness or live-provider acceptance.
 - Source `f3f0b887` passed the full release gate and was deployed on 8 September.
   Recovery, mouse/keyboard saving and publication passed on deployed `/evaluate`.
-- The latest independent run published the CFP but was blocked at anonymous
-  interaction, with **0% coverage and no acceptance score**. Its fixture was reset.
-- The evaluator now separates anonymous checks from publication dependencies;
-  a fresh deployed run must verify the revised execution. Provider, operational
-  and manual acceptance gaps remain below.
+- The revised deployed evaluation continued into authenticated submissions
+  despite blocked anonymous checks. Coverage reached **7.368%**, with the score
+  withheld below the 60% gate. Its fixture was reset.
+- Local changes address the proposal-URL handoff and toolbar overlap. Deployment
+  and a fresh independent run remain necessary; provider, operational and manual
+  acceptance gaps remain below.
 
 Status terms:
 
@@ -115,7 +116,8 @@ change. The latest complete gate supersedes older test-count histories.
 | Form-recovery fixes | Shared load/restore choice reconciliation preserves custom fields, stable routing/conditions and revision tokens; removed choices require repair. Validation returns 400; actual revision conflicts retain 409. Toolbar stays below topbar/banner. Focused checks and the full gate passed. Deployed rename → restore → mouse/keyboard save → reload → immutable publication passed. | Bounded production workflow; not full submission/provider acceptance. |
 | Follow-up Astra/high review | `codex exec review --uncommitted` reported no actionable findings. Focused tests/types/build passed, as did 25 evaluator tests, three configurations and a clean serial run of all six evaluation-browser tests. | An earlier browser run overlapped a rebuild and is invalid evidence; the serial rerun resolved it. No additional source fixes or deployment. |
 | Release-gate accessibility fix | Event Setup's section anchor could falsely announce a page change after validation. Route announcements now ignore anchor-only changes. Astra/high review found no actionable issues; typecheck/build/Biome, three serial browser repeats and the full gate passed. | A concurrent review rebuild invalidated one initial browser attempt; retained separately from passing evidence. |
-| Evaluation dependency split | 27 evaluator tests and all three configurations passed. Installed AEK CLI tests prove blocked anonymous checks allow applicant execution after publication, while missing publication blocks both. Import regeneration is identical; Astra/high review found no actionable issues; `check:core` passed (366.6 s). | Synthetic orchestration evidence only. No browser campaign or production mutation for this configuration change. |
+| Evaluation dependency split | 27 evaluator tests and all three configurations passed. Installed AEK CLI tests cover publication/anonymous dependencies; importer regeneration is identical; Astra/high reviews found no actionable issues; `check:core` passed (366.6 s). The deployed run below verified CFP-S2 starts after blocked anonymous checks. | Evaluator commit `4bc7825b`; application remains `f3f0b887`. Starting a scenario does not establish full acceptance. |
+| Proposal handoff and toolbar follow-up | 27 evaluator tests, three configurations, six focused evaluation-browser checks and eight submission/visual checks passed. Review/fix loop repaired canvas collapse and test dependence; final Astra/high review found no actionable issues. Core types, quality, build, 651 unit, 1,924 Worker and one Agent test passed; the full configuration/contracts lane passed on rerun after refreshing the visually reviewed film snapshot pin. | Source only. The initial `check:core` aggregate failed the stale pin; its failed lane was rerun separately. Observed organiser URLs reopen revised proposals and deny gate-only/reviewer access; a fresh deployed evaluation must verify the actual output handoff. |
 
 Latest local evidence locations:
 
@@ -136,7 +138,7 @@ Requested CLI model/effort receipts do not confirm a resolved provider snapshot.
 | --- | --- | --- |
 | Local regression `2026-09-07T02-12-32` | Nine criteria, 100% score and coverage with requested Astra/medium agent and judge; 265 artifacts verified. | Mailpit capture, real ClamAV clean/EICAR scans, versioned downloads/ZIP, anonymous denial and publication. Active baseline `2026-09-07T02-29-38-534Z-67a9d91b487d-ee63187c`; self-comparison has zero drift. Not the 98-criterion upstream suite or hosted-provider acceptance. |
 | Local upstream `2026-09-07T11-12-08` | Score withheld at 4.737% coverage; CFP-S1 completed, CFP-S2 blocked at applicant verification, 18 dependent scenarios blocked, 17 manual checks pending. | CLI exit 0 was completion without a coverage gate. Provisional 61.111% is not an acceptance score. Earlier `10-54-20` failed judge OAuth refresh and exhausted its setup call budget. |
-| Deployed `/evaluate` `2026-09-08T01-11-18` | Score withheld at 0% coverage; CFP-S1 blocked, 19 dependent scenarios blocked, 17 manual checks pending. The explicit 60% coverage gate exited 2. | Codex collection and requested Astra judging, 240 calls/scenario and 1,200 s deadline. All 148 artifacts verified. Health matched the deployed revision above. |
+| Deployed `/evaluate` `2026-09-08T02-33-47` | Score withheld at 7.368% coverage; CFP-S1 completed, anonymous checks blocked, CFP-S2 ran but its required URL output was blocked, 18 downstream scenarios blocked, 17 manual checks pending. The 60% coverage gate exited 2. | Codex collection and requested Astra judging, 240 calls/scenario and 1,200 s deadline. All 202 artifacts verified. Provisional 89.286% is not an acceptance score. Health matched `f3f0b887` before and after reset. |
 
 The earlier recovery/save blocker is resolved: both the direct deployed smoke
 and independent evaluator published successfully. Anonymous Start application
@@ -145,29 +147,45 @@ Playwright probe loaded those frames but received no token within 30 seconds.
 [Cloudflare documents automated-browser blocking](https://developers.cloudflare.com/turnstile/troubleshooting/testing/);
 observed 401 responses alone do not identify a configuration defect. Production
 verification remains enforced. This is unavailable interaction evidence, not
-proof of absent form capabilities. The activated applicant exposed Start
-application, but CFP-S2 could not run after CFP-S1 was marked blocked. The importer
-now puts anonymous steps 9–11 in CFP-S1-PUBLIC and leaves CFP-S2 dependent on
-publication. All original steps, success signals and 98 criteria remain; execution
-uses 21 scenarios. Authenticated checks cannot prove anonymous verification.
-This revision has no deployed campaign result yet; prior reports are unchanged.
-The evaluator also created Forward Summit 2028 with a separate empty queue and
-reported a recoverable form-properties toolbar obstruction for focused follow-up.
+proof of absent form capabilities. Splitting anonymous steps 9–11 into
+CFP-S1-PUBLIC allowed CFP-S2 to run: draft/resume, required-field errors,
+Workshop/Talk conditional visibility, two submitted proposals and a persisted
+abstract revision were observed. These do not prove ordinary signup, verification,
+email delivery or organiser-side revision visibility. All original steps,
+success signals and 98 criteria remain across 21 executable scenarios.
+
+Automatic approval review rejected CFP-S2's observed draft-specific proposal URL
+as a potential capability link. The evaluator left its required output unpublished,
+blocking later scenarios. A separate read-only check showed the applicant could
+see the proposal through that URL while anonymous and reviewer sessions could
+not; source selects the record from the authenticated applicant's applications.
+This supports an approval false positive, not a missing submission capability.
+The rejected URL was not published and the report was not regraded. The judge
+also recorded a minor sticky-toolbar obstruction; Control+Home restored access.
+The multi-event probe again created Forward Summit 2028 with a separate empty queue.
+
+The follow-up source change directs CFP-S2 to verify the revised proposal as
+organiser and hand off its observed authenticated detail route. The form builder
+reserves toolbar space above independently scrolling panes; short viewports can
+scroll the frame as a unit. These changes do not alter the sealed run or prove
+that a future deployed handoff will clear approval review.
 
 The deployed fixture was reset before and after the authorised run. Final checks
 proved the old organiser session invalid and clean applicant/reviewer baselines
-with no selected persona. The direct smoke also reset its fixture on completion.
+with no selected persona. The latest reset completed at 03:05:56 UTC on
+8 September; the earlier direct smoke also reset its fixture on completion.
 The shared fixture must not be reset while another evaluator is using it; follow
 [SBEK evaluation](SBEK_EVALUATION.md) and the evaluator README.
 
 Reports are retained under `evals/.agent-eval/runs/<run-id>/report.html`.
 Deployment health/reset/session receipts are in
-`.artifacts/release-85204439/`; local upstream attempts are in
+`.artifacts/deployed-evaluation-20260908-revised/`; earlier release/smoke evidence
+is in `.artifacts/release-85204439/`, and local upstream attempts are in
 `.artifacts/full-validation-20260907/`. Verified artifact roots:
 
 - Active local regression: `5c7afb60bb4a86f5937aacdd786fe0de16ff5b0c5d798dc16517334b5b5c5415`.
 - Local upstream: `86268503e077e1d7560fcf7d40b2cbb5babb7724e64995fe2b5276aef780d427`.
-- Deployed upstream: `3a0405fac7a54da6f42819be14746843c3ff116644c33f7d4e12e0c46a1b828d`.
+- Deployed upstream: `ba217e54c57db71afa3c28d3a82c3facc0a5d935278f8b351f3258515878cd6a`.
 
 ## Deployment evidence
 
@@ -239,10 +257,9 @@ acknowledgement latency remain outstanding.
 
 ## Remaining acceptance work
 
-1. **Deployed evaluation:** verify the revised publication/anonymous scenario
-   split with fresh personas and an explicit coverage gate. Anonymous security
-   verification remains unproven. Check the reported form-properties toolbar
-   obstruction; preserve missing-evidence boundaries in acceptance claims.
+1. **Deployed evaluation:** release the reviewed toolbar fix, then repeat the
+   revised proposal-link handoff with fresh personas and the coverage gate. Reset
+   the fixture after the authorised run. Anonymous verification remains unproven.
 2. **Provider paths:** exercise Airtable authority/recovery, Accelevents live
    reconciliation, external AI/tool-loop/assessment and fresh provider-error
    callbacks. Verify newer schedule-change emails, reminder cron and controlled

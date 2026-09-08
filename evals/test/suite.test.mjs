@@ -97,11 +97,11 @@ test("CFP execution split preserves every original step and success signal exact
   }
 });
 
-test("AEK runs applicants after blocked anonymous checks but blocks them without publication", () => {
+test("AEK binds the organiser proposal handoff after blocked anonymous checks and blocks missing prerequisites", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "programcue-dependencies-"));
   try {
     const source = loadConfig(path.join(root, "specs/upstream/01-call-for-papers.yaml"));
-    const ids = ["CFP-S1", "CFP-S1-PUBLIC", "CFP-S2"];
+    const ids = ["CFP-S1", "CFP-S1-PUBLIC", "CFP-S2", "CFP-S3"];
     // Exercise the installed public CLI with explicit synthetic command evidence.
     // This tests orchestration only; it never opens a browser or claims acceptance.
     fs.writeFileSync(
@@ -112,12 +112,16 @@ test("AEK runs applicants after blocked anonymous checks but blocks them without
       const context = JSON.parse(fs.readFileSync(process.env.AEK_COLLECT_CONTEXT, 'utf8'));
       const publicationBlocked = process.env.DEPENDENCY_TEST_BLOCK_PUBLICATION === '1';
       const blocked = id === 'CFP-S1-PUBLIC' || (id === 'CFP-S1' && publicationBlocked);
-      const url = 'https://example.com/apply';
-      if (id !== 'CFP-S1' && context.inputs.portalUrl.value !== url) throw new Error('Lost portal binding');
+      const portalUrl = 'https://example.com/apply';
+      const proposalUrl = 'https://example.com/admin/submissions/synthetic-proposal';
+      if (id === 'CFP-S3') {
+        if (context.inputs.proposalUrl.value !== proposalUrl) throw new Error('Lost organiser proposal binding');
+      } else if (id !== 'CFP-S1' && context.inputs.portalUrl.value !== portalUrl) throw new Error('Lost portal binding');
+      const url = id === 'CFP-S1' ? portalUrl : proposalUrl;
       const name = id === 'CFP-S1' ? 'portalUrl' : 'proposalUrl';
       console.log(JSON.stringify({version: 1, outcome: blocked ? 'blocked' : 'completed',
         summary: 'Synthetic dependency test, not product evidence', observations: [],
-        ...(blocked ? {} : {outputs: {[name]: {value: url, evidenceRefs: ['step:1']}}})}));
+        ...(blocked || id === 'CFP-S3' ? {} : {outputs: {[name]: {value: url, evidenceRefs: ['step:1']}}})}));
     `,
     );
     fs.writeFileSync(
@@ -168,8 +172,13 @@ test("AEK runs applicants after blocked anonymous checks but blocks them without
         JSON.parse(fs.readFileSync(path.join(runDir, id, "evidence.json"), "utf8"));
       assert.equal(evidence("CFP-S1-PUBLIC").outcome, "blocked");
       assert.equal(evidence("CFP-S2").outcome, publicationBlocked ? "blocked" : "completed");
+      assert.equal(evidence("CFP-S3").outcome, publicationBlocked ? "blocked" : "completed");
       if (!publicationBlocked) {
         assert.equal(evidence("CFP-S2").inputs.portalUrl.value, "https://example.com/apply");
+        assert.equal(
+          evidence("CFP-S3").inputs.proposalUrl.value,
+          "https://example.com/admin/submissions/synthetic-proposal",
+        );
       }
     }
   } finally {

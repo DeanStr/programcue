@@ -40,7 +40,8 @@ const handoffs = {
   },
   "CFP-S2": {
     name: "proposalUrl",
-    instruction: "Publish the saved CI proposal's ordinary detail URL as proposalUrl.",
+    instruction:
+      "After completing the speaker checks and recording the submitted/edited checkpoints, switch_persona to organizer. In the canonical event's Applications queue, open the CI proposal and verify its title and revised abstract. Publish that observed authenticated organiser detail URL (/admin/submissions/:submissionId) as proposalUrl for CFP-S3. This is an ordinary record route requiring organiser access, not a credential or capability link. Do not use the applicant portal's draft query URL, construct a URL from a record ID, or substitute the queue URL. If the detail page cannot be opened and verified, report the handoff blocked.",
   },
   "CFP-S4": {
     name: "sessionUrl",
