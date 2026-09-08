@@ -10,7 +10,7 @@ Two suites have separate configs and baseline directories. Runs share `.agent-ev
 
 | Suite | Config | Contract |
 | --- | --- | --- |
-| Upstream SBEK, local | `evalkit.local.yaml` | 7 areas, 20 scenarios, 98 criteria, optional CRM included by the run commands below |
+| Upstream SBEK, local | `evalkit.local.yaml` | 7 areas, 21 executable scenarios from 20 upstream scripts, 98 criteria; optional CRM included |
 | Upstream SBEK, production | `evalkit.production.yaml` | Same criteria, production aliases and `/evaluate` authentication |
 | Programcue regression, local | `evalkit.regression.yaml` | 9 additional criteria covering draft/publication isolation, actual versioned ZIP bytes, real local scan receipts, and Mailpit capture |
 
@@ -22,6 +22,16 @@ rubric ID, criterion, pass condition, weight, evidence description and manual
 instruction. Generated scenario adaptations add Programcue navigation guidance,
 explicit dependencies, typed URL handoffs, isolated personas and selected
 checkpoints. Edit the importer to change those adaptations, then regenerate.
+
+CFP-S1 runs the original authoring/publication and multi-event steps. Its
+anonymous steps 9–11 run in `CFP-S1-PUBLIC`, which consumes the observed portal
+URL. CFP-S2 depends on publication, not anonymous verification; a blocked
+security check therefore does not prevent testing an already authenticated
+applicant. CFP-S2 always checks options, conditional visibility and validation.
+CFP-01–03 retain their original requirements and include evidence from all three
+scenarios. Authenticated evidence does not prove anonymous verification or
+ordinary signup. Missing public evidence remains unavailable to the judge.
+The split changes the evaluation fingerprint and requires a fresh run.
 
 ## Install and validate
 
@@ -81,8 +91,11 @@ or imports production secrets.
 # Fresh full upstream evaluation, including the CRM bonus:
 npm run local
 
-# Bounded first-area pilot (CFP-S1 has no prerequisites):
+# Publication-only pilot (does not exercise anonymous form interaction):
 npm run local -- --areas call-for-papers --scenarios CFP-S1 --max-turns 45
+
+# Publication plus anonymous checks:
+npm run local -- --areas call-for-papers --scenarios CFP-S1,CFP-S1-PUBLIC
 
 # Separate Programcue requirements:
 npm run regression:all -- --fail-under-score 100 --fail-under-coverage 100

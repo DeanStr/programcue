@@ -47,6 +47,15 @@ scenarios:
       capability.
 
 
+      This scenario owns original CFP-S1 steps 1–8 and 12. Anonymous steps 9–11
+      run separately in CFP-S1-PUBLIC; do not perform them here or treat their
+      unavailable evidence as a publication failure. Verify the published
+      version and publish portalUrl only from observed evidence. After the
+      multi-event probe, restore the organizer's canonical event before
+      finishing. Completion here proves neither anonymous access nor applicant
+      validation.
+
+
       ORIGINAL SCENARIO SCRIPT:
 
       1. Navigate to the app root. Find the organizer/admin entry point — try
@@ -85,25 +94,6 @@ scenarios:
       "View
          public form", or the visible address). Record the exact URL as an observation
          — later scenarios reuse it.
-      9. Sign out. Load the public portal WITHOUT being logged in. Screenshot
-      the
-         page showing event branding/name, the submission deadline, and the form
-         (or its start button).
-      10. On the public form, open the track dropdown, the format dropdown, and
-      the
-         "Audience level" dropdown; screenshot each open so the options are visible
-         (the three fixture tracks, the five fixture formats, and
-         Beginner/Intermediate/Advanced). Then test the conditional field: select
-         format "Workshop (120 min)" and screenshot showing "Workshop prerequisites"
-         visible; switch to "Talk (30 min)" and screenshot showing it hidden. Record
-         whether visibility changed without a full page reload. If the form cannot be
-         interacted with while logged out (account required first), record that —
-         these checks are repeated in CFP-S2 as the speaker.
-      11. Attempt to submit (or advance past the page containing required
-      fields) with
-         "Key takeaway" and other required fields left empty. Screenshot the
-         validation error. If the form requires creating an account before it can be
-         filled, record that and leave validation testing to the speaker scenario.
       12. MULTI-EVENT PROBE. Sign back in as the organizer and look for a way to
       run a
          SECOND event alongside the first: an events list, an event switcher, a
@@ -130,15 +120,87 @@ scenarios:
     successSignals:
       - Builder screenshot shows "Key takeaway" (required) and "Audience level"
         dropdown
-      - Public portal loads logged-out with event name and a visible deadline
-      - Two screenshots proving the conditional field toggles with format
-        selection
-      - Validation error screenshot on empty required field
       - Recorded observation of the public portal URL
     dependsOn: []
     outputs:
       portalUrl:
         type: url
+  - id: CFP-S1-PUBLIC
+    name: Anonymous visitor checks the published CFP
+    kind: browser
+    persona: anonymous
+    requiresAuth: false
+    allowedPersonas:
+      - organizer
+      - speaker
+      - reviewer
+      - anonymous
+    instructions: >-
+      PROGRAMCUE EXECUTION ADAPTATION: Use the configured fixture identities and
+      current saved persona. Replace every sign-out/sign-in role transition
+      below with switch_persona. For public checks switch to anonymous. Never
+      authenticate another identity in the current context. Do not repeat signup
+      when already authenticated; explicitly distinguish pre-provisioned access
+      from signup evidence.
+
+
+      Use the canonical Future of Events 2027 event when a pre-seeded event is
+      needed. Fixture emails override literal example addresses below. Record
+      actual dates, track/format names and any substituted fixture values.
+      Follow the original criterion: substitutions cannot hide a missing
+      capability.
+
+
+      This scenario owns original CFP-S1 steps 9–11. Use the bound published
+      portalUrl in the anonymous persona. Keep security checks enforced: never
+      bypass challenges or substitute authenticated evidence for anonymous
+      evidence. If verification or account requirements prevent interaction,
+      record the precise boundary and report blocked for unavailable checks.
+      Applicant checks run independently in CFP-S2; do not create a submission
+      here.
+
+
+      Use the bound portalUrl from CFP-S1; verify the record before continuing.
+
+
+      ORIGINAL SCENARIO SCRIPT:
+
+      9. Sign out. Load the public portal WITHOUT being logged in. Screenshot
+      the
+         page showing event branding/name, the submission deadline, and the form
+         (or its start button).
+      10. On the public form, open the track dropdown, the format dropdown, and
+      the
+         "Audience level" dropdown; screenshot each open so the options are visible
+         (the three fixture tracks, the five fixture formats, and
+         Beginner/Intermediate/Advanced). Then test the conditional field: select
+         format "Workshop (120 min)" and screenshot showing "Workshop prerequisites"
+         visible; switch to "Talk (30 min)" and screenshot showing it hidden. Record
+         whether visibility changed without a full page reload. If the form cannot be
+         interacted with while logged out (account required first), record that —
+         these checks are repeated in CFP-S2 as the speaker.
+      11. Attempt to submit (or advance past the page containing required
+      fields) with
+         "Key takeaway" and other required fields left empty. Screenshot the
+         validation error. If the form requires creating an account before it can be
+         filled, record that and leave validation testing to the speaker scenario.
+
+
+      Missing optional features are findings: record them and continue the
+      reachable script. Use feature_not_found for an absent core capability and
+      blocked for unavailable access/evidence. Do not turn provider or
+      evidence-tool failures into product verdicts.
+    successSignals:
+      - Public portal loads logged-out with event name and a visible deadline
+      - Two screenshots proving the conditional field toggles with format
+        selection
+      - Validation error screenshot on empty required field
+    dependsOn:
+      - CFP-S1
+    inputs:
+      portalUrl:
+        from: CFP-S1
+        output: portalUrl
   - id: CFP-S2
     name: Speaker drafts, submits, and edits proposals
     kind: browser
@@ -168,7 +230,12 @@ scenarios:
       Saved fixture access does not prove ordinary signup or email verification.
       Record those parts as unexercised when using fixture activation; do not
       claim the full CFP-05 requirement passed merely because a session was
-      pre-captured.
+      pre-captured. Always exercise original step 5's dropdown and
+      conditional-field checks as the authenticated speaker, as well as step 4's
+      validation check: CFP-S1-PUBLIC may be blocked or unselected. These
+      observations establish authenticated behavior only; they do not prove
+      anonymous verification succeeded or that a security challenge is an
+      account requirement.
 
 
       Use the bound portalUrl from CFP-S1; verify the record before continuing.
@@ -467,6 +534,7 @@ rubric:
       - crud
     scenarios:
       - CFP-S1
+      - CFP-S1-PUBLIC
       - CFP-S2
     grader:
       type: llm
@@ -486,6 +554,7 @@ rubric:
       - depth
     scenarios:
       - CFP-S1
+      - CFP-S1-PUBLIC
       - CFP-S2
     grader:
       type: llm
@@ -507,6 +576,7 @@ rubric:
       - exists
     scenarios:
       - CFP-S1
+      - CFP-S1-PUBLIC
       - CFP-S2
     grader:
       type: llm

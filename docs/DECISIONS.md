@@ -2,6 +2,19 @@
 
 This file records durable decisions. It does not imply that every decided capability is implemented; verified delivery status lives in `IMPLEMENTATION_STATUS.md`.
 
+## Evaluation publication dependency — 8 September 2026
+
+The application-owned upstream importer separates CFP-S1's anonymous steps
+9–11 into CFP-S1-PUBLIC. CFP-S1 retains publication and the multi-event probe;
+both the anonymous scenario and CFP-S2 consume its observed portal URL. A blocked
+anonymous security check does not block an authenticated applicant scenario.
+CFP-S2 always exercises options, conditional visibility and validation, while
+anonymous verification and ordinary signup remain separate evidence boundaries.
+All original steps, success signals and 98 rubric requirements are retained;
+CFP-01–03 include the split scenario's evidence. This changes execution to 21
+scenarios and requires a fresh run, without reinterpreting prior reports or
+changing AEK's requirement that dependencies complete.
+
 ## Page announcements and section anchors — 8 September 2026
 
 Route progress and page announcements compare the pathname and query string.

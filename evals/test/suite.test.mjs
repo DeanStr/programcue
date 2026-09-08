@@ -36,7 +36,7 @@ test("the promoted regression baseline loads with the installed evaluator", () =
 test("all upstream criteria retain their identity, requirements, weights and explicit grading policy", () => {
   const imported = loadSpecs(path.join(root, "specs/upstream"));
   assert.equal(imported.length, 7);
-  assert.equal(imported.flatMap((s) => s.scenarios).length, 20);
+  assert.equal(imported.flatMap((s) => s.scenarios).length, 21);
   assert.equal(imported.flatMap((s) => s.rubric).length, 98);
   for (const name of fs.readdirSync(path.join(root, "upstream/specs"))) {
     const original = YAML.parse(fs.readFileSync(path.join(root, "upstream/specs", name), "utf8"));
@@ -49,6 +49,12 @@ test("all upstream criteria retain their identity, requirements, weights and exp
       assert.equal(item.weight, r.weight);
       assert.equal(item.evidence, r.evidence);
       assert.equal(item.manualInstructions, r.manual_instructions);
+      assert.deepEqual(
+        item.scenarios,
+        ["CFP-01", "CFP-02", "CFP-03"].includes(r.id)
+          ? ["CFP-S1", "CFP-S1-PUBLIC", "CFP-S2"]
+          : (r.scenarios ?? []),
+      );
       assert.deepEqual(item.tags, [r.type]);
       assert.deepEqual(
         item.grader,
@@ -57,6 +63,117 @@ test("all upstream criteria retain their identity, requirements, weights and exp
           : { type: r.testability === "auto" ? "llm" : "manual" },
       );
     }
+  }
+});
+
+test("CFP execution split preserves every original step and success signal exactly once", () => {
+  const original = loadConfig(path.join(root, "upstream/specs/01-call-for-papers.yaml"));
+  const spec = loadConfig(path.join(root, "specs/upstream/01-call-for-papers.yaml"));
+  const publication = spec.scenarios.find((s) => s.id === "CFP-S1");
+  const anonymous = spec.scenarios.find((s) => s.id === "CFP-S1-PUBLIC");
+  const source = original.scenarios.find((s) => s.id === "CFP-S1");
+  const steps = source.steps.split(/(?=^\d+\. )/m);
+  for (const [index, step] of steps.entries()) {
+    const expected = index >= 8 && index <= 10 ? anonymous : publication;
+    const other = expected === anonymous ? publication : anonymous;
+    assert.ok(expected.instructions.includes(step.trimEnd()), `Missing original step ${index + 1}`);
+    assert.ok(
+      !other.instructions.includes(step.trimEnd()),
+      `Duplicated original step ${index + 1}`,
+    );
+  }
+  assert.deepEqual(
+    [...publication.successSignals, ...anonymous.successSignals].sort(),
+    [...source.success_signals].sort(),
+  );
+  assert.equal(anonymous.persona, "anonymous");
+  assert.equal(anonymous.requiresAuth, false);
+  const applicant = spec.scenarios.find((s) => s.id === "CFP-S2");
+  assert.deepEqual(applicant.dependsOn, [publication.id]);
+  assert.deepEqual(anonymous.inputs.portalUrl, applicant.inputs.portalUrl);
+  assert.match(applicant.instructions, /Always exercise original step 5/);
+  for (const scenario of spec.scenarios) {
+    assert.ok(!scenario.dependsOn.includes(anonymous.id));
+  }
+});
+
+test("AEK runs applicants after blocked anonymous checks but blocks them without publication", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "programcue-dependencies-"));
+  try {
+    const source = loadConfig(path.join(root, "specs/upstream/01-call-for-papers.yaml"));
+    const ids = ["CFP-S1", "CFP-S1-PUBLIC", "CFP-S2"];
+    // Exercise the installed public CLI with explicit synthetic command evidence.
+    // This tests orchestration only; it never opens a browser or claims acceptance.
+    fs.writeFileSync(
+      path.join(dir, "collect.mjs"),
+      `
+      import fs from 'node:fs';
+      const id = process.argv[2];
+      const context = JSON.parse(fs.readFileSync(process.env.AEK_COLLECT_CONTEXT, 'utf8'));
+      const publicationBlocked = process.env.DEPENDENCY_TEST_BLOCK_PUBLICATION === '1';
+      const blocked = id === 'CFP-S1-PUBLIC' || (id === 'CFP-S1' && publicationBlocked);
+      const url = 'https://example.com/apply';
+      if (id !== 'CFP-S1' && context.inputs.portalUrl.value !== url) throw new Error('Lost portal binding');
+      const name = id === 'CFP-S1' ? 'portalUrl' : 'proposalUrl';
+      console.log(JSON.stringify({version: 1, outcome: blocked ? 'blocked' : 'completed',
+        summary: 'Synthetic dependency test, not product evidence', observations: [],
+        ...(blocked ? {} : {outputs: {[name]: {value: url, evidenceRefs: ['step:1']}}})}));
+    `,
+    );
+    fs.writeFileSync(
+      path.join(dir, "spec.yaml"),
+      YAML.stringify({
+        ...source,
+        weight: 100,
+        scenarios: source.scenarios
+          .filter((s) => ids.includes(s.id))
+          .map((s) => ({
+            id: s.id,
+            name: s.name,
+            instructions: s.instructions,
+            dependsOn: s.dependsOn,
+            inputs: s.inputs,
+            outputs: s.outputs,
+            kind: "command",
+            requiresAuth: false,
+            collect: { command: `node collect.mjs ${s.id}`, methodFiles: ["collect.mjs"] },
+          })),
+        rubric: source.rubric.filter((r) => ["CFP-01", "CFP-02", "CFP-03"].includes(r.id)),
+      }),
+    );
+    for (const publicationBlocked of [false, true]) {
+      const runRoot = publicationBlocked ? "blocked-runs" : "published-runs";
+      fs.writeFileSync(
+        path.join(dir, "config.yaml"),
+        YAML.stringify({
+          version: 1,
+          project: { name: "Synthetic dependency contract", root: "." },
+          target: { kind: "repository" },
+          agent: { provider: "mock" },
+          judge: { provider: "mock" },
+          paths: { specs: "spec.yaml", runs: runRoot },
+        }),
+      );
+      const result = spawnSync(process.execPath, [aek, "collect", "--config", "config.yaml"], {
+        cwd: dir,
+        encoding: "utf8",
+        timeout: 30_000,
+        env: { ...process.env, DEPENDENCY_TEST_BLOCK_PUBLICATION: publicationBlocked ? "1" : "0" },
+      });
+      assert.equal(result.status, 0, result.stderr + result.stdout);
+      const runs = fs.readdirSync(path.join(dir, runRoot));
+      assert.equal(runs.length, 1);
+      const runDir = path.join(dir, runRoot, runs[0]);
+      const evidence = (id) =>
+        JSON.parse(fs.readFileSync(path.join(runDir, id, "evidence.json"), "utf8"));
+      assert.equal(evidence("CFP-S1-PUBLIC").outcome, "blocked");
+      assert.equal(evidence("CFP-S2").outcome, publicationBlocked ? "blocked" : "completed");
+      if (!publicationBlocked) {
+        assert.equal(evidence("CFP-S2").inputs.portalUrl.value, "https://example.com/apply");
+      }
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
   }
 });
 

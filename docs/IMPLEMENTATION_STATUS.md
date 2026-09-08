@@ -16,9 +16,9 @@ Git history retains earlier committed work logs.
   Recovery, mouse/keyboard saving and publication passed on deployed `/evaluate`.
 - The latest independent run published the CFP but was blocked at anonymous
   interaction, with **0% coverage and no acceptance score**. Its fixture was reset.
-- Next: resolve the anonymous security-check/dependency boundary and repeat
-  deployed acceptance with an explicit coverage gate. Provider, operational and
-  manual acceptance gaps remain below.
+- The evaluator now separates anonymous checks from publication dependencies;
+  a fresh deployed run must verify the revised execution. Provider, operational
+  and manual acceptance gaps remain below.
 
 Status terms:
 
@@ -115,6 +115,7 @@ change. The latest complete gate supersedes older test-count histories.
 | Form-recovery fixes | Shared load/restore choice reconciliation preserves custom fields, stable routing/conditions and revision tokens; removed choices require repair. Validation returns 400; actual revision conflicts retain 409. Toolbar stays below topbar/banner. Focused checks and the full gate passed. Deployed rename → restore → mouse/keyboard save → reload → immutable publication passed. | Bounded production workflow; not full submission/provider acceptance. |
 | Follow-up Astra/high review | `codex exec review --uncommitted` reported no actionable findings. Focused tests/types/build passed, as did 25 evaluator tests, three configurations and a clean serial run of all six evaluation-browser tests. | An earlier browser run overlapped a rebuild and is invalid evidence; the serial rerun resolved it. No additional source fixes or deployment. |
 | Release-gate accessibility fix | Event Setup's section anchor could falsely announce a page change after validation. Route announcements now ignore anchor-only changes. Astra/high review found no actionable issues; typecheck/build/Biome, three serial browser repeats and the full gate passed. | A concurrent review rebuild invalidated one initial browser attempt; retained separately from passing evidence. |
+| Evaluation dependency split | 27 evaluator tests and all three configurations passed. Installed AEK CLI tests prove blocked anonymous checks allow applicant execution after publication, while missing publication blocks both. Import regeneration is identical; Astra/high review found no actionable issues; `check:core` passed (366.6 s). | Synthetic orchestration evidence only. No browser campaign or production mutation for this configuration change. |
 
 Latest local evidence locations:
 
@@ -145,8 +146,11 @@ Playwright probe loaded those frames but received no token within 30 seconds.
 observed 401 responses alone do not identify a configuration defect. Production
 verification remains enforced. This is unavailable interaction evidence, not
 proof of absent form capabilities. The activated applicant exposed Start
-application, but CFP-S2 could not run after CFP-S1 was marked blocked. Review the
-upstream permission to defer authenticated form checks before another campaign.
+application, but CFP-S2 could not run after CFP-S1 was marked blocked. The importer
+now puts anonymous steps 9–11 in CFP-S1-PUBLIC and leaves CFP-S2 dependent on
+publication. All original steps, success signals and 98 criteria remain; execution
+uses 21 scenarios. Authenticated checks cannot prove anonymous verification.
+This revision has no deployed campaign result yet; prior reports are unchanged.
 The evaluator also created Forward Summit 2028 with a separate empty queue and
 reported a recoverable form-properties toolbar obstruction for focused follow-up.
 
@@ -235,10 +239,10 @@ acknowledgement latency remain outstanding.
 
 ## Remaining acceptance work
 
-1. **Deployed evaluation:** resolve the anonymous security-check/dependency
-   boundary without weakening production verification or claiming unobserved
-   behavior. Check the reported form-properties toolbar obstruction, then repeat
-   acceptance with fresh personas and an explicit coverage gate.
+1. **Deployed evaluation:** verify the revised publication/anonymous scenario
+   split with fresh personas and an explicit coverage gate. Anonymous security
+   verification remains unproven. Check the reported form-properties toolbar
+   obstruction; preserve missing-evidence boundaries in acceptance claims.
 2. **Provider paths:** exercise Airtable authority/recovery, Accelevents live
    reconciliation, external AI/tool-loop/assessment and fresh provider-error
    callbacks. Verify newer schedule-change emails, reminder cron and controlled

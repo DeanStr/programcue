@@ -12,6 +12,7 @@ for (const [name, hash] of Object.entries(provenance.sha256)) {
     throw new Error(`Changed upstream snapshot: ${name}`);
 }
 const dependencies = {
+  "CFP-S1-PUBLIC": ["CFP-S1"],
   "CFP-S2": ["CFP-S1"],
   "CFP-S3": ["CFP-S2"],
   "CFP-S4": ["CFP-S3"],
@@ -50,7 +51,13 @@ const handoffs = {
     instruction: "Publish the observed public programme URL as programmeUrl.",
   },
 };
-const bindings = { "CFP-S2": "CFP-S1", "CFP-S3": "CFP-S2", "SPK-S1": "CFP-S4", "EMB-S1": "AIA-S2" };
+const bindings = {
+  "CFP-S1-PUBLIC": "CFP-S1",
+  "CFP-S2": "CFP-S1",
+  "CFP-S3": "CFP-S2",
+  "SPK-S1": "CFP-S4",
+  "EMB-S1": "AIA-S2",
+};
 const checkpoints = {
   "CFP-S2": {
     submitted: "The submission confirmation and saved dashboard row were inspected.",
@@ -76,8 +83,12 @@ const selectors = {
   "CNT-11": ["CNT-S3", "versions"],
 };
 const notices = {
+  "CFP-S1":
+    "This scenario owns original CFP-S1 steps 1–8 and 12. Anonymous steps 9–11 run separately in CFP-S1-PUBLIC; do not perform them here or treat their unavailable evidence as a publication failure. Verify the published version and publish portalUrl only from observed evidence. After the multi-event probe, restore the organizer's canonical event before finishing. Completion here proves neither anonymous access nor applicant validation.",
+  "CFP-S1-PUBLIC":
+    "This scenario owns original CFP-S1 steps 9–11. Use the bound published portalUrl in the anonymous persona. Keep security checks enforced: never bypass challenges or substitute authenticated evidence for anonymous evidence. If verification or account requirements prevent interaction, record the precise boundary and report blocked for unavailable checks. Applicant checks run independently in CFP-S2; do not create a submission here.",
   "CFP-S2":
-    "Saved fixture access does not prove ordinary signup or email verification. Record those parts as unexercised when using fixture activation; do not claim the full CFP-05 requirement passed merely because a session was pre-captured.",
+    "Saved fixture access does not prove ordinary signup or email verification. Record those parts as unexercised when using fixture activation; do not claim the full CFP-05 requirement passed merely because a session was pre-captured. Always exercise original step 5's dropdown and conditional-field checks as the authenticated speaker, as well as step 4's validation check: CFP-S1-PUBLIC may be blocked or unselected. These observations establish authenticated behavior only; they do not prove anonymous verification succeeded or that a security challenge is an account requirement.",
   "CFP-S3":
     "Sam's saved identity grants no reviewer membership. Perform Jordan's invitation, then switch to reviewer and explicitly accept the pending invitation. Capture both states. Do not publish invitation or magic-link credentials.",
   "ABS-S3":
@@ -90,7 +101,34 @@ const notices = {
 fs.mkdirSync(path.join(root, "specs/upstream"), { recursive: true });
 for (const name of fs.readdirSync(path.join(root, "upstream/specs")).sort()) {
   const original = YAML.parse(fs.readFileSync(path.join(root, "upstream/specs", name), "utf8"));
-  const scenarios = original.scenarios.map((scenario) => {
+  const executionScenarios = original.scenarios.flatMap((scenario) => {
+    if (scenario.id !== "CFP-S1") return [scenario];
+    // Split the pinned numbered steps without rewriting or dropping their text.
+    // Fail if an upstream update changes the boundary we reviewed.
+    const steps = scenario.steps.split(/(?=^\d+\. )/m);
+    if (
+      steps.length !== 12 ||
+      steps.some((step, index) => !step.startsWith(`${index + 1}. `)) ||
+      steps.join("") !== scenario.steps
+    )
+      throw new Error("CFP-S1 must contain the pinned 12 numbered steps");
+    return [
+      {
+        ...scenario,
+        steps: [...steps.slice(0, 8), steps[11]].join(""),
+        success_signals: [scenario.success_signals[0], scenario.success_signals[4]],
+      },
+      {
+        ...scenario,
+        id: "CFP-S1-PUBLIC",
+        name: "Anonymous visitor checks the published CFP",
+        persona: "anonymous",
+        steps: steps.slice(8, 11).join(""),
+        success_signals: scenario.success_signals.slice(1, 4),
+      },
+    ];
+  });
+  const scenarios = executionScenarios.map((scenario) => {
     const persona = scenario.persona === "attendee" ? "anonymous" : scenario.persona;
     const origin = bindings[scenario.id];
     const handoff = handoffs[scenario.id];
@@ -134,7 +172,11 @@ for (const name of fs.readdirSync(path.join(root, "upstream/specs")).sort()) {
     criterion: r.criterion,
     weight: r.weight,
     tags: [r.type],
-    scenarios: r.scenarios ?? [],
+    // These criteria need publication plus real public/applicant interaction.
+    // Multi-event criteria remain attached to their unchanged step 12 in S1.
+    scenarios: ["CFP-01", "CFP-02", "CFP-03"].includes(r.id)
+      ? ["CFP-S1", "CFP-S1-PUBLIC", "CFP-S2"]
+      : (r.scenarios ?? []),
     grader:
       r.testability === "auto"
         ? { type: "llm" }
