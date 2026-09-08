@@ -81,8 +81,8 @@ export abstract class AiEvaluationProposalWorkflows extends AiFormProposalWorkfl
         },
         {
           field: "Scored weight",
-          before: `${round.criteria.filter((criterion) => criterion.inputType.startsWith("scale_")).reduce((total, criterion) => total + criterion.weightPercent, 0)}%`,
-          after: `${scoredWeight}%`,
+          before: `${round.criteria.filter((criterion) => criterion.inputType.startsWith("scale_")).reduce((total, criterion) => total + criterion.weightPercent, 0)}`,
+          after: `${scoredWeight}`,
         },
         {
           field: "Due date",
@@ -93,7 +93,7 @@ export abstract class AiEvaluationProposalWorkflows extends AiFormProposalWorkfl
       affectedRecords: args.criteria.map((criterion) => ({
         id: `criterion:${criterion.id}`,
         label: criterion.name,
-        detail: `${criterion.inputType.replaceAll("_", " ")} · ${criterion.weightPercent}% · ${criterion.required ? "required" : "optional"}`,
+        detail: `${criterion.inputType.replaceAll("_", " ")} · weight ${criterion.weightPercent} · ${criterion.required ? "required" : "optional"}`,
         href: `/admin/review?round=${encodeURIComponent(round.id)}`,
       })),
       approvalRequired: true,

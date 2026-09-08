@@ -1,5 +1,7 @@
 export type WeightedCriterion = {
   id: string;
+  // Persisted/API name retained for immutable deployed review snapshots.
+  // Values are relative weights, normalised by their total when scoring.
   weightPercent: number;
   inputType?: "scale_5" | "scale_10";
 };
@@ -12,8 +14,18 @@ function weightedFivePointScore(
     (sum, criterion) => sum + criterion.weightPercent,
     0,
   );
-  if (criteria.length === 0 || totalWeight !== 100) {
-    throw new Error("Evaluation criteria must exist and total 100%.");
+  if (
+    criteria.length === 0 ||
+    criteria.some(
+      (criterion) =>
+        !Number.isInteger(criterion.weightPercent) ||
+        criterion.weightPercent <= 0 ||
+        criterion.weightPercent > 100,
+    )
+  ) {
+    throw new Error(
+      "Evaluation criteria must have positive whole-number weights from 1 to 100.",
+    );
   }
   const invalid = criteria.filter((criterion) => {
     const score = scores[criterion.id];
@@ -25,11 +37,10 @@ function weightedFivePointScore(
     );
   }
   const score = criteria.reduce(
-    (sum, criterion) =>
-      sum + (scores[criterion.id] * criterion.weightPercent) / 100,
+    (sum, criterion) => sum + scores[criterion.id] * criterion.weightPercent,
     0,
   );
-  return Number(score.toFixed(2));
+  return Number((score / totalWeight).toFixed(2));
 }
 
 export function calculateWeightedScore(

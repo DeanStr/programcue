@@ -45,6 +45,9 @@ export async function handleEvaluationAdminAiIntent(
     const assessment = await new AiReviewAssessmentService(env).generate(
       viewer,
       {
+        providerConfiguration: String(
+          values.get("providerConfiguration") ?? "",
+        ),
         generationIntentId: values.get("generationIntentId"),
         roundId: values.get("roundId"),
         submissionId: values.get("submissionId"),
@@ -61,6 +64,9 @@ export async function handleEvaluationAdminAiIntent(
     const assessment = await new AiReviewAssessmentService(env).generate(
       viewer,
       {
+        providerConfiguration: String(
+          values.get("providerConfiguration") ?? "",
+        ),
         generationIntentId: values.get("generationIntentId"),
         roundId: values.get("roundId"),
         submissionId: values.get("submissionId"),

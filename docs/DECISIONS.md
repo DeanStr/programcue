@@ -2241,3 +2241,27 @@ after ABS scoring. Historical reviewer queue entries remain visible and must be
 identified honestly; upstream criteria and sealed earlier results are unchanged.
 
 Co-author revisions in ABS-S1 must be persisted before CFP-S3 assigns any review: the production review freeze remains enforced. New and saved form builders display the current scoped event timezone; UTC is not a substitute for a missing saved form.
+
+## 2026-09-08 — Relative rubric weights and explicit AI destinations
+
+Scored criteria accept positive whole-number relative weights from 1 to 100;
+contextual criteria retain zero weight. The weighted score divides the sum of
+normalised score contributions by the total scored weight and rounds only the
+final result. Weights 2 and 1 therefore express an exact 2:1 ratio. Existing
+percentage rubrics retain their results. Keep the deployed `weightPercent` API
+property and `weight_percent` column: immutable review snapshots and AI provenance
+already use them. Do not rewrite those historical records or hashes.
+
+Before AI assessment confirmation, show the configured provider, model and actual
+endpoint origin (or Workers AI binding). Opening request details sends nothing.
+A new generation request fails before persistence or provider calls if that
+configuration changed since the organiser inspected it. Completed idempotent
+replays return their retained operation without requiring current credentials or
+configuration. Missing configuration disables generation with its specific error.
+
+The upstream AI generation/override steps have their own ABS-S2-AI scenario and
+retain ABS-14. Core decisions do not depend on optional AI success. Collect
+abstract management first so human scoring and the independent AI branch run
+before CFP decisions close review; preserve all upstream criteria and sealed
+historical evidence. A suite test checks this order and proves a blocked AI
+scenario does not prevent the downstream core workflow.

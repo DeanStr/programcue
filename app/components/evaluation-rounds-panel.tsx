@@ -84,9 +84,13 @@ export function EvaluationRoundsPanel() {
                 {criterion.weightPercent > 0 ? (
                   <>
                     <div className="progress">
-                      <span style={{ width: `${criterion.weightPercent}%` }} />
+                      <span
+                        style={{
+                          width: `${(criterion.weightPercent / round.criteria.reduce((total, item) => total + item.weightPercent, 0)) * 100}%`,
+                        }}
+                      />
                     </div>
-                    <b>{criterion.weightPercent}%</b>
+                    <b>Weight {criterion.weightPercent}</b>
                   </>
                 ) : (
                   <span className="help">unweighted</span>

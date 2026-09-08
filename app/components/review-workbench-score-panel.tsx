@@ -414,7 +414,7 @@ export function ReviewScorePanel() {
                   </div>
                   <span className="review-weight pc-num" id={weightId}>
                     {criterion.weightPercent > 0
-                      ? `${criterion.weightPercent}%`
+                      ? `Weight ${criterion.weightPercent}`
                       : criterion.required
                         ? "Required"
                         : "Optional"}
@@ -520,7 +520,7 @@ export function ReviewScorePanel() {
                 <small className="subtle">
                   {weightedScore === null
                     ? "Appears once every scored criterion has a value."
-                    : "Weighted by the criterion percentages in this round."}
+                    : "Weighted by the relative criterion weights in this round."}
                 </small>
               </div>
               <strong

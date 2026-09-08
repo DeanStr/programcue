@@ -8,6 +8,11 @@ import type { AiModelProvider } from "./openai-responses-provider.server";
 export const generationInputSchema = z
   .object({
     generationIntentId: z.uuid("Refresh before generating this AI assessment."),
+    providerConfiguration: z
+      .string()
+      .min(1, "Review the AI provider and destination before confirming.")
+      .max(1000)
+      .optional(),
     roundId: z.string().trim().min(1).max(200),
     submissionId: z.string().trim().min(1).max(200),
     retryFailedOperationId: z.string().trim().min(1).max(200).optional(),

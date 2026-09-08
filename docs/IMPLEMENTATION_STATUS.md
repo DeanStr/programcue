@@ -18,8 +18,12 @@ Git history retains earlier committed work logs.
   the score is withheld, and all **373 artifacts verified**. Co-author persistence
   and real advancement into Initial Review succeeded. An approval-blocked optional
   AI probe marked ABS-S2 blocked and stopped decisions/speaker/content/scheduling.
-- Anonymous production verification remains unavailable to automation. Exact 2:1
-  rubric weights are a product gap: only integer percentages saved.
+- Anonymous production verification remains unavailable to automation. The current
+  candidate adds exact relative rubric weights, explicit AI destination confirmation
+  and an independent AI scenario (22 executable scenarios, 98 criteria). Focused
+  scoring, D1 persistence, API and evaluation-sequencing tests pass; release and
+  fresh deployed evaluation evidence are pending. The deployed release still has
+  the integer-percentage limitation.
 - The fixture was reset and session invalidation checked at **15:56 UTC**.
 
 Status terms:

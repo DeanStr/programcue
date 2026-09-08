@@ -10,7 +10,7 @@ Two suites have separate configs and baseline directories. Runs share `.agent-ev
 
 | Suite | Config | Contract |
 | --- | --- | --- |
-| Upstream SBEK, local | `evalkit.local.yaml` | 7 areas, 21 executable scenarios from 20 upstream scripts, 98 criteria; optional CRM included |
+| Upstream SBEK, local | `evalkit.local.yaml` | 7 areas, 22 executable scenarios from 20 upstream scripts, 98 criteria; optional CRM included |
 | Upstream SBEK, production | `evalkit.production.yaml` | Same criteria, production aliases and `/evaluate` authentication |
 | Programcue regression, local | `evalkit.regression.yaml` | 9 additional criteria covering draft/publication isolation, actual versioned ZIP bytes, real local scan receipts, and Mailpit capture |
 
@@ -53,6 +53,15 @@ reviews remain inspectable; current and historical evidence must be labelled by
 round. Only CFP-S4 releases decisions and closes the CFP. This ordering requires
 the abstract-management prerequisites when selecting CFP-S4, including a
 CFP-only run. Existing sealed runs are unchanged; use a fresh evaluation.
+
+The optional AI generation and human-override steps run in `ABS-S2-AI` after
+ABS-S3's human scoring. ABS-14 belongs to that separate scenario; no core
+scenario depends on it. A blocked AI check retains its own unavailable evidence
+without blocking decisions or speaker/content/scheduling. Generated abstract
+management uses the `00-` filename so AEK collects this branch before CFP-S4
+releases decisions and makes the proposals unavailable for review. The importer
+preserves the original step text and all 98 criteria; tests verify collection
+order and dependency behavior with the installed public AEK CLI.
 
 ## Install and validate
 

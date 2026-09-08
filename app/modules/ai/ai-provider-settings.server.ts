@@ -49,6 +49,31 @@ export type AiProviderReadiness = {
   model: string | null;
 };
 
+/** Public destination details for an explicit request confirmation; never credentials. */
+export function aiProviderConfirmation(
+  env: CloudflareEnvironment,
+  readiness: AiProviderReadiness,
+) {
+  if (!readiness.configured || !readiness.selection) return null;
+  const { provider, model, revision } = readiness.selection;
+  const destination =
+    provider === "workers_ai"
+      ? "Cloudflare Workers AI binding"
+      : new URL(
+          provider === "openai"
+            ? env.OPENAI_RESPONSES_URL?.trim() ||
+                "https://api.openai.com/v1/responses"
+            : env.ANTHROPIC_MESSAGES_URL?.trim() ||
+                "https://api.anthropic.com/v1/messages",
+        ).origin;
+  return {
+    providerLabel: aiProviderLabels[provider],
+    model,
+    destination,
+    configuration: JSON.stringify([provider, model, revision, destination]),
+  };
+}
+
 export class AiProviderSettingsConflictError extends Error {
   constructor() {
     super(

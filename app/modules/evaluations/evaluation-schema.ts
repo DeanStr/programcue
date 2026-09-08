@@ -42,11 +42,11 @@ export const evaluationRoundSchema = z
       (sum, criterion) => sum + criterion.weightPercent,
       0,
     );
-    if (total !== 100) {
+    if (total <= 0) {
       context.addIssue({
         code: "custom",
         path: ["criteria"],
-        message: `Criterion weights must total 100%; the current total is ${total}%.`,
+        message: "Add at least one scored criterion with a positive weight.",
       });
     }
     for (const [index, criterion] of round.criteria.entries()) {
@@ -572,11 +572,11 @@ export const draftRoundUpdateSchema = z
       (sum, criterion) => sum + criterion.weightPercent,
       0,
     );
-    if (total !== 100) {
+    if (total <= 0) {
       context.addIssue({
         code: "custom",
         path: ["criteria"],
-        message: `Criterion weights must total 100%; the current total is ${total}%.`,
+        message: "Add at least one scored criterion with a positive weight.",
       });
     }
     for (const [index, criterion] of round.criteria.entries()) {

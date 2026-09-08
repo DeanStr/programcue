@@ -5,7 +5,10 @@ import {
   ResponseBodyTooLargeError,
   readBoundedResponseJson,
 } from "~/platform/http/read-response";
-import { AiProviderSettingsService } from "./ai-provider-settings.server";
+import {
+  AiProviderSettingsService,
+  aiProviderConfirmation,
+} from "./ai-provider-settings.server";
 import {
   AI_PROVIDER_REQUEST_TIMEOUT_MS,
   AI_PROVIDER_RESPONSE_MAX_BYTES,
@@ -486,6 +489,7 @@ export async function resolveAiProvider(
   options: {
     fetcher?: typeof fetch;
     testOpenAiConfiguration?: { apiKey: string; model: string };
+    expectedConfiguration?: string;
   } = {},
 ): Promise<AiModelProvider> {
   if (options.testOpenAiConfiguration) {
@@ -499,6 +503,15 @@ export async function resolveAiProvider(
   if (!readiness.configured || !readiness.selection) {
     throw new AiConfigurationError(
       readiness.problem ?? "The organisation AI provider is not configured.",
+    );
+  }
+  if (
+    options.expectedConfiguration !== undefined &&
+    aiProviderConfirmation(env, readiness)?.configuration !==
+      options.expectedConfiguration
+  ) {
+    throw new AiConfigurationError(
+      "The AI provider, model or destination changed. Reload and review the current destination before confirming.",
     );
   }
   const { provider, model } = readiness.selection;

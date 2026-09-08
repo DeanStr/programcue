@@ -19,6 +19,7 @@ const dependencies = {
   "ABS-S1": ["CFP-S2"],
   "ABS-S2": ["CFP-S3"],
   "ABS-S3": ["ABS-S2"],
+  "ABS-S2-AI": ["ABS-S3"],
   "SPK-S1": ["CFP-S4"],
   "SPK-S2": ["SPK-S1"],
   "SPK-S3": ["SPK-S2"],
@@ -96,10 +97,12 @@ const notices = {
     "ABS-S3 has now completed the deeper review checks. In original step 1, select the historical CFP Review results to inspect Sam's original all-4 scorecard and comment; do not overwrite the later Initial Review scores. Return to the current round for decisions. Release decisions and close the CFP only in this scenario.",
   "ABS-S1":
     "This scenario runs after CFP-S2 and before any review assignment in CFP-S3: both original proposals are submitted, editable and undecided, and the CFP is open. Reuse them, add and save the co-author on the CI proposal, verify that participant persisted after reload, and submit the third proposal. Leave all three undecided. Review assignment locks applicant revisions, so complete this setup before switching to review work. Do not release decisions, reset the fixture or archive a review cycle.",
+  "ABS-S2-AI":
+    "This independent scenario owns original ABS-S2 step 10 and ABS-S3 step 13. Human Initial Review scoring is complete and decisions have not been released. Select Initial Review and the CI proposal. Inspect the named provider, model and destination before confirming any AI request; opening the provider/request confirmation does not send data. Use only the configured synthetic evaluation proposal. Preserve explicit confirmation and any automatic approval rejection: report blocked if required authority or configuration is unavailable, never bypass it. Record actual generated output and a persisted human override, or the precise unavailable boundary. Do not release decisions, alter human reviews, change provider settings or reset the fixture. AI results remain separately graded and do not gate the core workflow.",
   "ABS-S2":
-    "Preserve the completed CFP Review. Do not use Start new review cycle, replace the active plan, reset data or release decisions. For original steps 4-5, use Round progression > Add next round to add Initial Review and then Final Review to the same plan, each with its own new scorecard. Use Edit unassigned round and rubric to configure the exact requested fields, weights, dates and anonymity before assigning work. The original script's Round 1 and Round 2 refer to these named ABS rounds; CFP Review is their earlier prerequisite. Add Sam to Initial Review's pool and leave Final Review's pool distinct. Before original step 7, complete the real progression prerequisite: in the still-active CFP Review, assign the AI Pair Programmer proposal to Sam, switch to reviewer, fill its existing numeric criteria with 4 and the fixture review comment, and explicitly submit it. Keep the earlier CI review unchanged. Switch back to organizer and use Review advancement to shortlist exactly CI and AI into Initial Review, confirming the two affected proposals and Sam. This closes the completed CFP round, activates Initial Review and creates its two fresh assignments together; no cycle is archived. Verify Initial Review shows 2 assigned and 0 completed, with Docs unassigned; exercise track filtering and reminders in that round. Preserve screenshots of the progression and the round-scoped baseline. If progression is unavailable, record the specific blocker instead of clearing prior work.",
+    "This scenario owns original steps 1-9; AI step 10 runs separately in ABS-S2-AI. Do not run the AI probe here or mark completed core setup blocked because AI evidence is unavailable. Preserve the completed CFP Review. Do not use Start new review cycle, replace the active plan, reset data or release decisions. For original steps 4-5, use Round progression > Add next round to add Initial Review and then Final Review to the same plan, each with its own new scorecard. Use Edit unassigned round and rubric to configure the exact requested fields, weights, dates and anonymity before assigning work. The original script's Round 1 and Round 2 refer to these named ABS rounds; CFP Review is their earlier prerequisite. Add Sam to Initial Review's pool and leave Final Review's pool distinct. Before original step 7, complete the real progression prerequisite: in the still-active CFP Review, assign the AI Pair Programmer proposal to Sam, switch to reviewer, fill its existing numeric criteria with 4 and the fixture review comment, and explicitly submit it. Keep the earlier CI review unchanged. Switch back to organizer and use Review advancement to shortlist exactly CI and AI into Initial Review, confirming the two affected proposals and Sam. This closes the completed CFP round, activates Initial Review and creates its two fresh assignments together; no cycle is archived. Verify Initial Review shows 2 assigned and 0 completed, with Docs unassigned; exercise track filtering and reminders in that round. Preserve screenshots of the progression and the round-scoped baseline. If progression is unavailable, record the specific blocker instead of clearing prior work.",
   "ABS-S3":
-    "In the reviewer queue, open the two Assigned entries and verify the Initial Review rubric before scoring. Completed CFP Review entries remain available as history; record them explicitly rather than claiming they disappeared or counting them as new assignments. Inspect the stored Initial Review scorecards after submission. Select Initial Review in the organizer results and progress views. Preserve completed CFP Review records; do not reopen or replace them. For weighted arithmetic, record the selected round and complete set of included reviews; if the displayed aggregate includes earlier CFP reviews, include them in the arithmetic. Do not release decisions or advance into Final Review here; CFP-S4 follows these checks. Use download for CSV exports and retain actual bytes.",
+    "This scenario owns original steps 1-12; the AI override check in step 13 runs with AI generation in ABS-S2-AI. In the reviewer queue, open the two Assigned entries and verify the Initial Review rubric before scoring. Completed CFP Review entries remain available as history; record them explicitly rather than claiming they disappeared or counting them as new assignments. Inspect the stored Initial Review scorecards after submission. Select Initial Review in the organizer results and progress views. Preserve completed CFP Review records; do not reopen or replace them. For weighted arithmetic, record the selected round and complete set of included reviews; if the displayed aggregate includes earlier CFP reviews, include them in the arithmetic. Do not release decisions or advance into Final Review here; CFP-S4 follows these checks. Use download for CSV exports and retain actual bytes.",
   "CNT-S3":
     "CNT-12 cannot borrow later area evidence automatically. Exercise an actual public approval gate now; if no qualifying public surface is available, abstain on that requirement. A visible queue or ZIP-ready message is not byte-content verification.",
   "EMB-S3":
@@ -109,6 +112,17 @@ fs.mkdirSync(path.join(root, "specs/upstream"), { recursive: true });
 for (const name of fs.readdirSync(path.join(root, "upstream/specs")).sort()) {
   const original = YAML.parse(fs.readFileSync(path.join(root, "upstream/specs", name), "utf8"));
   const executionScenarios = original.scenarios.flatMap((scenario) => {
+    if (scenario.id === "ABS-S2" || scenario.id === "ABS-S3") {
+      const steps = scenario.steps.split(/(?=^\d+\. )/m);
+      const expected = scenario.id === "ABS-S2" ? 10 : 13;
+      if (
+        steps.length !== expected ||
+        steps.some((step, index) => !step.startsWith(`${index + 1}. `)) ||
+        steps.join("") !== scenario.steps
+      )
+        throw new Error(`${scenario.id} must contain the pinned ${expected} numbered steps`);
+      return [{ ...scenario, steps: steps.slice(0, -1).join("") }];
+    }
     if (scenario.id !== "CFP-S1") return [scenario];
     // Split the pinned numbered steps without rewriting or dropping their text.
     // Fail if an upstream update changes the boundary we reviewed.
@@ -135,6 +149,20 @@ for (const name of fs.readdirSync(path.join(root, "upstream/specs")).sort()) {
       },
     ];
   });
+  if (original.area === "abstract-management") {
+    const setup = original.scenarios.find((s) => s.id === "ABS-S2");
+    const scoring = original.scenarios.find((s) => s.id === "ABS-S3");
+    executionScenarios.push({
+      id: "ABS-S2-AI",
+      name: "AI first-pass assessment and human override",
+      persona: "organizer",
+      steps: setup.steps.split(/(?=^\d+\. )/m).at(-1) + scoring.steps.split(/(?=^\d+\. )/m).at(-1),
+      success_signals: [
+        "A real AI score and rationale are distinguishable from human reviews",
+        "A human override persists after reload",
+      ],
+    });
+  }
   const scenarios = executionScenarios.map((scenario) => {
     const persona = scenario.persona === "attendee" ? "anonymous" : scenario.persona;
     const origin = bindings[scenario.id];
@@ -183,7 +211,9 @@ for (const name of fs.readdirSync(path.join(root, "upstream/specs")).sort()) {
     // Multi-event criteria remain attached to their unchanged step 12 in S1.
     scenarios: ["CFP-01", "CFP-02", "CFP-03"].includes(r.id)
       ? ["CFP-S1", "CFP-S1-PUBLIC", "CFP-S2"]
-      : (r.scenarios ?? []),
+      : r.id === "ABS-14"
+        ? ["ABS-S2-AI"]
+        : (r.scenarios ?? []),
     grader:
       r.testability === "auto"
         ? { type: "llm" }
@@ -196,7 +226,11 @@ for (const name of fs.readdirSync(path.join(root, "upstream/specs")).sort()) {
     ...(selectors[r.id] ? { checkpoints: { [selectors[r.id][0]]: [selectors[r.id][1]] } } : {}),
   }));
   fs.writeFileSync(
-    path.join(root, "specs/upstream", name),
+    path.join(
+      root,
+      "specs/upstream",
+      original.area === "abstract-management" ? "00-abstract-management.yaml" : name,
+    ),
     YAML.stringify({
       id: original.area,
       title: original.title,
@@ -208,6 +242,10 @@ for (const name of fs.readdirSync(path.join(root, "upstream/specs")).sort()) {
     }),
   );
 }
+// AEK collects areas in filename order. Collect abstract setup/scoring/AI before
+// CFP decisions, while hard dependencies pull in CFP publication and submissions.
+// AI failure must not gate decisions, and accepted proposals cannot be AI-reviewed.
+fs.rmSync(path.join(root, "specs/upstream/02-abstract-management.yaml"), { force: true });
 console.log(
   "Imported the pinned 7-area upstream suite; AEK hybrid weights use an explicit 50/50 policy.",
 );

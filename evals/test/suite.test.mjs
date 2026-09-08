@@ -16,6 +16,7 @@ function loadSpecs(directory) {
   return fs
     .readdirSync(directory)
     .filter((name) => name.endsWith(".yaml"))
+    .sort()
     .map((name) => loadConfig(path.join(directory, name)));
 }
 
@@ -36,7 +37,7 @@ test("the promoted regression baseline loads with the installed evaluator", () =
 test("all upstream criteria retain their identity, requirements, weights and explicit grading policy", () => {
   const imported = loadSpecs(path.join(root, "specs/upstream"));
   assert.equal(imported.length, 7);
-  assert.equal(imported.flatMap((s) => s.scenarios).length, 21);
+  assert.equal(imported.flatMap((s) => s.scenarios).length, 22);
   assert.equal(imported.flatMap((s) => s.rubric).length, 98);
   for (const name of fs.readdirSync(path.join(root, "upstream/specs"))) {
     const original = YAML.parse(fs.readFileSync(path.join(root, "upstream/specs", name), "utf8"));
@@ -53,7 +54,9 @@ test("all upstream criteria retain their identity, requirements, weights and exp
         item.scenarios,
         ["CFP-01", "CFP-02", "CFP-03"].includes(r.id)
           ? ["CFP-S1", "CFP-S1-PUBLIC", "CFP-S2"]
-          : (r.scenarios ?? []),
+          : r.id === "ABS-14"
+            ? ["ABS-S2-AI"]
+            : (r.scenarios ?? []),
       );
       assert.deepEqual(item.tags, [r.type]);
       assert.deepEqual(
@@ -97,11 +100,32 @@ test("CFP execution split preserves every original step and success signal exact
   }
 });
 
+test("AI split retains original steps and grading without gating core review", () => {
+  const source = loadConfig(path.join(root, "upstream/specs/02-abstract-management.yaml"));
+  const spec = loadConfig(path.join(root, "specs/upstream/00-abstract-management.yaml"));
+  const ai = spec.scenarios.find((s) => s.id === "ABS-S2-AI");
+  for (const id of ["ABS-S2", "ABS-S3"]) {
+    const original = source.scenarios.find((s) => s.id === id);
+    const core = spec.scenarios.find((s) => s.id === id);
+    const steps = original.steps.split(/(?=^\d+\. )/m);
+    for (const [index, step] of steps.entries()) {
+      const isAi = index === steps.length - 1;
+      assert.ok((isAi ? ai : core).instructions.includes(step.trimEnd()));
+      assert.ok(!(isAi ? core : ai).instructions.includes(step.trimEnd()));
+    }
+    assert.deepEqual(core.successSignals, original.success_signals);
+  }
+  assert.deepEqual(spec.rubric.find((r) => r.id === "ABS-14").scenarios, [ai.id]);
+  for (const area of loadSpecs(path.join(root, "specs/upstream"))) {
+    for (const scenario of area.scenarios) assert.ok(!scenario.dependsOn.includes(ai.id));
+  }
+});
+
 test("AEK binds the organiser proposal handoff after blocked anonymous checks and blocks missing prerequisites", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "programcue-dependencies-"));
   try {
     const source = loadConfig(path.join(root, "specs/upstream/01-call-for-papers.yaml"));
-    const abstract = loadConfig(path.join(root, "specs/upstream/02-abstract-management.yaml"));
+    const abstract = loadConfig(path.join(root, "specs/upstream/00-abstract-management.yaml"));
     const ids = ["CFP-S1", "CFP-S1-PUBLIC", "CFP-S2", "ABS-S1", "CFP-S3"];
     // Exercise the installed public CLI with explicit synthetic command evidence.
     // This tests orchestration only; it never opens a browser or claims acceptance.
@@ -308,7 +332,7 @@ test("AEK runs abstract reviews before decisions and blocks decisions when revie
       if (id === 'ABS-S2' && !prior.includes('CFP-S3')) throw new Error('Round progression preceded source review');
       if (id === 'CFP-S4' && !prior.includes('ABS-S3')) throw new Error('Abstract scoring did not precede decisions');
       prior.push(id); fs.writeFileSync('order.json', JSON.stringify(prior));
-      const blocked = id === 'CFP-S1-PUBLIC' || (id === 'ABS-S2' && process.env.SEQUENCE_BLOCK_SETUP === '1');
+      const blocked = id === 'CFP-S1-PUBLIC' || id === 'ABS-S2-AI' || (id === 'ABS-S2' && process.env.SEQUENCE_BLOCK_SETUP === '1');
       const outputs = Object.fromEntries(Object.keys(declarations[id].outputs ?? {}).map(name => [name, {value: 'https://example.com/' + name, evidenceRefs: ['step:1']}]));
       console.log(JSON.stringify({version: 1, outcome: blocked ? 'blocked' : 'completed',
         summary: 'Synthetic ordering evidence; not product acceptance', observations: [], ...(blocked ? {} : {outputs})}));
@@ -381,6 +405,9 @@ test("AEK runs abstract reviews before decisions and blocks decisions when revie
       assert.equal(evidence("CFP-S4").outcome, blocked ? "blocked" : "completed");
       assert.equal(evidence("SPK-S1").outcome, blocked ? "blocked" : "completed");
       if (!blocked) {
+        assert.equal(evidence("ABS-S2-AI").outcome, "blocked");
+        assert.ok(order.indexOf("ABS-S3") < order.indexOf("ABS-S2-AI"));
+        assert.ok(order.indexOf("ABS-S2-AI") < order.indexOf("CFP-S4"));
         assert.ok(order.indexOf("ABS-S3") < order.indexOf("CFP-S4"));
         assert.equal(evidence("SPK-S1").inputs.sessionUrl.value, "https://example.com/sessionUrl");
       }

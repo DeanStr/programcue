@@ -119,6 +119,27 @@ beforeEach(async () => {
 });
 
 describe("persisted AI first-pass review assessments", () => {
+  it("rejects a changed provider confirmation before persisting or sending a new request", async () => {
+    const testEnv = {
+      ...env,
+      OPENAI_API_KEY: "test-key-not-a-real-provider-credential",
+    } as unknown as CloudflareEnvironment;
+    const service = new AiReviewAssessmentService(testEnv);
+    await expect(
+      service.generate(admin, {
+        ...generationInput(),
+        providerConfiguration: "stale-provider-destination",
+      }),
+    ).rejects.toThrow(/changed/);
+    const operations = await env.DB.prepare(
+      "SELECT count(*) AS count FROM operation_jobs WHERE event_id = ? AND type = 'ai.review_assessment.generate'",
+    )
+      .bind(admin.eventId)
+      .first<{ count: number }>();
+    expect(operations?.count).toBe(0);
+    expect(await service.listForEvent(admin)).toEqual([]);
+  });
+
   it("requires explicit confirmation before generation or override work", async () => {
     const create = vi
       .fn<(request: OpenAiResponsesRequest) => Promise<OpenAiResponse>>()
@@ -1024,7 +1045,17 @@ describe("persisted AI first-pass review assessments", () => {
     const input = generationInput();
     const first = await service.generate(admin, input);
 
-    const replay = await service.generate(admin, input);
+    // A retained result needs no currently configured provider or fresh confirmation.
+    const replayService = new AiReviewAssessmentService({
+      ...env,
+      OPENAI_API_KEY: undefined,
+      ANTHROPIC_API_KEY: undefined,
+      AI: undefined,
+    } as unknown as CloudflareEnvironment);
+    const replay = await replayService.generate(admin, {
+      ...input,
+      providerConfiguration: "previously-confirmed-provider",
+    });
     expect(replay.id).toBe(first.id);
     expect(create).toHaveBeenCalledTimes(1);
   });

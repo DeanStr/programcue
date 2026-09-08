@@ -1262,7 +1262,14 @@ describe("abstract management round depth", () => {
     const service = new EvaluationService(
       env as unknown as CloudflareEnvironment,
     );
-    await service.savePlan(admin, planInput());
+    const input = planInput();
+    input.rounds[0].criteria = input.rounds[0].criteria.map(
+      (criterion, index) => ({
+        ...criterion,
+        weightPercent: index === 0 ? 2 : index === 1 ? 1 : 0,
+      }),
+    );
+    await service.savePlan(admin, input);
     await service.changeRoundReviewerPool(admin, {
       roundId: "abstract-initial-round",
       personId: sam.personId,
@@ -1286,8 +1293,8 @@ describe("abstract management round depth", () => {
         assignmentId: assigned!.id,
         revision: 0,
         scores: {
-          "abstract-originality": 5,
-          "abstract-relevance": 4,
+          "abstract-originality": 4,
+          "abstract-relevance": 2,
           "abstract-audience-level": "Intermediate",
           "abstract-comments": "Strong fit.",
         },
@@ -1309,7 +1316,13 @@ describe("abstract management round depth", () => {
     ).toMatchObject({
       options: ["Introductory", "Intermediate", "Advanced"],
     });
+    expect(
+      reloaded.criteria
+        .filter((c) => c.weightPercent > 0)
+        .map((c) => c.weightPercent),
+    ).toEqual([2, 1]);
     expect(reloaded.review).toMatchObject({
+      weightedScore: 3.33,
       scores: expect.objectContaining({
         "abstract-audience-level": "Intermediate",
       }),

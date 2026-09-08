@@ -147,8 +147,8 @@ test.describe
         ),
       ).toBeVisible();
       const rubric = [
-        ["Originality", "scale_5", "50", "true", "Original perspective", ""],
-        ["Relevance", "scale_5", "50", "true", "Fit for the programme", ""],
+        ["Originality", "scale_5", "2", "true", "Original perspective", ""],
+        ["Relevance", "scale_5", "1", "true", "Fit for the programme", ""],
         [
           "Audience level",
           "dropdown",
@@ -188,6 +188,10 @@ test.describe
       await expect(
         page.getByText("Dropdown: Introductory, Intermediate, Advanced"),
       ).toBeVisible();
+      await page.reload();
+      await openEvaluationView(page, "Setup");
+      await expect(initialCard).toContainText("Weight 2");
+      await expect(initialCard).toContainText("Weight 1");
       await expect(initialCard).toContainText("blind review");
       await expect(initialCard).toContainText("2099");
 
@@ -326,18 +330,18 @@ test.describe
         .locator("tr")
         .filter({ hasText: SUBMISSION_TITLE });
       await expect(submissionRow).toBeVisible();
-      await submissionRow
-        .getByRole("button", { name: "Review AI first pass" })
-        .click();
-      const aiAssessmentDialog = page.getByRole("dialog", {
-        name: "Generate AI first-pass assessment?",
-      });
-      await expect(aiAssessmentDialog).toContainText(SUBMISSION_TITLE);
-      await expect(aiAssessmentDialog).toContainText(INITIAL_ROUND);
-      await expect(aiAssessmentDialog).toContainText(
-        "The request to the provider cannot be undone",
+      // This local runtime has no OpenAI credential; do not invent provider readiness.
+      await expect(
+        submissionRow.getByRole("button", {
+          name: "Review AI request details",
+        }),
+      ).toBeDisabled();
+      await expect(page.locator("#evaluation-proposals")).toContainText(
+        "Opening the request details sends nothing",
       );
-      await aiAssessmentDialog.getByRole("button", { name: "Cancel" }).click();
+      await expect(page.locator("#evaluation-proposals")).toContainText(
+        "OpenAI credentials are not configured",
+      );
       const assignmentSelect = submissionRow.getByLabel(
         `Evaluator or team for ${SUBMISSION_TITLE}`,
       );
@@ -427,6 +431,18 @@ test.describe
       await expect(
         page.getByLabel("Recommendation", { exact: true }),
       ).toHaveCount(1);
+
+      await page.getByRole("radio", { name: /No conflict/ }).check();
+      const scoreGroups = page.locator("[data-review-scale]");
+      await scoreGroups
+        .nth(0)
+        .getByRole("radio", { name: "4", exact: true })
+        .check();
+      await scoreGroups
+        .nth(1)
+        .getByRole("radio", { name: "2", exact: true })
+        .check();
+      await expect(page.locator(".score-summary-value")).toHaveText("3.33 / 5");
 
       await switchDemoRole(page, "administrator", "/admin/review");
       await waitForInterface(

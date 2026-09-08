@@ -150,27 +150,30 @@ scenarios:
       cannot hide a missing capability.
 
 
-      Preserve the completed CFP Review. Do not use Start new review cycle,
-      replace the active plan, reset data or release decisions. For original
-      steps 4-5, use Round progression > Add next round to add Initial Review
-      and then Final Review to the same plan, each with its own new scorecard.
-      Use Edit unassigned round and rubric to configure the exact requested
-      fields, weights, dates and anonymity before assigning work. The original
-      script's Round 1 and Round 2 refer to these named ABS rounds; CFP Review
-      is their earlier prerequisite. Add Sam to Initial Review's pool and leave
-      Final Review's pool distinct. Before original step 7, complete the real
-      progression prerequisite: in the still-active CFP Review, assign the AI
-      Pair Programmer proposal to Sam, switch to reviewer, fill its existing
-      numeric criteria with 4 and the fixture review comment, and explicitly
-      submit it. Keep the earlier CI review unchanged. Switch back to organizer
-      and use Review advancement to shortlist exactly CI and AI into Initial
-      Review, confirming the two affected proposals and Sam. This closes the
-      completed CFP round, activates Initial Review and creates its two fresh
-      assignments together; no cycle is archived. Verify Initial Review shows 2
-      assigned and 0 completed, with Docs unassigned; exercise track filtering
-      and reminders in that round. Preserve screenshots of the progression and
-      the round-scoped baseline. If progression is unavailable, record the
-      specific blocker instead of clearing prior work.
+      This scenario owns original steps 1-9; AI step 10 runs separately in
+      ABS-S2-AI. Do not run the AI probe here or mark completed core setup
+      blocked because AI evidence is unavailable. Preserve the completed CFP
+      Review. Do not use Start new review cycle, replace the active plan, reset
+      data or release decisions. For original steps 4-5, use Round progression >
+      Add next round to add Initial Review and then Final Review to the same
+      plan, each with its own new scorecard. Use Edit unassigned round and
+      rubric to configure the exact requested fields, weights, dates and
+      anonymity before assigning work. The original script's Round 1 and Round 2
+      refer to these named ABS rounds; CFP Review is their earlier prerequisite.
+      Add Sam to Initial Review's pool and leave Final Review's pool distinct.
+      Before original step 7, complete the real progression prerequisite: in the
+      still-active CFP Review, assign the AI Pair Programmer proposal to Sam,
+      switch to reviewer, fill its existing numeric criteria with 4 and the
+      fixture review comment, and explicitly submit it. Keep the earlier CI
+      review unchanged. Switch back to organizer and use Review advancement to
+      shortlist exactly CI and AI into Initial Review, confirming the two
+      affected proposals and Sam. This closes the completed CFP round, activates
+      Initial Review and creates its two fresh assignments together; no cycle is
+      archived. Verify Initial Review shows 2 assigned and 0 completed, with
+      Docs unassigned; exercise track filtering and reminders in that round.
+      Preserve screenshots of the progression and the round-scoped baseline. If
+      progression is unavailable, record the specific blocker instead of
+      clearing prior work.
 
 
       ORIGINAL SCENARIO SCRIPT:
@@ -229,11 +232,6 @@ scenarios:
       Sam
          Whitfield and trigger the bulk / send-reminder action. Screenshot the
          confirmation that a reminder was sent. Do not expect to verify the email itself.
-      10. If the site advertises AI evaluation / AI triage / AI reviewer
-      features, enable
-          or run it on "Taming 40-Minute CI" (configuring a persona if required).
-          Screenshot any AI-produced score and its written reasoning, plus any
-          override control. If no AI feature exists, record that observation.
 
 
       Missing optional features are findings: record them and continue the
@@ -281,17 +279,19 @@ scenarios:
       cannot hide a missing capability.
 
 
-      In the reviewer queue, open the two Assigned entries and verify the
-      Initial Review rubric before scoring. Completed CFP Review entries remain
-      available as history; record them explicitly rather than claiming they
-      disappeared or counting them as new assignments. Inspect the stored
-      Initial Review scorecards after submission. Select Initial Review in the
-      organizer results and progress views. Preserve completed CFP Review
-      records; do not reopen or replace them. For weighted arithmetic, record
-      the selected round and complete set of included reviews; if the displayed
-      aggregate includes earlier CFP reviews, include them in the arithmetic. Do
-      not release decisions or advance into Final Review here; CFP-S4 follows
-      these checks. Use download for CSV exports and retain actual bytes.
+      This scenario owns original steps 1-12; the AI override check in step 13
+      runs with AI generation in ABS-S2-AI. In the reviewer queue, open the two
+      Assigned entries and verify the Initial Review rubric before scoring.
+      Completed CFP Review entries remain available as history; record them
+      explicitly rather than claiming they disappeared or counting them as new
+      assignments. Inspect the stored Initial Review scorecards after
+      submission. Select Initial Review in the organizer results and progress
+      views. Preserve completed CFP Review records; do not reopen or replace
+      them. For weighted arithmetic, record the selected round and complete set
+      of included reviews; if the displayed aggregate includes earlier CFP
+      reviews, include them in the arithmetic. Do not release decisions or
+      advance into Final Review here; CFP-S4 follows these checks. Use download
+      for CSV exports and retain actual bytes.
 
 
       ORIGINAL SCENARIO SCRIPT:
@@ -369,11 +369,6 @@ scenarios:
           the results table or a reports area. Trigger it, screenshot the control and any
           confirmation or download indication, and record the filename if shown. Do not
           attempt to open the downloaded file.
-      13. If AI scores were produced in ABS-S2, verify in the results view that
-      the AI
-          score is visually distinguishable from human reviewer scores, and if an override
-          control exists, override the AI score to a different value, save, reload, and
-          screenshot the persisted override.
 
 
       Record each declared checkpoint immediately after the corresponding check
@@ -396,6 +391,74 @@ scenarios:
       - ABS-S2
     checkpoints:
       aggregates: The results table, recorded scores and both sort orders were inspected.
+  - id: ABS-S2-AI
+    name: AI first-pass assessment and human override
+    kind: browser
+    persona: organizer
+    requiresAuth: true
+    allowedPersonas:
+      - organizer
+      - speaker
+      - reviewer
+      - anonymous
+    instructions: >-
+      PROGRAMCUE EXECUTION ADAPTATION: Use the configured fixture identities and
+      current saved persona. Replace every sign-out/sign-in role transition
+      below with switch_persona. For public checks switch to anonymous. Never
+      authenticate another identity in the current context. Do not repeat signup
+      when already authenticated; explicitly distinguish pre-provisioned access
+      from signup evidence.
+
+
+      Run the chained suite in the new DevFlow Conf 2027 event created by
+      CFP-S1, not the populated Future of Events 2027 showcase. After each
+      switch_persona, explicitly select DevFlow Conf 2027 through the event
+      picker when that role has event access; applicant pages use the observed
+      bound CFP URL. Accept the invitation to this event before opening its
+      reviewer workspace. Never substitute the showcase's form, schedule,
+      reviews or published programme. Fixture emails override literal example
+      addresses below. Record actual dates, track/format names and any
+      substituted fixture values. Follow the original criterion: substitutions
+      cannot hide a missing capability.
+
+
+      This independent scenario owns original ABS-S2 step 10 and ABS-S3 step 13.
+      Human Initial Review scoring is complete and decisions have not been
+      released. Select Initial Review and the CI proposal. Inspect the named
+      provider, model and destination before confirming any AI request; opening
+      the provider/request confirmation does not send data. Use only the
+      configured synthetic evaluation proposal. Preserve explicit confirmation
+      and any automatic approval rejection: report blocked if required authority
+      or configuration is unavailable, never bypass it. Record actual generated
+      output and a persisted human override, or the precise unavailable
+      boundary. Do not release decisions, alter human reviews, change provider
+      settings or reset the fixture. AI results remain separately graded and do
+      not gate the core workflow.
+
+
+      ORIGINAL SCENARIO SCRIPT:
+
+      10. If the site advertises AI evaluation / AI triage / AI reviewer
+      features, enable
+          or run it on "Taming 40-Minute CI" (configuring a persona if required).
+          Screenshot any AI-produced score and its written reasoning, plus any
+          override control. If no AI feature exists, record that observation.
+      13. If AI scores were produced in ABS-S2, verify in the results view that
+      the AI
+          score is visually distinguishable from human reviewer scores, and if an override
+          control exists, override the AI score to a different value, save, reload, and
+          screenshot the persisted override.
+
+
+      Missing optional features are findings: record them and continue the
+      reachable script. Use feature_not_found for an absent core capability and
+      blocked for unavailable access/evidence. Do not turn provider or
+      evidence-tool failures into product verdicts.
+    successSignals:
+      - A real AI score and rationale are distinguishable from human reviews
+      - A human override persists after reload
+    dependsOn:
+      - ABS-S3
 rubric:
   - id: ABS-01
     criterion: Organizer can configure an evaluation plan with two or more
@@ -657,8 +720,7 @@ rubric:
     tags:
       - depth
     scenarios:
-      - ABS-S2
-      - ABS-S3
+      - ABS-S2-AI
     grader:
       type: hybrid
       autoShare: 0.5

@@ -314,7 +314,7 @@ describe("evaluation and integration API reads", () => {
               name: "Programme fit",
               description: "Fit for this event.",
               inputType: "scale_5",
-              weightPercent: 100,
+              weightPercent: 2,
               required: true,
               position: 0,
             },

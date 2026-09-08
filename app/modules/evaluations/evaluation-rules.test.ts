@@ -20,6 +20,46 @@ describe("evaluation rules", () => {
     ).toBe(4.5);
   });
 
+  it("uses exact relative weights and normalises mixed scales before rounding", () => {
+    const criteria = [
+      { id: "originality", weightPercent: 2 },
+      { id: "relevance", weightPercent: 1 },
+    ];
+    expect(
+      calculateWeightedScore(criteria, { originality: 4, relevance: 2 }),
+    ).toBe(3.33);
+    expect(
+      calculateWeightedScore(
+        criteria.map((c) => ({ ...c, weightPercent: c.weightPercent * 10 })),
+        { originality: 4, relevance: 2 },
+      ),
+    ).toBe(3.33);
+    expect(
+      calculateRubricWeightedScore(
+        [
+          { id: "originality", weightPercent: 2, inputType: "scale_10" },
+          { id: "relevance", weightPercent: 1, inputType: "scale_5" },
+        ],
+        { originality: 8, relevance: 2 },
+      ),
+    ).toBe(3.33);
+  });
+
+  it.each([0, -1, 0.5, 101, Number.NaN, Number.POSITIVE_INFINITY])(
+    "rejects invalid scored weight %s",
+    (weightPercent) => {
+      expect(() =>
+        calculateWeightedScore([{ id: "quality", weightPercent }], {
+          quality: 4,
+        }),
+      ).toThrow(/weights/);
+    },
+  );
+
+  it("rejects an empty scored rubric", () => {
+    expect(() => calculateWeightedScore([], {})).toThrow(/weights/);
+  });
+
   it("rejects incomplete score records", () => {
     expect(() =>
       calculateWeightedScore(
@@ -32,7 +72,7 @@ describe("evaluation rules", () => {
     ).toThrow(/quality/);
   });
 
-  it("requires each rubric to total 100 percent", () => {
+  it("accepts a positive rubric total other than 100", () => {
     expect(() =>
       evaluationPlanSchema.parse({
         revision: 0,
@@ -58,7 +98,7 @@ describe("evaluation rules", () => {
           },
         ],
       }),
-    ).toThrow(/100%/);
+    ).not.toThrow();
   });
 
   it("requires recommendation choices instead of silently applying defaults", () => {

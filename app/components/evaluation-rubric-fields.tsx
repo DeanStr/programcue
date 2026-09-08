@@ -74,12 +74,13 @@ export function RubricFields({
       <p className="help">
         Every review already includes a required overall recommendation and
         confidence rating; do not recreate them as rubric criteria. Scored 1–5
-        and 1–10 criteria must total 100%. Yes/no, dropdown and free-text
-        criteria are contextual and must have zero weight. Every scored
-        criterion is required; contextual criteria may be optional. Dropdown
-        options are saved in the order entered, separated by commas. Leave the
-        final row blank unless another criterion is needed. Clear an existing
-        criterion name to remove that criterion when you save.
+        and 1–10 criteria use relative whole-number weights from 1 to 100. A
+        weight of 2 counts twice as much as 1; the total need not be 100.
+        Yes/no, dropdown and free-text criteria are contextual and must have
+        zero weight. Every scored criterion is required; contextual criteria may
+        be optional. Dropdown options are saved in the order entered, separated
+        by commas. Leave the final row blank unless another criterion is needed.
+        Clear an existing criterion name to remove that criterion when you save.
       </p>
       {rows.map((criterion, index) => (
         <div className="card pad" key={criterion.id ?? `new-${index}`}>
@@ -101,7 +102,7 @@ export function RubricFields({
               </select>
             </label>
             <label className="label">
-              Weight percent
+              Weight
               <input
                 className="field"
                 name="criterionWeight"

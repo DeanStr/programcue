@@ -60,6 +60,13 @@ function model(input: {
       aiReviewAssessmentGenerationAttempts: input.attempts,
       aiReviewAssessmentsSupported: true,
       canManageAiAssessments: true,
+      aiAssessmentProvider: {
+        providerLabel: "OpenAI",
+        model: "fixture-model",
+        destination: "https://ai.example.com",
+        configuration: "fixture-configuration",
+      },
+      aiAssessmentProviderProblem: null,
       eventTimezone: "UTC",
       resultSort: "score_desc",
       resultsExportIntent: "export-one",
@@ -100,6 +107,33 @@ function renderQueue(value: EvaluationAdminModel) {
 }
 
 describe("AI assessment attempt feedback", () => {
+  it("names the provider destination before opening request details", () => {
+    const markup = renderQueue(
+      model({ navigation: { state: "idle" } as never, attempts: [] }),
+    );
+    expect(markup).toContain("OpenAI · fixture-model · https://ai.example.com");
+    expect(markup).toContain("Opening the request details sends nothing");
+    expect(markup).toContain("Review AI request details");
+    expect(markup).toContain(
+      'name="providerConfiguration" value="fixture-configuration"',
+    );
+  });
+
+  it("disables a new request when the provider is unavailable", () => {
+    const value = model({
+      navigation: { state: "idle" } as never,
+      attempts: [],
+    });
+    value.loaderData.aiAssessmentProvider = null;
+    value.loaderData.aiAssessmentProviderProblem =
+      "OpenAI credentials are not configured.";
+    const markup = renderQueue(value);
+    expect(markup).toContain("OpenAI credentials are not configured.");
+    expect(markup).toMatch(
+      /<button[^>]*disabled[^>]*>Review AI request details<\/button>/,
+    );
+  });
+
   it("immediately replaces a failed retry action while its navigation is pending", () => {
     const formData = new FormData();
     formData.set("intent", "retry-ai-review-assessment");
@@ -114,7 +148,7 @@ describe("AI assessment attempt feedback", () => {
 
     expect(markup).toContain("Starting AI first pass retry");
     expect(markup).toContain("Submitting the request from this page.");
-    expect(markup).not.toContain("Retry failed AI first pass");
+    expect(markup).not.toContain("Review AI retry details");
   });
 
   it("shows the durable running retry and links to its operation", () => {
@@ -143,7 +177,7 @@ describe("AI assessment attempt feedback", () => {
     expect(markup).toContain(
       'href="/admin/operations?operation=running-operation"',
     );
-    expect(markup).not.toContain("Retry failed AI first pass");
+    expect(markup).not.toContain("Review AI retry details");
   });
 
   it("offers provider-safe reconciliation for a recoverable running attempt", () => {
@@ -173,6 +207,6 @@ describe("AI assessment attempt feedback", () => {
     expect(markup).toContain('value="reconcile-ai-review-assessment"');
     expect(markup).toContain('value="expired-operation"');
     expect(markup).toContain("Reconcile AI attempt");
-    expect(markup).not.toContain("Retry failed AI first pass");
+    expect(markup).not.toContain("Review AI retry details");
   });
 });

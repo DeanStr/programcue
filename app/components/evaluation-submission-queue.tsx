@@ -24,6 +24,11 @@ export function EvaluationSubmissionQueue() {
     navigation,
   } = useEvaluationAdminModel();
   const { confirm, dialog } = useConfirm();
+  const provider = loaderData.aiAssessmentProvider;
+  const providerDescription = provider
+    ? `${provider.providerLabel} · ${provider.model} · ${provider.destination}`
+    : (loaderData.aiAssessmentProviderProblem ??
+      "Configure an AI provider before requesting an assessment.");
   const selectedResultsRound = loaderData.plan?.rounds.find(
     (round) => round.id === loaderData.resultsRoundId,
   );
@@ -39,6 +44,12 @@ export function EvaluationSubmissionQueue() {
   return (
     <section className="card pad pc-eval-queue" id="evaluation-proposals">
       {dialog}
+      {loaderData.canManageAiAssessments ? (
+        <p className="help">
+          AI first-pass destination: {providerDescription}. Opening the request
+          details sends nothing; generation requires confirmation.
+        </p>
+      ) : null}
       <div className="card-title">
         <div>
           <h2>Proposal assignments and decisions</h2>
@@ -468,9 +479,15 @@ export function EvaluationSubmissionQueue() {
                                 name="confirmed"
                                 value="true"
                               />
+                              <input
+                                type="hidden"
+                                name="providerConfiguration"
+                                value={provider?.configuration ?? ""}
+                              />
                               <Button
                                 size="small"
                                 type="button"
+                                disabled={!provider}
                                 onClick={(event) => {
                                   const form = event.currentTarget.form;
                                   if (!form) {
@@ -482,8 +499,7 @@ export function EvaluationSubmissionQueue() {
                                     {
                                       title:
                                         "Retry failed AI first-pass assessment?",
-                                      description:
-                                        "This creates a separate provider attempt and retains the failed operation. The earlier request may have been accepted or charged even though Program Cue received no usable result, so another provider charge or duplicate result is possible.",
+                                      description: `This sends a new request to ${providerDescription} and retains the failed operation. The earlier request may have been accepted or charged even though Program Cue received no usable result, so another provider charge or duplicate result is possible.`,
                                       records: [
                                         `${submission.title} · ${selectedResultsRound.name}`,
                                         `Failed attempt ${shortReference(aiAssessmentGenerationAttempt.operationId)}`,
@@ -495,7 +511,7 @@ export function EvaluationSubmissionQueue() {
                                   );
                                 }}
                               >
-                                Retry failed AI first pass
+                                Review AI retry details
                               </Button>
                             </Form>
                           </div>
@@ -532,9 +548,15 @@ export function EvaluationSubmissionQueue() {
                               name="confirmed"
                               value="true"
                             />
+                            <input
+                              type="hidden"
+                              name="providerConfiguration"
+                              value={provider?.configuration ?? ""}
+                            />
                             <Button
                               size="small"
                               type="button"
+                              disabled={!provider}
                               onClick={(event) => {
                                 const form = event.currentTarget.form;
                                 if (!form) {
@@ -545,8 +567,7 @@ export function EvaluationSubmissionQueue() {
                                 confirm(
                                   {
                                     title: "Generate AI first-pass assessment?",
-                                    description:
-                                      "Program Cue sends a fixed copy of this proposal and its rubric to the AI provider, then saves the advisory score and rationale it returns. The request to the provider cannot be undone.",
+                                    description: `Program Cue sends a fixed copy of this proposal and its rubric to ${providerDescription}, then saves the advisory score and rationale it returns. The request to the provider cannot be undone.`,
                                     records: [
                                       `${submission.title} · ${selectedResultsRound.name}`,
                                     ],
@@ -557,7 +578,7 @@ export function EvaluationSubmissionQueue() {
                                 );
                               }}
                             >
-                              Review AI first pass
+                              Review AI request details
                             </Button>
                           </Form>
                         ) : null}

@@ -1,4 +1,8 @@
 import type { LoaderFunctionArgs } from "react-router";
+import {
+  AiProviderSettingsService,
+  aiProviderConfirmation,
+} from "~/modules/ai/ai-provider-settings.server";
 import { AiReviewAssessmentService } from "~/modules/ai/ai-review-assessment.server";
 import { ReviewerAiSuggestionService } from "~/modules/ai/reviewer-ai-suggestion.server";
 import { ensureDemoEvaluationData } from "~/modules/evaluations/demo.server";
@@ -55,15 +59,21 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
   const canManageAiAssessments =
     canPrepareReviewerReminders && aiReviewAssessmentsSupported;
   const aiAssessmentService = new AiReviewAssessmentService(env);
-  const [aiReviewAssessments, aiReviewAssessmentGenerationAttempts] =
-    await Promise.all([
-      aiReviewAssessmentsSupported
-        ? aiAssessmentService.listForEvent(viewer)
-        : Promise.resolve([]),
-      canManageAiAssessments
-        ? aiAssessmentService.listGenerationAttempts(viewer)
-        : Promise.resolve([]),
-    ]);
+  const [
+    aiReviewAssessments,
+    aiReviewAssessmentGenerationAttempts,
+    aiReadiness,
+  ] = await Promise.all([
+    aiReviewAssessmentsSupported
+      ? aiAssessmentService.listForEvent(viewer)
+      : Promise.resolve([]),
+    canManageAiAssessments
+      ? aiAssessmentService.listGenerationAttempts(viewer)
+      : Promise.resolve([]),
+    canManageAiAssessments
+      ? new AiProviderSettingsService(env).readiness(viewer)
+      : Promise.resolve(null),
+  ]);
   const resultsModel = await buildEvaluationAdminResultsModel({
     env,
     viewer,
@@ -91,6 +101,10 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
     reviewerReminderTemplates: reviewerReminderTemplateRows.results,
     aiReviewAssessments,
     aiReviewAssessmentGenerationAttempts,
+    aiAssessmentProvider: aiReadiness
+      ? aiProviderConfirmation(env, aiReadiness)
+      : null,
+    aiAssessmentProviderProblem: aiReadiness?.problem ?? null,
     ...resultsModel,
     eventTimezone: event.timezone,
     sessionFormats: event.sessionFormats,
