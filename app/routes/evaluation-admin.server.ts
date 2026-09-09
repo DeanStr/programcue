@@ -102,7 +102,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
     aiReviewAssessments,
     aiReviewAssessmentGenerationAttempts,
     aiAssessmentProvider: aiReadiness
-      ? aiProviderConfirmation(env, aiReadiness)
+      ? await aiProviderConfirmation(env, aiReadiness)
       : null,
     aiAssessmentProviderProblem: aiReadiness?.problem ?? null,
     ...resultsModel,

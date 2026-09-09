@@ -507,7 +507,7 @@ export async function resolveAiProvider(
   }
   if (
     options.expectedConfiguration !== undefined &&
-    aiProviderConfirmation(env, readiness)?.configuration !==
+    (await aiProviderConfirmation(env, readiness))?.configuration !==
       options.expectedConfiguration
   ) {
     throw new AiConfigurationError(

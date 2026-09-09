@@ -20,6 +20,8 @@ Git history retains earlier committed work logs.
 - The current candidate initializes empty biographies consistently across both
   claim paths and clarifies multiple-track evaluation guidance. Local validation
   is recorded below; deployment and fresh independent acceptance are pending.
+- The AI follow-up candidate binds confirmation to the full endpoint and fixes
+  relative-weight labels in review-aid evidence. Deployment remains pending.
 - The fixture was reset at **03:16 UTC** on 9 September; all four saved persona
   sessions were invalidated, clean baselines verified and production health
   matched `f7d0d63e`.
@@ -248,6 +250,12 @@ validation passed: 59 submission Worker tests, 13 application-route tests,
 the Marcus Chromium claim/reload workflow,
 generated TypeScript checks, 30 evaluator tests and all three evaluator
 configurations. Local check receipts are in `.artifacts/claim-biography-review/`; deployment is pending.
+AI endpoint/weight follow-up: 43 focused Worker tests passed, including same-host
+path/query rejection before request persistence or dispatch and relative-weight
+evidence labels. Two Chromium checks passed for reviewer AI prerequisites and
+AI/human result separation after reload; these use local fixtures and do not
+prove external provider delivery. Check/review receipts:
+`.artifacts/ai-endpoint-weights-review/`.
 Latest run/release receipts are in `.artifacts/acceptance-template-rerun/`.
 The requested fresh cleanup reset completed at **03:16:41.553 UTC**; all four
 prior persona sessions were invalid and clean applicant/reviewer baselines and

@@ -50,13 +50,13 @@ export type AiProviderReadiness = {
 };
 
 /** Public destination details for an explicit request confirmation; never credentials. */
-export function aiProviderConfirmation(
+export async function aiProviderConfirmation(
   env: CloudflareEnvironment,
   readiness: AiProviderReadiness,
 ) {
   if (!readiness.configured || !readiness.selection) return null;
   const { provider, model, revision } = readiness.selection;
-  const destination =
+  const endpoint =
     provider === "workers_ai"
       ? "Cloudflare Workers AI binding"
       : new URL(
@@ -65,12 +65,22 @@ export function aiProviderConfirmation(
                 "https://api.openai.com/v1/responses"
             : env.ANTHROPIC_MESSAGES_URL?.trim() ||
                 "https://api.anthropic.com/v1/messages",
-        ).origin;
+        ).href;
+  const destination =
+    provider === "workers_ai" ? endpoint : new URL(endpoint).origin;
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(
+      JSON.stringify([provider, model, revision, endpoint]),
+    ),
+  );
   return {
     providerLabel: aiProviderLabels[provider],
     model,
     destination,
-    configuration: JSON.stringify([provider, model, revision, destination]),
+    configuration: Array.from(new Uint8Array(digest), (byte) =>
+      byte.toString(16).padStart(2, "0"),
+    ).join(""),
   };
 }
 

@@ -79,7 +79,7 @@ export class AiAssistantService extends AiAssistantCoreService {
           ...workspace.criteria.map((criterion) => ({
             id: `criterion:${criterion.id}`,
             label: criterion.name,
-            detail: `${criterion.inputType.replaceAll("_", " ")} · ${criterion.weightPercent}% weight`,
+            detail: `${criterion.inputType.replaceAll("_", " ")} · Weight ${criterion.weightPercent}`,
             href: `/review/workbench?assignment=${encodeURIComponent(assignmentId)}`,
             source: "Program Cue D1" as const,
           })),

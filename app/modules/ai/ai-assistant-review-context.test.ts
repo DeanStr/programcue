@@ -79,6 +79,15 @@ describe("contextual review assistance", () => {
       .bind(evaluator.eventId, evaluator.personId)
       .first<{ id: string }>();
     expect(assignment).toBeTruthy();
+    await env.DB.prepare(
+      `UPDATE evaluation_criteria SET weight_percent = CASE id
+         WHEN 'demo-evaluation-criterion-relevance' THEN 2 ELSE 1 END
+        WHERE event_id = ? AND id IN (
+          'demo-evaluation-criterion-relevance', 'demo-evaluation-criterion-substance'
+        )`,
+    )
+      .bind(evaluator.eventId)
+      .run();
     const fetcher = vi
       .fn<typeof fetch>()
       .mockResolvedValue(
@@ -109,6 +118,21 @@ describe("contextual review assistance", () => {
       },
     });
     expect(result.content).toContain("Missing evidence");
+    expect(result.evidence).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "criterion:demo-evaluation-criterion-relevance",
+          detail: "scale 5 · Weight 2",
+        }),
+        expect.objectContaining({
+          id: "criterion:demo-evaluation-criterion-substance",
+          detail: "scale 5 · Weight 1",
+        }),
+      ]),
+    );
+    expect(
+      result.evidence.some((item) => item.detail.includes("% weight")),
+    ).toBe(false);
     expect(result.evidence.map((item) => item.id)).toEqual(
       expect.arrayContaining([expect.stringMatching(/^submission:/)]),
     );

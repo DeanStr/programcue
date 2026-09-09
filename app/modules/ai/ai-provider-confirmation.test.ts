@@ -1,5 +1,5 @@
 import { env } from "cloudflare:test";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import { resolveAiProvider } from "./ai-provider.server";
@@ -104,4 +104,54 @@ describe("AI request destination confirmation", () => {
       }),
     ).rejects.toThrow(/credentials are not configured/);
   });
+
+  for (const provider of ["openai", "anthropic"] as const) {
+    it.each([
+      "https://gateway.example.com/team-b/responses?tenant=a",
+      "https://gateway.example.com/team-a/responses?tenant=b",
+    ])(
+      `${provider} rejects a changed path or query on the same origin: %s`,
+      async (endpoint) => {
+        await env.DB.prepare(
+          "UPDATE organisation_ai_settings SET provider = ? WHERE organisation_id = ?",
+        )
+          .bind(provider, viewer.organisationId)
+          .run();
+        const endpointKey =
+          provider === "openai"
+            ? "OPENAI_RESPONSES_URL"
+            : "ANTHROPIC_MESSAGES_URL";
+        const configuration = {
+          ...testEnv,
+          [endpointKey]:
+            "https://gateway.example.com/team-a/responses?tenant=a",
+        };
+        const original = await confirmation(configuration);
+        const changedConfiguration = {
+          ...configuration,
+          [endpointKey]: endpoint,
+        };
+        const changed = await confirmation(changedConfiguration);
+        expect(changed?.destination).toBe(original?.destination);
+        expect(changed?.configuration).not.toBe(original?.configuration);
+        expect(JSON.stringify(changed)).not.toContain("tenant=");
+        expect(JSON.stringify(changed)).not.toContain("/team-");
+        const fetcher = vi.fn<typeof fetch>();
+        await expect(
+          resolveAiProvider(changedConfiguration, viewer, {
+            expectedConfiguration: original!.configuration,
+            fetcher,
+          }),
+        ).rejects.toThrow(/changed/);
+        expect(fetcher).not.toHaveBeenCalled();
+        await expect(
+          resolveAiProvider(changedConfiguration, viewer, {
+            expectedConfiguration: changed!.configuration,
+            fetcher,
+          }),
+        ).resolves.toMatchObject({ model: "fixture-model" });
+        expect(fetcher).not.toHaveBeenCalled();
+      },
+    );
+  }
 });

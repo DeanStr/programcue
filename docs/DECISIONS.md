@@ -2305,3 +2305,13 @@ The upstream track-dropdown request does not supersede the recorded one-or-more
 track product decision. Evaluation guidance uses the protected checkbox group,
 records the presentation difference and continues available checks; original
 criterion text, weights and grading remain unchanged.
+
+### 9 September 2026 — Bind AI confirmation to the full endpoint
+
+AI request confirmation displays the provider endpoint origin but fingerprints
+provider, model, settings revision and the complete resolved endpoint URL,
+including path and query. New requests reject a changed fingerprint before
+persisting generation work or contacting a provider. The public confirmation
+contains no raw endpoint path or query. Workers AI uses its explicit binding
+identity. AI review-aid evidence labels rubric values as relative weights, using
+`Weight 2` rather than `2% weight`; stored weights and scoring are unchanged.

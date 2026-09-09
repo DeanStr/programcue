@@ -7,6 +7,10 @@ import { EvaluationService } from "~/modules/evaluations/evaluation-service.serv
 import { CANONICAL_EVENT_FILE_POLICY_JSON } from "~/modules/files/file-policy";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
+  AiProviderSettingsService,
+  aiProviderConfirmation,
+} from "./ai-provider-settings.server";
+import {
   AiReviewAssessmentConflictError,
   AiReviewAssessmentService,
   AiReviewAssessmentStateError,
@@ -119,6 +123,56 @@ beforeEach(async () => {
 });
 
 describe("persisted AI first-pass review assessments", () => {
+  it.each([
+    "https://gateway.example.com/team-b/responses?tenant=a",
+    "https://gateway.example.com/team-a/responses?tenant=b",
+  ])(
+    "rejects a changed endpoint before persisting or sending an assessment: %s",
+    async (endpoint) => {
+      const originalEnv = {
+        ...env,
+        OPENAI_API_KEY: "test-key-not-a-real-provider-credential",
+        OPENAI_RESPONSES_URL:
+          "https://gateway.example.com/team-a/responses?tenant=a",
+      } as unknown as CloudflareEnvironment;
+      await env.DB.prepare(
+        "UPDATE organisation_ai_settings SET provider = 'openai', model = 'fixture-model' WHERE organisation_id = ?",
+      )
+        .bind(admin.organisationId)
+        .run();
+      const confirmation = await aiProviderConfirmation(
+        originalEnv,
+        await new AiProviderSettingsService(originalEnv).readiness(admin),
+      );
+      expect(confirmation).not.toBeNull();
+      const fetcher = vi
+        .spyOn(globalThis, "fetch")
+        .mockRejectedValue(new Error("Unexpected provider request"));
+      try {
+        const service = new AiReviewAssessmentService({
+          ...originalEnv,
+          OPENAI_RESPONSES_URL: endpoint,
+        });
+        await expect(
+          service.generate(admin, {
+            ...generationInput(),
+            providerConfiguration: confirmation!.configuration,
+          }),
+        ).rejects.toThrow(/changed/);
+        expect(fetcher).not.toHaveBeenCalled();
+        const operations = await env.DB.prepare(
+          "SELECT COUNT(*) AS count FROM operation_jobs WHERE event_id = ? AND type = 'ai.review_assessment.generate'",
+        )
+          .bind(admin.eventId)
+          .first<{ count: number }>();
+        expect(operations?.count).toBe(0);
+        expect(await service.listForEvent(admin)).toEqual([]);
+      } finally {
+        fetcher.mockRestore();
+      }
+    },
+  );
+
   it("rejects a changed provider confirmation before persisting or sending a new request", async () => {
     const testEnv = {
       ...env,
