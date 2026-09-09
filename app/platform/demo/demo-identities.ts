@@ -19,6 +19,13 @@ export const DEMO_IDENTITY = {
   profileStatus: "published",
 } as const;
 
+export const SBEK_SECOND_SPEAKER = {
+  personId: "person-sbek-speaker2",
+  name: "Marcus Okafor",
+  email: "sbek-speaker2@example.com",
+  profileStatus: "draft",
+} as const;
+
 export const DEMO_IDENTITIES = {
   administrator: DEMO_IDENTITY,
   owner: {
@@ -75,6 +82,12 @@ export const DEMO_IDENTITIES = {
     cohort: "sbek",
     profileStatus: "draft",
   },
+  sbek_co_speaker: {
+    ...SBEK_SECOND_SPEAKER,
+    role: "submitter",
+    destination: "/apply/form",
+    cohort: "sbek",
+  },
   sbek_reviewer: {
     personId: "person-sbek-reviewer",
     name: "Sam Whitfield",
@@ -84,13 +97,6 @@ export const DEMO_IDENTITIES = {
     cohort: "sbek",
     profileStatus: "published",
   },
-} as const;
-
-export const SBEK_SECOND_SPEAKER = {
-  personId: "person-sbek-speaker2",
-  name: "Marcus Okafor",
-  email: "sbek-speaker2@example.com",
-  profileStatus: "draft",
 } as const;
 
 export const SBEK_FIXTURE_PEOPLE = {

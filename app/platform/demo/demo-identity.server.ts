@@ -9,7 +9,11 @@ export async function resolveDemoIdentityState(
   identityKey: DemoIdentityKey,
 ) {
   const identity = DEMO_IDENTITIES[identityKey];
-  if (identityKey !== "sbek_reviewer" && identityKey !== "sbek_speaker") {
+  if (
+    identityKey !== "sbek_reviewer" &&
+    identityKey !== "sbek_speaker" &&
+    identityKey !== "sbek_co_speaker"
+  ) {
     return { destination: identity.destination, role: identity.role };
   }
 

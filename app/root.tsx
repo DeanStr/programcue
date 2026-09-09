@@ -89,7 +89,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       session.identityKey === "sbek_applicant"
         ? evaluationApplicantGuideLabel(scenarioState.applicant.phase)
         : evaluationReviewerGuideLabel(scenarioState.reviewer.phase);
-  } else if (identity.group === "scenario") {
+  } else if (
+    identity.group === "scenario" &&
+    session.identityKey !== "sbek_co_speaker"
+  ) {
     throw new Error(
       `Evaluation identity ${session.identityKey} has no scenario banner mapping.`,
     );

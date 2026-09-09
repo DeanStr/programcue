@@ -281,6 +281,10 @@
   background: var(--surface);
   box-shadow: var(--elev-3);
 }
+.pc-eval-row-detail {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
 .pc-eval-row-detail > summary {
   color: var(--text-accent);
   font-size: var(--text-xs);
@@ -431,6 +435,9 @@
 @media (max-width: 760px) {
   .pc-eval-admin .pc-eval-table .pc-eval-overflow-cell {
     white-space: normal;
+  }
+  .pc-eval-row-detail {
+    grid-column: 1 / -1;
   }
   .pc-eval-admin .pc-responsive-table tr:has(.pc-eval-overflow[open]) {
     overflow: visible;

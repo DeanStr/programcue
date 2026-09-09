@@ -324,12 +324,19 @@ function reviewerPresentation(
   }
 }
 
-type ScenarioIdentityKey = "sbek_applicant" | "sbek_reviewer";
+type ScenarioIdentityKey =
+  | "sbek_applicant"
+  | "sbek_co_speaker"
+  | "sbek_reviewer";
 
 function isScenarioIdentityKey(
   key: EvaluationIdentityKey,
 ): key is ScenarioIdentityKey {
-  return key === "sbek_applicant" || key === "sbek_reviewer";
+  return (
+    key === "sbek_applicant" ||
+    key === "sbek_co_speaker" ||
+    key === "sbek_reviewer"
+  );
 }
 
 function scenarioPresentation(
@@ -337,6 +344,7 @@ function scenarioPresentation(
   state: EvaluationScenarioGuideState,
 ): ScenarioPresentation {
   if (key === "sbek_applicant") return applicantPresentation(state.applicant);
+  if (key === "sbek_co_speaker") return EVALUATION_IDENTITIES.sbek_co_speaker;
   return reviewerPresentation(state.reviewer);
 }
 

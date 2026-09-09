@@ -772,7 +772,7 @@ test("a released decision keeps inspectable recipient delivery evidence after re
 test("AI advisory and human judgment remain separate after reload", async ({
   page,
   request,
-}) => {
+}, testInfo) => {
   await resetDemoEvent(request);
   const fixture = await request.post("/demo/fixtures/ai-review-evidence", {
     form: { confirm: "seed-ai-review-evidence-browser-fixture" },
@@ -820,6 +820,52 @@ test("AI advisory and human judgment remain separate after reload", async ({
     return result;
   }
 
+  for (const viewport of [
+    { width: 1280, height: 900 },
+    { width: 390, height: 844 },
+  ]) {
+    await page.setViewportSize(viewport);
+    const evidence = await openEvidence();
+    const cards = evidence.locator(".pc-eval-row-detail article");
+    const overflow = await cards.evaluateAll((elements) =>
+      elements.flatMap((card) => {
+        const bounds = card.getBoundingClientRect();
+        return [...card.querySelectorAll("p")]
+          .filter((paragraph) => {
+            const walker = document.createTreeWalker(
+              paragraph,
+              NodeFilter.SHOW_TEXT,
+            );
+            for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+              if (node.parentElement?.closest(".sr-only")) continue;
+              const range = document.createRange();
+              range.selectNodeContents(node);
+              if (
+                [...range.getClientRects()].some(
+                  (rect) =>
+                    rect.right > bounds.right + 1 ||
+                    rect.left < bounds.left - 1,
+                )
+              )
+                return true;
+            }
+            return false;
+          })
+          .map((paragraph) => paragraph.textContent);
+      }),
+    );
+    expect(
+      overflow,
+      `Expanded evidence must fit its cards at ${viewport.width}px`,
+    ).toEqual([]);
+    await expect(
+      evidence.getByText("Submitted snapshot SHA-256:", { exact: false }),
+    ).toBeVisible();
+    await cards.nth(1).screenshot({
+      path: testInfo.outputPath(`ai-evidence-${viewport.width}.png`),
+    });
+  }
+  await page.setViewportSize({ width: 1280, height: 900 });
   let result = await openEvidence();
   await result.getByLabel("Human assessment score").fill("4.5");
   await result

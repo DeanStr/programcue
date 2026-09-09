@@ -548,6 +548,22 @@ describe("Submissions D1 vertical slice", () => {
           verified: true,
         },
       );
+      const marcusCookie = await evaluationSessionCookie(
+        evaluationEnvironment,
+        "sbek_co_speaker",
+      );
+      await expect(
+        applicantSessions.get(
+          new Request(`https://example.com/apply/${slug}`, {
+            headers: { cookie: marcusCookie.split(";", 1)[0]! },
+          }),
+          form,
+        ),
+      ).resolves.toMatchObject({
+        personId: "person-sbek-speaker2",
+        email: "sbek-speaker2@example.com",
+        verified: true,
+      });
     });
 
     it("does not grant applicant verification to another evaluation persona", async () => {

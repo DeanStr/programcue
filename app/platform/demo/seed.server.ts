@@ -8,7 +8,6 @@ import {
   DEMO_ORGANISATION_ID,
   DEMO_VENUE_ADDRESS,
   DEMO_VENUE_MAP_URL,
-  SBEK_SECOND_SPEAKER,
 } from "./demo-identities";
 
 export {
@@ -68,7 +67,6 @@ export async function ensureDemoData(env: CloudflareEnvironment) {
       ...Object.entries(DEMO_IDENTITIES)
         .filter(([identityKey]) => identityKey !== "administrator")
         .map(([, identity]) => identity),
-      SBEK_SECOND_SPEAKER,
     ].map((identity) =>
       env.DB.prepare(
         `

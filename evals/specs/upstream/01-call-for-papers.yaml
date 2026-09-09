@@ -61,13 +61,25 @@ scenarios:
       already exists before this run, report blocked and request an
       operator-owned fresh fixture rather than reusing or clearing unknown work.
       Verify the new event has no proposals or existing review assignments
-      before continuing; create its CFP with New form if needed. This scenario
-      owns original CFP-S1 steps 1–8 and 12. Anonymous steps 9–11 run separately
-      in CFP-S1-PUBLIC; do not perform them here or treat their unavailable
-      evidence as a publication failure. Verify the published version and
-      publish portalUrl only from observed evidence. After the multi-event
-      probe, restore the organizer's canonical event before finishing.
-      Completion here proves neither anonymous access nor applicant validation.
+      before continuing; create its CFP with New form if needed. Before
+      publishing the CFP, open Communications in this new event and create,
+      save, preview and publish two active email templates: Submission
+      confirmation and Decision (the actual categories, not Ad hoc or Task
+      reminder). Use explicit synthetic event copy. For these controlled
+      evaluation messages, set the required footer to Evaluation fixture
+      followed by the observed fixture event location, and record that synthetic
+      footer value; this does not verify an organisation mailing address. Do not
+      change the organisation postal address or provider credentials. Verify
+      each published version and active status after reload. A verified sender
+      alone is not template readiness. Missing required configuration is a setup
+      blocker; do not claim a queued confirmation or decision email was
+      delivered. This scenario owns original CFP-S1 steps 1–8 and 12. Anonymous
+      steps 9–11 run separately in CFP-S1-PUBLIC; do not perform them here or
+      treat their unavailable evidence as a publication failure. Verify the
+      published version and publish portalUrl only from observed evidence. After
+      the multi-event probe, restore the organizer's canonical event before
+      finishing. Completion here proves neither anonymous access nor applicant
+      validation.
 
 
       ORIGINAL SCENARIO SCRIPT:

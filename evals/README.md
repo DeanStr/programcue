@@ -34,7 +34,12 @@ ordinary signup. Missing public evidence remains unavailable to the judge.
 The split changes the evaluation fingerprint and requires a fresh run.
 
 CFP-S1 creates a blank DevFlow Conf 2027 event for the chained run, with explicit
-reuse of the configured evaluation sender where available. The populated Future
+reuse of the configured evaluation sender where available. Before CFP publication,
+it creates and publishes active Submission confirmation and Decision email
+templates with an explicit synthetic footer (Evaluation fixture plus the observed
+event location). This does not verify an organisation mailing address. Sender
+verification alone is not
+notification readiness. The populated Future
 of Events 2027 showcase retains its protected review work. A pre-existing DevFlow
 event blocks a fresh run; only the operator resets shared state between runs.
 Every persona selects the new event after gaining access, and applicant/public
@@ -50,7 +55,12 @@ plan, completes the remaining source-round review, then explicitly advances the
 two proposals into Initial Review. This gives the required 2-assigned/0-completed
 baseline without archiving a cycle or releasing decisions early. Historical CFP
 reviews remain inspectable; current and historical evidence must be labelled by
-round. Only CFP-S4 releases decisions and closes the CFP. This ordering requires
+round. ABS-S1 switches to the saved `co_speaker` persona (Marcus), opens the bound
+CFP URL and uses **Claim speaker profile** before review assignment. Selecting
+Marcus in `/evaluate` grants no membership and claims no invitation; his
+ordinary authenticated email-matching claim must persist and be visible to
+Priya. This is not evidence of signup, email verification or invitation delivery.
+Only CFP-S4 releases decisions and closes the CFP. This ordering requires
 the abstract-management prerequisites when selecting CFP-S4, including a
 CFP-only run. Existing sealed runs are unchanged; use a fresh evaluation.
 
@@ -163,7 +173,7 @@ process kill, inspect the PID in `.agent-eval/local.lock` and stop any surviving
 owned Worker before removing the stale lock; never remove a live run's lock.
 
 `--areas` must include declared prerequisite areas. `--scenarios` must explicitly
-include prerequisites or dependent execution will be blocked. All four saved
+include prerequisites or dependent execution will be blocked. All five saved
 personas are captured even for public scenarios, because their declared allowed
 persona sets require them.
 
@@ -310,7 +320,8 @@ removed afterward; retained evidence supports offline grading.
   intended Programcue behavior. Do not republish secretly to claim `EMB-16` passed.
 - Pre-captured evaluator access is not ordinary account creation or email
   verification. Sam still needs the organizer's invitation and explicit acceptance.
-  Marcus has no production persona card. Fixture access must not earn unsupported
+  Marcus must explicitly claim his matching invitation after selecting Co-speaker.
+  Fixture access must not earn unsupported
   signup or identity-isolation credit. Upstream `ABS-14` is left applicable;
   absence of sufficient AI evidence is not an automatic exclusion.
 - The source scripts contain illustrative event dates, names and emails. The
@@ -351,7 +362,7 @@ setup and tests never start one.
 | Evidence | What closes the gap |
 | --- | --- |
 | Port structure and original criteria | Importer hash verification, preservation tests, and all three config validations |
-| Local role preparation | Fresh isolated reset and four saved-role captures plus anonymous public browsing |
+| Local role preparation | Fresh isolated reset and five saved-role captures plus anonymous public browsing |
 | Local email delivery | Explicit UI send followed by a correlated Mailpit receipt; healthy missing receipt fails |
 | Full upstream workflows | An explicitly requested chained run; currently not verified end to end |
 | Real signup, external inbox delivery, attachments/calendar import and timed reminders | Controlled accounts/providers and retained independent evidence; complete declared manual checks using `aek finalize` |
@@ -406,8 +417,8 @@ using this profile. No script here resets production or installs/reads reset sec
    is using the shared workspace. Use the current operator reset tooling only with explicit reset authorization.
 2. Run `npm run auth:production`. Enter the access code in each opened browser;
    capture Event organiser, Clean applicant + Create evaluator submitter account,
-   and Clean reviewer respectively. Capture only after reset, which invalidates
-   all prior sessions. Never save a Marcus or attendee persona.
+   Co-speaker (Marcus), and Clean reviewer respectively. Capture only after reset,
+   which invalidates all prior sessions. Attendee remains anonymous.
 3. Run `npm run validate`, then `npm run run:production`. The configured readiness
    command checks the production health response and records its reported source
    revision in lifecycle diagnostics. Actual sending and provider work can occur.

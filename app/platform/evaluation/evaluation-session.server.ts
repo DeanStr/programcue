@@ -128,6 +128,15 @@ export const EVALUATION_IDENTITIES = {
     whatToTry: "Start an application, add Marcus as co-speaker and submit it.",
     group: "scenario",
   },
+  sbek_co_speaker: {
+    ...DEMO_IDENTITIES.sbek_co_speaker,
+    label: "Co-speaker",
+    description:
+      "Marcus’s fixed evaluator identity. Selecting it grants no event access and claims no invitation.",
+    whatToTry:
+      "Open the published CFP as Marcus and explicitly claim the proposal invitation matching his email. Fixture access is not email-verification or delivery evidence.",
+    group: "scenario",
+  },
   sbek_reviewer: {
     ...DEMO_IDENTITIES.sbek_reviewer,
     destination: "/events/select",
@@ -151,6 +160,7 @@ const EVALUATION_WORKSPACE_RECOVERY_LABEL = {
   applicant: "Go to participant workspace",
   speaker: "Go to participant workspace",
   sbek_applicant: "Back to the application",
+  sbek_co_speaker: "Back to the application",
 } as const satisfies Record<EvaluationIdentityKey, string>;
 
 export function evaluationWorkspaceRecovery(
@@ -418,7 +428,7 @@ export async function resolveEvaluationPerson(
   identityKey: EvaluationIdentityKey,
 ) {
   const definition = EVALUATION_IDENTITIES[identityKey];
-  // The two scenario identities intentionally start without fixture-event
+  // Scenario identities intentionally start without fixture-event
   // access. Every showcase identity must retain its seeded, active role.
   const requiresFixtureMembership = definition.group === "showcase";
   const expectedMembershipEventId =

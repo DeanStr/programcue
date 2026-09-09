@@ -1,6 +1,6 @@
 # Verified implementation status
 
-Evidence recorded through **8 September 2026**.
+Evidence recorded through **9 September 2026**.
 This is the current capability,
 requirements and acceptance index; consolidation does not constitute a new
 verification or deployment. The [product specification](../sessionboard-replacement-full-scope-implementation-specification-with-competition-ux.md)
@@ -20,7 +20,14 @@ Git history retains earlier committed work logs.
 - Decisions stopped at missing evaluation setup: no active decision-email template
   and an unclaimed co-speaker. Speaker/content/scheduling remain unexercised.
   Anonymous verification is still unavailable; expanded AI-result text clips.
-- The fixture was reset and old-session invalidation checked at **19:19 UTC**.
+- The fixture was reset and old-session invalidation checked at **19:19 UTC** on 8 September.
+- Current candidate adds explicit template setup and a separately authenticated
+  Marcus claim before review assignment, plus wrapping for expanded AI evidence.
+  Focused checks passed: 71 Worker tests, 30 evaluator tests and all three
+  configurations, TypeScript, desktop/mobile AI evidence and co-speaker claim
+  browsers, and production-shaped Marcus selection/reload. Review caught and
+  fixed a missing root-banner mapping before release. Deployment and fresh
+  acceptance evidence are pending.
 
 Status terms:
 

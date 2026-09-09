@@ -27,7 +27,11 @@ async function waitForInterface(page: Page, path: string) {
 
 async function switchDemoRole(
   page: Page,
-  identity: "administrator" | "sbek_reviewer" | "sbek_speaker",
+  identity:
+    | "administrator"
+    | "sbek_reviewer"
+    | "sbek_speaker"
+    | "sbek_co_speaker",
   returnTo: string,
 ) {
   const response = await page.request.post("/demo/role", {
@@ -519,3 +523,103 @@ test.describe
       );
     });
   });
+
+test("Marcus claims his submitted co-speaker invitation before review assignment", async ({
+  page,
+  request,
+  browser,
+}) => {
+  test.setTimeout(90_000);
+  await resetDemoEvent(request);
+  try {
+    await switchDemoRole(page, "administrator", "/admin/command");
+    await resetDemoSubmissions(page.request, { verifiedLocalSender: true });
+    await switchDemoRole(page, "sbek_speaker", "/apply/form");
+    await waitForInterface(page, "/apply/form");
+    await page.getByLabel("Email address").fill(PRIYA_EMAIL);
+    await page.getByRole("button", { name: "Send verification code" }).click();
+    await page.getByLabel("Six-digit code").fill("424242");
+    await page
+      .getByRole("button", { name: "Verify and open applications" })
+      .click();
+    await page
+      .getByRole("button", { name: "Start application", exact: true })
+      .click();
+    await page.getByLabel("Session title").fill("Claim before review");
+    await page
+      .getByLabel("Session description")
+      .fill(
+        "A practical talk about making event data useful to programme teams.",
+      );
+    await page.getByLabel("Event Operations").check();
+    await page.getByLabel("Format").selectOption("Presentation");
+    await page.getByLabel("Speaker 1 name").fill("Priya Raman");
+    await page
+      .getByLabel("Biography")
+      .last()
+      .fill("Priya builds data systems.");
+    await page.getByRole("button", { name: "Add co-speaker" }).click();
+    await page.getByLabel("Speaker 2 name").fill("Marcus Okafor");
+    await page.getByLabel("Email").nth(1).fill(MARCUS_EMAIL);
+    await page.getByRole("button", { name: "Save draft", exact: true }).click();
+    await expect(
+      page.getByRole("status").filter({ hasText: "Your draft has been saved" }),
+    ).toBeVisible();
+    await page.getByText("I have reviewed this application").click();
+    await page
+      .getByRole("button", { name: "Submit application", exact: true })
+      .click();
+    await expect(
+      page
+        .getByRole("status")
+        .filter({ hasText: "Your application has been submitted" }),
+    ).toBeVisible();
+    const marcusContext = await browser.newContext({
+      storageState: { cookies: [], origins: [] },
+    });
+    try {
+      const marcusPage = await marcusContext.newPage();
+      await switchDemoRole(marcusPage, "sbek_co_speaker", "/apply/form");
+      await waitForInterface(marcusPage, "/apply/form");
+      await marcusPage.getByLabel("Email address").fill(MARCUS_EMAIL);
+      await marcusPage
+        .getByRole("button", { name: "Send verification code" })
+        .click();
+      await expect(marcusPage.getByText("No email was sent")).toBeVisible();
+      await marcusPage.getByLabel("Six-digit code").fill("424242");
+      await marcusPage
+        .getByRole("button", { name: "Verify and open applications" })
+        .click();
+      const invitation = marcusPage
+        .locator(".row-main")
+        .filter({ hasText: "Claim before review" });
+      await expect(invitation).toContainText("Invited as Marcus Okafor");
+      await invitation
+        .getByRole("button", { name: "Claim speaker profile" })
+        .click();
+      await expect(
+        marcusPage.getByRole("button", { name: "Claim speaker profile" }),
+      ).toHaveCount(0);
+      await marcusPage.reload();
+      await expect(
+        marcusPage.getByText("Your claimed speaker profile", { exact: true }),
+      ).toBeVisible();
+    } finally {
+      await marcusContext.close();
+    }
+    await switchDemoRole(page, "sbek_speaker", "/participant/applications");
+    await waitForInterface(page, "/participant/applications");
+    await page
+      .locator("article.card")
+      .filter({ hasText: "Claim before review" })
+      .getByRole("link", { name: "View application" })
+      .click();
+    const marcus = page
+      .locator("#participant-application-detail")
+      .getByRole("listitem")
+      .filter({ hasText: "Marcus Okafor" });
+    await expect(marcus).toContainText("Relationship status: claimed");
+  } finally {
+    await resetDemoEvent(request);
+  }
+});

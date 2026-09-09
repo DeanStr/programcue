@@ -33,6 +33,7 @@ export async function prepareLocal({ upstream = false } = {}) {
   for (const [persona, name] of [
     ["organizer", upstream ? "Morgan Chen" : "Jordan Alvarez"],
     ["speaker", "Priya Raman"],
+    ["co_speaker", "Marcus Okafor"],
     ["reviewer", "Sam Whitfield"],
     ["showcase_speaker", "Priya Shah"],
   ]) {
@@ -62,6 +63,6 @@ export async function prepareLocal({ upstream = false } = {}) {
     mode: 0o600,
   });
   console.log(
-    "Reset the isolated local fixture and captured four fresh role states. Fixture access is not signup or email-delivery evidence.",
+    "Reset the isolated local fixture and captured five fresh role states. Fixture access is not signup or email-delivery evidence.",
   );
 }

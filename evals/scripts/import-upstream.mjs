@@ -16,7 +16,7 @@ const dependencies = {
   "CFP-S2": ["CFP-S1"],
   "CFP-S3": ["CFP-S2", "ABS-S1"],
   "CFP-S4": ["CFP-S3", "ABS-S3"],
-  "ABS-S1": ["CFP-S2"],
+  "ABS-S1": ["CFP-S1", "CFP-S2"],
   "ABS-S2": ["CFP-S3"],
   "ABS-S3": ["ABS-S2"],
   "ABS-S2-AI": ["ABS-S3"],
@@ -57,6 +57,7 @@ const bindings = {
   "CFP-S1-PUBLIC": "CFP-S1",
   "CFP-S2": "CFP-S1",
   "CFP-S3": "CFP-S2",
+  "ABS-S1": "CFP-S1",
   "SPK-S1": "CFP-S4",
   "EMB-S1": "AIA-S2",
 };
@@ -86,7 +87,7 @@ const selectors = {
 };
 const notices = {
   "CFP-S1":
-    "At original steps 1-2, create a blank DevFlow Conf 2027 event using Program Cue as its data repository, the fixture dates and public slug devflow-conf-2027. Reuse the configured verified evaluation sender from the showcase event through the explicit Reuse verified sender choice when available; missing sender capability stays an honest provider blocker. Do not clone the showcase or archive its review cycle. If DevFlow Conf 2027 already exists before this run, report blocked and request an operator-owned fresh fixture rather than reusing or clearing unknown work. Verify the new event has no proposals or existing review assignments before continuing; create its CFP with New form if needed. This scenario owns original CFP-S1 steps 1–8 and 12. Anonymous steps 9–11 run separately in CFP-S1-PUBLIC; do not perform them here or treat their unavailable evidence as a publication failure. Verify the published version and publish portalUrl only from observed evidence. After the multi-event probe, restore the organizer's canonical event before finishing. Completion here proves neither anonymous access nor applicant validation.",
+    "At original steps 1-2, create a blank DevFlow Conf 2027 event using Program Cue as its data repository, the fixture dates and public slug devflow-conf-2027. Reuse the configured verified evaluation sender from the showcase event through the explicit Reuse verified sender choice when available; missing sender capability stays an honest provider blocker. Do not clone the showcase or archive its review cycle. If DevFlow Conf 2027 already exists before this run, report blocked and request an operator-owned fresh fixture rather than reusing or clearing unknown work. Verify the new event has no proposals or existing review assignments before continuing; create its CFP with New form if needed. Before publishing the CFP, open Communications in this new event and create, save, preview and publish two active email templates: Submission confirmation and Decision (the actual categories, not Ad hoc or Task reminder). Use explicit synthetic event copy. For these controlled evaluation messages, set the required footer to Evaluation fixture followed by the observed fixture event location, and record that synthetic footer value; this does not verify an organisation mailing address. Do not change the organisation postal address or provider credentials. Verify each published version and active status after reload. A verified sender alone is not template readiness. Missing required configuration is a setup blocker; do not claim a queued confirmation or decision email was delivered. This scenario owns original CFP-S1 steps 1–8 and 12. Anonymous steps 9–11 run separately in CFP-S1-PUBLIC; do not perform them here or treat their unavailable evidence as a publication failure. Verify the published version and publish portalUrl only from observed evidence. After the multi-event probe, restore the organizer's canonical event before finishing. Completion here proves neither anonymous access nor applicant validation.",
   "CFP-S1-PUBLIC":
     "This scenario owns original CFP-S1 steps 9–11. Use the bound published portalUrl in the anonymous persona. Keep security checks enforced: never bypass challenges or substitute authenticated evidence for anonymous evidence. If verification or account requirements prevent interaction, record the precise boundary and report blocked for unavailable checks. Applicant checks run independently in CFP-S2; do not create a submission here.",
   "CFP-S2":
@@ -96,7 +97,7 @@ const notices = {
   "CFP-S4":
     "ABS-S3 has now completed the deeper review checks. In original step 1, select the historical CFP Review results to inspect Sam's original all-4 scorecard and comment; do not overwrite the later Initial Review scores. Return to the current round for decisions. Release decisions and close the CFP only in this scenario.",
   "ABS-S1":
-    "This scenario runs after CFP-S2 and before any review assignment in CFP-S3: both original proposals are submitted, editable and undecided, and the CFP is open. Reuse them, add and save the co-author on the CI proposal, verify that participant persisted after reload, and submit the third proposal. Leave all three undecided. Review assignment locks applicant revisions, so complete this setup before switching to review work. Do not release decisions, reset the fixture or archive a review cycle.",
+    "This scenario runs after CFP-S2 and before any review assignment in CFP-S3: both original proposals are submitted, editable and undecided, and the CFP is open. Reuse them, add and save the co-author on the CI proposal, verify that participant persisted after reload, and submit the third proposal. Then switch_persona to co_speaker (Marcus), open the bound published portalUrl (in the local demo only, complete its explicitly labelled no-send email-code fixture as Marcus if the applicant portal requires it; do not claim external verification), verify the CI invitation under Applications that include you, and explicitly choose Claim speaker profile. Verify Marcus’s claimed profile after reload; switch back to speaker (Priya), reopen CI and verify that Marcus is now linked to his identity, not merely listed with a pending or prepared claim invitation. This uses the ordinary authenticated email-matching claim action; fixture login alone does not claim the invitation and is not email-verification or invitation-delivery evidence. If the claim is unavailable, preserve the precise blocker rather than deleting Marcus or attempting acceptance. Leave all three undecided. Review assignment locks applicant revisions, so complete this setup before switching to review work. Do not release decisions, reset the fixture or archive a review cycle.",
   "ABS-S2-AI":
     "This independent scenario owns original ABS-S2 step 10 and ABS-S3 step 13. Human Initial Review scoring is complete and decisions have not been released. Select Initial Review and the CI proposal. Inspect the named provider, model and destination before confirming any AI request; opening the provider/request confirmation does not send data. Use only the configured synthetic evaluation proposal. Preserve explicit confirmation and any automatic approval rejection: report blocked if required authority or configuration is unavailable, never bypass it. Record actual generated output and a persisted human override, or the precise unavailable boundary. Do not release decisions, alter human reviews, change provider settings or reset the fixture. AI results remain separately graded and do not gate the core workflow.",
   "ABS-S2":
@@ -191,7 +192,13 @@ for (const name of fs.readdirSync(path.join(root, "upstream/specs")).sort()) {
       kind: "browser",
       persona,
       requiresAuth: persona !== "anonymous",
-      allowedPersonas: ["organizer", "speaker", "reviewer", "anonymous"],
+      allowedPersonas: [
+        "organizer",
+        "speaker",
+        "reviewer",
+        "anonymous",
+        ...(scenario.id === "ABS-S1" ? ["co_speaker"] : []),
+      ],
       instructions,
       successSignals: scenario.success_signals ?? [],
       dependsOn: dependencies[scenario.id] ?? [],

@@ -11,7 +11,6 @@ import {
   DEMO_VENUE_ADDRESS,
   DEMO_VENUE_MAP_URL,
   SBEK_FIXTURE_PEOPLE,
-  SBEK_SECOND_SPEAKER,
 } from "~/platform/demo/demo-identities";
 import { seedJudgedDemoWorkflow } from "~/platform/demo/demo-judged-workflow-seed.server";
 import {
@@ -361,7 +360,7 @@ async function clearDemoObjects(
 }
 
 async function resetMutableIdentity(env: CloudflareEnvironment) {
-  const identities = [...Object.values(DEMO_IDENTITIES), SBEK_SECOND_SPEAKER];
+  const identities = Object.values(DEMO_IDENTITIES);
   const statements = [
     env.DB.prepare(
       `UPDATE organisations

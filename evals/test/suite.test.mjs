@@ -416,3 +416,15 @@ test("AEK runs abstract reviews before decisions and blocks decisions when revie
     fs.rmSync(directory, { recursive: true, force: true });
   }
 });
+
+test("acceptance setup includes published templates and an authenticated co-speaker claim", () => {
+  const specs = loadSpecs(path.join(root, "specs/upstream"));
+  const scenarios = specs.flatMap((spec) => spec.scenarios);
+  const setup = scenarios.find((scenario) => scenario.id === "CFP-S1");
+  assert.match(setup.instructions, /Submission confirmation and Decision/);
+  const coSpeaker = scenarios.find((scenario) => scenario.id === "ABS-S1");
+  assert.ok(coSpeaker.allowedPersonas.includes("co_speaker"));
+  assert.deepEqual(coSpeaker.inputs.portalUrl, { from: "CFP-S1", output: "portalUrl" });
+  assert.match(coSpeaker.instructions, /Claim speaker profile/);
+  assert.match(coSpeaker.instructions, /fixture login alone does not claim the invitation/);
+});

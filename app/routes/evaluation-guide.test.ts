@@ -217,6 +217,53 @@ describe("production evaluation guide", () => {
     });
   });
 
+  it("selects Marcus without granting membership or claiming a co-speaker invitation", async () => {
+    const environment = productionEnvironment();
+    await provisionEvaluationFixture(environment);
+    const unlocked = await action({
+      request: request({
+        _intent: "unlock",
+        accessCode: "0123456789abcdef0123456789abcdef",
+      }),
+      params: {},
+      context: context(environment),
+    } as never);
+    const selected = await action({
+      request: request(
+        { _intent: "select_identity", identity: "sbek_co_speaker" },
+        { cookie: responseCookieHeader(unlocked as Response) },
+      ),
+      params: {},
+      context: context(environment),
+    } as never);
+    expect(selected).toBeInstanceOf(Response);
+    expect((selected as Response).headers.get("location")).toBe("/apply/form");
+    const person = await requireAuthenticatedPerson(
+      new Request("https://app.programcue.com/apply/form", {
+        headers: { cookie: responseCookieHeader(selected as Response) },
+      }),
+      environment,
+    );
+    expect(person).toMatchObject({
+      personId: "person-sbek-speaker2",
+      email: "eval-speaker-2@programcue.com",
+    });
+    expect(
+      await environment.DB.prepare(
+        "SELECT id FROM memberships WHERE person_id = ? AND accepted_at IS NOT NULL AND revoked_at IS NULL",
+      )
+        .bind("person-sbek-speaker2")
+        .all(),
+    ).toMatchObject({ results: [] });
+    expect(
+      await environment.DB.prepare(
+        "SELECT id FROM submission_speakers WHERE person_id = ? AND invitation_status = 'claimed'",
+      )
+        .bind("person-sbek-speaker2")
+        .all(),
+    ).toMatchObject({ results: [] });
+  });
+
   it("unlocks a fixed persona and authenticates it through normal server authorization", async () => {
     await ensureDemoData(env as unknown as CloudflareEnvironment);
     const environment = productionEnvironment();
@@ -248,7 +295,7 @@ describe("production evaluation guide", () => {
       unlockedGuide.identities
         .filter((identity) => identity.group === "scenario")
         .map((identity) => identity.key),
-    ).toEqual(["sbek_applicant", "sbek_reviewer"]);
+    ).toEqual(["sbek_applicant", "sbek_co_speaker", "sbek_reviewer"]);
     expect(
       unlockedGuide.identities.map((identity) => String(identity.key)),
     ).not.toContain("sbek_second_speaker");

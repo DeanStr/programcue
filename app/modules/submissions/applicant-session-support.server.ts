@@ -182,6 +182,7 @@ export function isEvaluationApplicantSession(
 ) {
   return (
     session.identityKey === "sbek_applicant" ||
+    session.identityKey === "sbek_co_speaker" ||
     session.identityKey === "applicant"
   );
 }

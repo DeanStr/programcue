@@ -30,6 +30,7 @@ scenarios:
       - speaker
       - reviewer
       - anonymous
+      - co_speaker
     instructions: >-
       PROGRAMCUE EXECUTION ADAPTATION: Use the configured fixture identities and
       current saved persona. Replace every sign-out/sign-in role transition
@@ -55,10 +56,24 @@ scenarios:
       CFP-S3: both original proposals are submitted, editable and undecided, and
       the CFP is open. Reuse them, add and save the co-author on the CI
       proposal, verify that participant persisted after reload, and submit the
-      third proposal. Leave all three undecided. Review assignment locks
-      applicant revisions, so complete this setup before switching to review
-      work. Do not release decisions, reset the fixture or archive a review
-      cycle.
+      third proposal. Then switch_persona to co_speaker (Marcus), open the bound
+      published portalUrl (in the local demo only, complete its explicitly
+      labelled no-send email-code fixture as Marcus if the applicant portal
+      requires it; do not claim external verification), verify the CI invitation
+      under Applications that include you, and explicitly choose Claim speaker
+      profile. Verify Marcus’s claimed profile after reload; switch back to
+      speaker (Priya), reopen CI and verify that Marcus is now linked to his
+      identity, not merely listed with a pending or prepared claim invitation.
+      This uses the ordinary authenticated email-matching claim action; fixture
+      login alone does not claim the invitation and is not email-verification or
+      invitation-delivery evidence. If the claim is unavailable, preserve the
+      precise blocker rather than deleting Marcus or attempting acceptance.
+      Leave all three undecided. Review assignment locks applicant revisions, so
+      complete this setup before switching to review work. Do not release
+      decisions, reset the fixture or archive a review cycle.
+
+
+      Use the bound portalUrl from CFP-S1; verify the record before continuing.
 
 
       ORIGINAL SCENARIO SCRIPT:
@@ -118,7 +133,12 @@ scenarios:
         role label
       - Screenshot of the co-author control in the submission form or edit view
     dependsOn:
+      - CFP-S1
       - CFP-S2
+    inputs:
+      portalUrl:
+        from: CFP-S1
+        output: portalUrl
   - id: ABS-S2
     name: Organizer configures rounds, pools, assignments, reminders
     kind: browser

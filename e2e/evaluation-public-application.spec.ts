@@ -588,3 +588,29 @@ test("form recovery reconciles renamed event choices and stays saveable beneath 
     }
   }
 });
+
+test("Marcus opens the applicant portal through the production evaluation persona", async ({
+  page,
+}) => {
+  await page.goto("/evaluate");
+  await page.getByRole("textbox", { name: "Access code" }).fill(accessCode);
+  await page.getByRole("button", { name: "Unlock evaluation" }).click();
+  await page
+    .getByRole("button", { name: "Open as Co-speaker", exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/apply\/form$/u);
+  const response = await page.reload();
+  expect(response?.status()).toBe(200);
+  await page.locator("body[data-hydrated='true']").waitFor();
+  const banner = page.getByRole("complementary", {
+    name: "Evaluation session",
+  });
+  await expect(banner).toContainText("Marcus Okafor");
+  await expect(banner).toContainText("Co-speaker");
+  await expect(
+    page.getByRole("button", { name: "Start application", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Send verification code", exact: true }),
+  ).toHaveCount(0);
+});
