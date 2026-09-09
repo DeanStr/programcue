@@ -2281,3 +2281,8 @@ Fresh-event evaluation setup must publish active submission-confirmation and dec
 The fixed Marcus identity is selectable in the local demo and production evaluation gate without granting event membership or claiming proposals. ABS-S1 uses a separate saved persona and the existing authenticated, email-matching **Claim speaker profile** action before assigning reviews. Selecting a fixture identity is not signup, email-verification or delivery evidence. Acceptance continues to require every listed speaker to be claimed; the evaluation must satisfy that invariant rather than remove the co-speaker.
 
 Expanded review-result details wrap prose and unbroken provenance hashes within their cards; compact row actions retain their layout.
+
+
+### 9 September 2026 — Patch release-gate dependencies without changing the toolchain
+
+The release audit rejected `js-yaml` 4.3.1 and Miniflare’s exact `sharp` 0.35.2 pin. Update the lockfile to `js-yaml` 4.3.2 and scope a `sharp` 0.35.4 override to Miniflare. The latter bundles libheif 1.23.2; remove the override when the selected Miniflare release pins a patched Sharp version. Keep the existing high-severity audit gate and toolchain versions. See the [js-yaml advisory](https://github.com/advisories/GHSA-2883-xcg3-v3hh) and [Sharp advisory](https://github.com/advisories/GHSA-rgj7-g3m4-5g8c).

@@ -27,7 +27,9 @@ Git history retains earlier committed work logs.
   configurations, TypeScript, desktop/mobile AI evidence and co-speaker claim
   browsers, and production-shaped Marcus selection/reload. Review caught and
   fixed a missing root-banner mapping before release. Deployment and fresh
-  acceptance evidence are pending.
+  acceptance evidence are pending. The first release attempt passed core checks
+  (661 unit, 1,937 Worker and one agent test) but stopped at newly reported
+  high-severity dependency advisories; the candidate patches js-yaml and Sharp.
 
 Status terms:
 
