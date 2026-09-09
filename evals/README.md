@@ -209,10 +209,27 @@ Worker and runs three Playwright checks without model calls or sending email:
   errors fail. This narrower smoke does not establish clean-persona onboarding.
 
 Screenshots, failures and blocked annotations are retained in
-`.agent-eval/product-smoke/`. AEK's regular browser collector deliberately masks
-opaque sandboxed frames; its exclusion note is missing evidence, not an empty
-application preview. These direct Playwright checks can inspect the application
-fixture without changing AEK's origin boundary or loosening the app sandbox.
+`.agent-eval/product-smoke/`. The configured AEK read-only frame policy permits
+text and image evidence from the representative merged email preview only on
+`/admin/communications/` pages of the application origin. It requires a direct
+`srcdoc` iframe whose sandbox was empty at attachment and has not changed.
+State-preserving iframe moves revoke eligibility. No interactive references are
+granted inside it. Other opaque frames remain excluded; the product sandbox is unchanged.
+
+Production explicitly allows `https://challenges.cloudflare.com` so the collector
+can inspect and interact with the genuine verification frame. A read-only deployed
+probe with that allowance still showed Security check in progress; no token or
+application submission was observed. [Cloudflare does not support automated
+browsers for production challenges](https://developers.cloudflare.com/cloudflare-challenges/reference/supported-browsers/).
+Keep genuine verification as manual acceptance; local mocked verification is not
+live proof. The allowance does not bypass the challenge or award coverage.
+
+Production instructions carry the operator-authorized ABS-S2-AI disclosure: the
+synthetic CI proposal content and Initial Review rubric from this run's evaluation
+event, sent through the configured Cloudflare Workers AI binding for one assessment,
+followed by the specified human override. Inspect the displayed provider/model,
+confirm in the product and preserve approval decisions. This scope excludes real
+customer data, other providers/endpoints and provider-setting changes.
 
 The complementary Worker test runs from the application root:
 

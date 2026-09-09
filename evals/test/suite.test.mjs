@@ -223,6 +223,24 @@ test("profiles share fresh local personas but keep regression results separate a
   assert.equal(local.paths.auth, regression.paths.auth);
   assert.notEqual(local.paths.baselines, regression.paths.baselines);
   assert.notEqual(local.paths.auth, production.paths.auth);
+  assert.deepEqual(production.target.allowedOrigins, ["https://challenges.cloudflare.com"]);
+  assert.match(
+    production.instructions,
+    /synthetic CI proposal's submitted content and Initial Review rubric/,
+  );
+  assert.match(
+    production.instructions,
+    /explicitly authorizes that fixture payload and destination/,
+  );
+  assert.match(production.instructions, /does not authorize real customer data/);
+  for (const config of [local, production, regression]) {
+    assert.deepEqual(config.browser.readOnlyFrames, [
+      {
+        pathPrefix: "/admin/communications/",
+        selector: 'iframe.email-preview-frame[title^="Representative merged email"]',
+      },
+    ]);
+  }
   for (const name of ["local", "production", "regression"]) {
     const data = YAML.parse(fs.readFileSync(path.join(root, `fixtures/${name}.yaml`), "utf8"));
     assert.ok(Object.values(data.data.identities).every((identity) => !("password" in identity)));

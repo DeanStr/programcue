@@ -1,3 +1,6 @@
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import YAML from "yaml";
 import { deniesPrivateDownload } from "../scripts/file-access-checks.mjs";
 import fs from "node:fs";
 import path from "node:path";
@@ -66,6 +69,66 @@ test("merged email preview renders inside its opaque sandbox on desktop and mobi
     body: JSON.stringify(errors),
     contentType: "application/json",
   });
+  const directory = info.outputPath("aek-preview");
+  fs.mkdirSync(directory, { recursive: true });
+  const state = path.join(directory, "state.json");
+  await page.context().storageState({ path: state });
+  const config = YAML.parse(fs.readFileSync(path.join(root, "evalkit.local.yaml"), "utf8"));
+  const contextFile = path.join(directory, "context.json");
+  fs.writeFileSync(
+    contextFile,
+    JSON.stringify({
+      targetUrl: origin,
+      allowedOrigins: [origin],
+      evidenceDir: directory,
+      storageStatePath: state,
+      expectAuthenticated: true,
+      fixtureFiles: {},
+      requiredCheckpoints: [],
+      headless: true,
+      viewport: { width: 1440, height: 1000 },
+      actionTimeoutMs: 10000,
+      maxToolCalls: 10,
+      readOnlyFrames: config.browser.readOnlyFrames,
+    }),
+  );
+  const transport = new StdioClientTransport({
+    command: path.join(root, "node_modules/.bin/aek-browser-mcp"),
+    args: [contextFile],
+    stderr: "pipe",
+  });
+  const client = new Client({ name: "programcue-preview-smoke", version: "1" });
+  const call = async (name, args = {}) => {
+    const result = await client.callTool({ name, arguments: args });
+    expect(result.isError, JSON.stringify(result.content)).not.toBe(true);
+    return result.content
+      .filter((item) => item.type === "text")
+      .map((item) => item.text)
+      .join("\n");
+  };
+  try {
+    await client.connect(transport);
+    const initial = await call("navigate", { url: page.url() });
+    const generate = initial.match(/\[(e\d+)\] <button[^>]*> Generate current preview/);
+    expect(generate, initial).not.toBeNull();
+    await call("click", { ref: generate[1] });
+    await call("wait", { ms: 500 });
+    const snapshot = await call("snapshot");
+    expect(snapshot).toContain("Hi Priya,");
+    expect(snapshot).toContain("approved read-only preview");
+    expect(snapshot).toContain("Your speaker workspace is ready.");
+    await call("scroll", { direction: "down" });
+    await call("scroll", { direction: "down" });
+    await call("screenshot", { label: "aek-merged-preview", fullPage: false });
+    const shots = JSON.parse(fs.readFileSync(path.join(directory, "screenshots.json"), "utf8"));
+    await info.attach("aek-merged-preview", {
+      path: path.join(directory, shots.at(-1).path),
+      contentType: "image/jpeg",
+    });
+  } finally {
+    await client.close();
+    await transport.close();
+  }
   // Deliberately stop at preview: this smoke sends no notifications.
 });
 

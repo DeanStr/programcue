@@ -217,10 +217,8 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
   const pulseParts = [
     `${dashboard.totalContacts} ${dashboard.totalContacts === 1 ? "contact" : "contacts"}`,
     `${dashboard.eventCount} ${dashboard.eventCount === 1 ? "event" : "events"}`,
-    dashboard.returningSpeakers
-      ? `${dashboard.returningSpeakers} returning`
-      : null,
-  ].filter(Boolean);
+    `${dashboard.returningSpeakers} returning ${dashboard.returningSpeakers === 1 ? "speaker" : "speakers"}`,
+  ];
   return (
     <div className="crm-workspace">
       <div className="page-head pc-page-header">
@@ -264,6 +262,11 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
           " not recorded yet"
         )}
       </div>
+
+      <p className="crm-caption">
+        Returning speakers have sessions in more than one active event in this
+        organisation.
+      </p>
 
       {actionData ? (
         <div

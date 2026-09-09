@@ -2333,3 +2333,27 @@ content-upload → content-review dependencies because those checks inspect the
 earlier changes. Preserve all upstream criteria and weights. Checkpoint guidance
 requires settled, complete captures and explicit screenshot-step references
 before immutable publication; missing observations remain unavailable evidence.
+
+
+### Evaluation preview evidence and provider authorization
+
+AEK may collect text and image evidence from Program Cue's representative merged
+email preview through an explicit application-origin, pathname-prefix and iframe
+selector policy. The iframe must be a direct `srcdoc` child with an empty sandbox
+from attachment onward. Sandbox changes or state-preserving iframe moves revoke
+eligibility until the frame is replaced. No interactive references are granted; product sandbox and
+referrer restrictions remain intact. This distinguishes unavailable evaluator
+access from a broken product preview.
+
+Production evaluation explicitly allows the Cloudflare challenge origin, but
+successful genuine verification remains manual acceptance: the allowed-origin
+probe still did not obtain a token, and Cloudflare does not support automated
+browsers for production challenges. No test-key or verification bypass is enabled
+on the deployed application.
+
+The operator-authorized AI scenario carries its bounded disclosure in the
+production evaluation instructions: synthetic CI proposal content and Initial
+Review rubric from the run's DevFlow fixture, sent through the configured Workers
+AI binding for one assessment and the specified human override. Provider/model
+inspection, product confirmation and automatic approval decisions remain enforced.
+Other providers, real customer data and provider-setting changes are outside scope.

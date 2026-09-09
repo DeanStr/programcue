@@ -5,9 +5,16 @@ project:
 target:
   kind: web
   url: https://app.programcue.com
+  allowedOrigins:
+    - https://challenges.cloudflare.com
   ready:
     command: node evals/scripts/production-health.mjs
     timeoutSeconds: 30
+browser:
+  readOnlyFrames:
+    - pathPrefix: /admin/communications/
+      selector: iframe.email-preview-frame[title^="Representative merged email"]
+
 agent:
   provider: codex
   maxTurns: 120
@@ -28,7 +35,16 @@ variables:
   evaluationEnvironment: production
   canonicalEvent: DevFlow Conf 2027
   canonicalPublicPath: /public/programme/devflow-conf-2027
-instructions: "Evaluate Programcue by function and filled-state correctness, not
+instructions: "Operator-authorized AI scope: in ABS-S2-AI, send the synthetic CI
+  proposal's submitted content and Initial Review rubric from this run's DevFlow
+  Conf 2027 evaluation fixture to Cloudflare Workers AI through Program Cue's
+  configured AI binding for one first-pass assessment, then save the scenario's
+  human override. This explicitly authorizes that fixture payload and destination.
+  Inspect and record the displayed Workers AI provider and configured model before
+  confirming Generate first pass. This does not authorize real customer data,
+  another provider or endpoint, or changes to provider settings. Preserve the
+  product confirmation and any automatic approval rejection; never bypass them.
+  Evaluate Programcue by function and filled-state correctness, not
   resemblance to SessionBoard. Use the real interface and the configured
   non-secret fixture emails. Organizer navigation: Command Centre, Form builder,
   Review & selection, Participants, Content, Schedule, Programme,

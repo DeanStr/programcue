@@ -8,6 +8,11 @@ target:
   ready:
     url: http://127.0.0.1:5188/demo
     timeoutSeconds: 30
+browser:
+  readOnlyFrames:
+    - pathPrefix: /admin/communications/
+      selector: iframe.email-preview-frame[title^="Representative merged email"]
+
 agent:
   provider: codex
   model: gpt-6-astra

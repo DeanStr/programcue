@@ -62,6 +62,14 @@ test("organization CRM covers directory, relationship, pipeline, handoff and out
   await expect(
     page.getByRole("heading", { name: "Speaker directory", level: 1 }),
   ).toBeVisible();
+  await expect(
+    page.getByText("0 returning speakers", { exact: false }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      "Returning speakers have sessions in more than one active event in this organisation.",
+    ),
+  ).toBeVisible();
 
   await page.getByText("Import speaker contacts from CSV").click();
   await page.getByLabel("CSV file").setInputFiles(fixture);

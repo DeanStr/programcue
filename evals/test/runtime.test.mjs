@@ -133,7 +133,7 @@ test("coordinator rejects failed Worker shutdown and still removes all owned res
   fs.writeFileSync(
     path.join(evaluator, "node_modules/agent-eval-kit/dist/cli.js"),
     `
-    if (process.argv.includes('--dry-run')) console.log(JSON.stringify({version:1,areas:[{id:'file-integrity',scenarios:[{id:'fixture'}]}]}));
+    if (process.argv.includes('--dry-run')) console.log(JSON.stringify({version:2,areas:[{id:'file-integrity',scenarios:[{id:'fixture'}]}]}));
     // A fixture collection returns successfully even if its browser reports blocked.
   `,
   );

@@ -463,9 +463,12 @@ scenarios:
       released. Select Initial Review and the CI proposal. Inspect the named
       provider, model and destination before confirming any AI request; opening
       the provider/request confirmation does not send data. Use only the
-      configured synthetic evaluation proposal. Preserve explicit confirmation
-      and any automatic approval rejection: report blocked if required authority
-      or configuration is unavailable, never bypass it. Record actual generated
+      configured synthetic evaluation proposal. For production, the project-wide
+      instructions carry the operator-authorized fixture payload and Cloudflare
+      Workers AI destination; verify those boundaries and the displayed model
+      before confirming Generate first pass. Preserve explicit confirmation and
+      any automatic approval rejection: report blocked if required authority or
+      configuration is unavailable, never bypass it. Record actual generated
       output and a persisted human override, or the precise unavailable
       boundary. Do not release decisions, alter human reviews, change provider
       settings or reset the fixture. AI results remain separately graded and do

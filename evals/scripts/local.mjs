@@ -60,7 +60,7 @@ if (!mode?.startsWith("--smoke") && mode !== "--prepare-only") {
   );
   const plan = JSON.parse(output);
   if (
-    plan.version !== 1 ||
+    plan.version !== 2 ||
     !Array.isArray(plan.areas) ||
     plan.areas.some(
       (area) =>
