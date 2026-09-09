@@ -23,15 +23,15 @@ const dependencies = {
   "SPK-S1": ["CFP-S4"],
   "SPK-S2": ["SPK-S1"],
   "SPK-S3": ["SPK-S2"],
-  "CNT-S1": ["SPK-S3"],
+  "CNT-S1": ["CFP-S4"],
   "CNT-S2": ["CNT-S1"],
   "CNT-S3": ["CNT-S2"],
-  "AIA-S1": ["CNT-S3"],
+  "AIA-S1": ["CFP-S4"],
   "AIA-S2": ["AIA-S1"],
   "EMB-S1": ["AIA-S2"],
   "EMB-S2": ["EMB-S1"],
   "EMB-S3": ["EMB-S2"],
-  "CRM-S1": ["SPK-S3"],
+  "CRM-S1": ["CFP-S1"],
   "CRM-S2": ["CRM-S1"],
 };
 const handoffs = {
@@ -59,6 +59,8 @@ const bindings = {
   "CFP-S3": "CFP-S2",
   "ABS-S1": "CFP-S1",
   "SPK-S1": "CFP-S4",
+  "CNT-S1": "CFP-S4",
+  "AIA-S1": "CFP-S4",
   "EMB-S1": "AIA-S2",
 };
 const checkpoints = {
@@ -75,6 +77,16 @@ const checkpoints = {
     aggregates: "The results table, recorded scores and both sort orders were inspected.",
   },
   "CNT-S3": { versions: "The attributed version history and restored abstract were inspected." },
+};
+const checkpointInstructions = {
+  "CFP-S2":
+    "For submitted, retain the confirmation and the saved dashboard row; for edited, retain the edited abstract after reload. Fixture activation is not signup or email-verification evidence.",
+  "CFP-S4":
+    "For decisions, reload the organizer queue after both decisions finish and capture both proposal titles and their persisted Accepted/Rejected statuses. For handoff, open the accepted CI session and capture its title, abstract, speakers and track, including any missing transferred fields. For closed, capture the public closed state and actually attempt the speaker edit. Preserve the speaker's editability before closure too; distinguish an existing decision/review lock from a lock caused by closure. Capture disabled fields and the actual explanation. Do not infer closure caused a pre-existing lock.",
+  "ABS-S3":
+    "For aggregates, capture the selected Initial Review round, included review scorecards and displayed aggregates. Exercise descending and ascending sort separately: wait for each results table to settle and capture its visible sort control, proposal titles and scores before changing it again. Record aggregates only after collecting both final sort states; a click's transitional snapshot is insufficient.",
+  "CNT-S3":
+    "For versions, capture the attributed before/after version history, execute the requested restore, then reload and capture the restored abstract before recording the checkpoint.",
 };
 const selectors = {
   "CFP-05": ["CFP-S2", "submitted"],
@@ -106,6 +118,12 @@ const notices = {
     "This scenario owns original steps 1-12; the AI override check in step 13 runs with AI generation in ABS-S2-AI. In the reviewer queue, open the two Assigned entries and verify the Initial Review rubric before scoring. Completed CFP Review entries remain available as history; record them explicitly rather than claiming they disappeared or counting them as new assignments. Inspect the stored Initial Review scorecards after submission. Select Initial Review in the organizer results and progress views. Preserve completed CFP Review records; do not reopen or replace them. For weighted arithmetic, record the selected round and complete set of included reviews; if the displayed aggregate includes earlier CFP reviews, include them in the arithmetic. Do not release decisions or advance into Final Review here; CFP-S4 follows these checks. Use download for CSV exports and retain actual bytes.",
   "CNT-S3":
     "CNT-12 cannot borrow later area evidence automatically. Exercise an actual public approval gate now; if no qualifying public surface is available, abstain on that requirement. A visible queue or ZIP-ready message is not byte-content verification.",
+  "CNT-S1":
+    "Content setup depends on the accepted CI handoff, not completion of speaker profile uploads or bulk communications. Verify the bound session and perform original step 4's explicit setup of Marcus's separate session, then create this area's own tasks. Do not assume earlier speaker tasks or headshots succeeded.",
+  "AIA-S1":
+    "Scheduling depends on the completed decision handoff, not content uploads, approvals or ZIP export. Verify the bound CI session, then perform original steps 4-6 to establish rooms, schedulable sessions and shared-speaker assignments. Record any remaining acceptance prerequisites as specific blockers; do not invent accepted sessions or successful file scans.",
+  "CRM-S1":
+    "CRM needs the fixture organization and canonical event, not completed speaker uploads or bulk communications. Inspect existing contacts before original step 3 and perform its import or manual-contact setup only where needed. Do not assume the earlier roster import succeeded or use CRM evidence to claim blocked speaker checks passed.",
   "EMB-S3":
     "EMB-16 remains the original no-republish requirement. Programcue uses immutable published session-content snapshots. Record whether a draft title edit propagates without publishing; do not quietly republish to turn this criterion into a pass. Snapshot publication behavior has a separate regression suite.",
 };
@@ -177,7 +195,7 @@ for (const name of fs.readdirSync(path.join(root, "upstream/specs")).sort()) {
         : "",
       `ORIGINAL SCENARIO SCRIPT:\n${scenario.steps}`,
       checkpoints[scenario.id]
-        ? "Record each declared checkpoint immediately after the corresponding check was actually exercised, citing successful evidence steps. A checkpoint records reach, never success; leave unexercised checks unpublished."
+        ? `Checkpoint evidence is immutable. Finish every observation required by a declared check before publishing it. After mutations, wait for the UI to settle and reload where persistence is required; take a fresh snapshot and screenshots with the relevant values visible (scroll or open the specific record when needed). Cite the successful screenshot steps themselves as well as useful snapshot steps using step:N; screenshots taken at other steps are outside that checkpoint. Large snapshot excerpts may be truncated, so retain readable screenshots of the actual results. Do not cite observe notes, a click alone, failed tools or planned future captures. Publish each checkpoint once, immediately after gathering its complete evidence, and verify the call succeeds. A checkpoint records reach, never success; missing or failing product behavior can be evidenced, but leave unexercised checks unpublished. ${checkpointInstructions[scenario.id]}`
         : "",
       handoff
         ? `${handoff.instruction} Call publish_output with successful evidence step references. Use only ordinary non-secret HTTP(S) URLs. If it cannot be observed, report blocked; never invent a URL.`

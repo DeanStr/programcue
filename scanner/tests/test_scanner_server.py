@@ -2,6 +2,9 @@ import importlib.util
 import io
 import json
 import pathlib
+import socket
+import threading
+import time
 import tempfile
 import unittest
 from unittest import mock
@@ -87,22 +90,69 @@ class ScannerServerContractTests(unittest.TestCase):
                 "ClamAV 1.4.6/28087/Sun Aug  9 06:24:56 2026\n",
             )
 
-    def test_clamav_readiness_requires_marker_and_socket(self):
+    def test_readiness_tracks_loaded_signatures_and_daemon_availability(self):
+        now = time.time()
+        def version(age):
+            stamp = time.strftime("%a %b %d %H:%M:%S %Y", time.localtime(now - age))
+            return f"ClamAV 1.4.6/28087/{stamp}".encode("ascii") + b"\0"
+
+        # Exercise the wire protocol, including a stale -> fresh reload without
+        # restarting the adapter, then a dead daemon leaving its socket behind.
+        responses = [
+            (version(8 * 86400), False),
+            (version(60), True),
+            (version(8 * 86400), False),
+            (version(-2 * 86400), False),
+            (b"ClamAV 1.4.6\0", False),
+            (b"ClamAV 1.4.6/28087/not-a-date\0", False),
+            (b"x" * 256, False),
+            (b"ClamAV 1.4.6/28087/incomplete", False),
+        ]
         with tempfile.TemporaryDirectory() as directory:
-            readiness_file = pathlib.Path(directory) / "ready"
-            socket_file = pathlib.Path(directory) / "clamd.sock"
+            socket_path = str(pathlib.Path(directory) / "clamd.sock")
+            with mock.patch.object(scanner, "CLAMD_SOCKET", socket_path):
+                self.assertFalse(scanner.clamav_ready())
+                with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as daemon:
+                    daemon.bind(socket_path)
+                    daemon.listen()
+                    daemon.settimeout(5)
+                    errors = []
+                    def respond():
+                        try:
+                            for response, _ in responses:
+                                connection, _ = daemon.accept()
+                                with connection:
+                                    self.assertEqual(connection.recv(256), b"zVERSION\0")
+                                    # A stream response may arrive in fragments.
+                                    connection.sendall(response[:8])
+                                    connection.sendall(response[8:])
+                        except Exception as error:
+                            errors.append(error)
+                    worker = threading.Thread(target=respond)
+                    worker.start()
+                    try:
+                        for response, expected in responses:
+                            with self.subTest(response=response):
+                                self.assertEqual(scanner.clamav_ready(), expected)
+                    finally:
+                        worker.join(timeout=5)
+                    self.assertFalse(worker.is_alive())
+                    self.assertEqual(errors, [])
+                self.assertFalse(scanner.clamav_ready())
+
+    def test_readiness_does_not_wait_indefinitely_for_unresponsive_daemon(self):
+        with tempfile.TemporaryDirectory() as directory:
+            socket_path = str(pathlib.Path(directory) / "clamd.sock")
             with (
-                mock.patch.object(scanner, "READINESS_FILE", readiness_file),
-                mock.patch.object(scanner, "Path", side_effect=lambda value: {
-                    "/run/clamav/clamd.sock": socket_file,
-                    "/tmp/clamd.sock": socket_file,
-                }.get(value, pathlib.Path(value))),
+                socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as daemon,
+                mock.patch.object(scanner, "CLAMD_SOCKET", socket_path),
+                mock.patch.object(scanner, "READINESS_TIMEOUT_SECONDS", 0.05),
             ):
+                daemon.bind(socket_path)
+                daemon.listen()
+                started = time.monotonic()
                 self.assertFalse(scanner.clamav_ready())
-                readiness_file.touch()
-                self.assertFalse(scanner.clamav_ready())
-                socket_file.touch()
-                self.assertTrue(scanner.clamav_ready())
+                self.assertLess(time.monotonic() - started, 1)
 
     def test_scanner_adapter_refuses_root_privileges(self):
         with mock.patch.object(scanner.os, "geteuid", return_value=0):

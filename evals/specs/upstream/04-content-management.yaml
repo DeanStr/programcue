@@ -50,6 +50,16 @@ scenarios:
       cannot hide a missing capability.
 
 
+      Content setup depends on the accepted CI handoff, not completion of
+      speaker profile uploads or bulk communications. Verify the bound session
+      and perform original step 4's explicit setup of Marcus's separate session,
+      then create this area's own tasks. Do not assume earlier speaker tasks or
+      headshots succeeded.
+
+
+      Use the bound sessionUrl from CFP-S4; verify the record before continuing.
+
+
       ORIGINAL SCENARIO SCRIPT:
 
       1. Navigate to the site root. Find the organizer/admin area - try obvious
@@ -104,7 +114,11 @@ scenarios:
         due dates
       - File-uploads-enabled setting visible (if the clone has such a toggle)
     dependsOn:
-      - SPK-S3
+      - CFP-S4
+    inputs:
+      sessionUrl:
+        from: CFP-S4
+        output: sessionUrl
   - id: CNT-S2
     name: Speaker uploads and versions a deliverable
     kind: browser
@@ -290,9 +304,22 @@ scenarios:
           the restored title.
 
 
-      Record each declared checkpoint immediately after the corresponding check
-      was actually exercised, citing successful evidence steps. A checkpoint
-      records reach, never success; leave unexercised checks unpublished.
+      Checkpoint evidence is immutable. Finish every observation required by a
+      declared check before publishing it. After mutations, wait for the UI to
+      settle and reload where persistence is required; take a fresh snapshot and
+      screenshots with the relevant values visible (scroll or open the specific
+      record when needed). Cite the successful screenshot steps themselves as
+      well as useful snapshot steps using step:N; screenshots taken at other
+      steps are outside that checkpoint. Large snapshot excerpts may be
+      truncated, so retain readable screenshots of the actual results. Do not
+      cite observe notes, a click alone, failed tools or planned future
+      captures. Publish each checkpoint once, immediately after gathering its
+      complete evidence, and verify the call succeeds. A checkpoint records
+      reach, never success; missing or failing product behavior can be
+      evidenced, but leave unexercised checks unpublished. For versions, capture
+      the attributed before/after version history, execute the requested
+      restore, then reload and capture the restored abstract before recording
+      the checkpoint.
 
 
       Missing optional features are findings: record them and continue the

@@ -2315,3 +2315,21 @@ persisting generation work or contacting a provider. The public confirmation
 contains no raw endpoint path or query. Workers AI uses its explicit binding
 identity. AI review-aid evidence labels rubric values as relative weights, using
 `Weight 2` rather than `2% weight`; stored weights and scoring are unchanged.
+
+### 9 September 2026 — Live scanner readiness and independent evaluation branches
+
+Scanner readiness queries `VERSION` over the pinned image's `/tmp/clamd.sock`
+with a bounded deadline and response size. Only a responding daemon with loaded
+signatures within seven days (and no more than one day ahead) is ready. Remove
+the startup marker: it could remain absent after a successful database refresh,
+or remain present after signatures aged out or the daemon stopped. The updater
+continues notifying clamd to reload; no stale-signature allowance or scan-success
+fallback is added. Local file evaluation uses this same readiness probe.
+
+Content setup and scheduling depend directly on the completed CFP decision
+handoff; CRM depends on event setup. Their upstream scripts establish their own
+remaining prerequisites. Keep the speaker-edit → speaker-progress and
+content-upload → content-review dependencies because those checks inspect the
+earlier changes. Preserve all upstream criteria and weights. Checkpoint guidance
+requires settled, complete captures and explicit screenshot-step references
+before immutable publication; missing observations remain unavailable evidence.

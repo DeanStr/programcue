@@ -26,6 +26,14 @@ Git history retains earlier committed work logs.
 - The fixture was reset at **10:32:29 UTC** on 9 September; all four saved persona
   sessions were invalidated, clean baselines verified and production health
   matched `6e01f396`.
+- Local scanner changes replace the startup marker with bounded probes of the
+  daemon's loaded signatures. A real container returned 503 with stale loaded
+  signatures and recovered to 200 after FreshClam updated and reloaded them.
+  The rebuilt container passed clean/EICAR upload
+  and latest-version ZIP browser checks. Evaluation guidance now captures full
+  checkpoint evidence before publication; independent content setup, scheduling
+  and CRM branches pass synthetic dependency tests. These changes are **not yet
+  deployed or verified by a fresh production evaluation**.
 
 Status terms:
 
@@ -394,11 +402,13 @@ acknowledgement latency remain outstanding.
 
 ## Remaining acceptance work
 
-1. **Deployed evaluation:** resolve production scanner readiness, verify headshot
-   release, then rerun the blocked speaker/content/scheduling chain and reset
-   afterward. Biography preservation, readable AI results and decision handoff
-   passed the latest bounded run. Repair checkpoint evidence collection without
-   weakening criteria; anonymous verification still needs a supported browser.
+1. **Deployed evaluation:** release and verify the local scanner readiness fix,
+   including headshot release, then rerun with corrected checkpoint guidance and
+   independent content/scheduling/CRM branches; reset afterward. Local receipts:
+   `.artifacts/scanner-readiness-evidence-fix/`. The previous scanner failure's
+   deployed root cause remains unverified. Biography preservation, readable AI
+   results and decision handoff passed the latest bounded run. Anonymous
+   verification still needs a supported browser.
 2. **Provider paths:** exercise Airtable authority/recovery, Accelevents live
    reconciliation, external AI/tool-loop/assessment and fresh provider-error
    callbacks. Verify newer schedule-change emails, reminder cron and controlled

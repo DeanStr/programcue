@@ -46,6 +46,17 @@ scenarios:
       cannot hide a missing capability.
 
 
+      Scheduling depends on the completed decision handoff, not content uploads,
+      approvals or ZIP export. Verify the bound CI session, then perform
+      original steps 4-6 to establish rooms, schedulable sessions and
+      shared-speaker assignments. Record any remaining acceptance prerequisites
+      as specific blockers; do not invent accepted sessions or successful file
+      scans.
+
+
+      Use the bound sessionUrl from CFP-S4; verify the record before continuing.
+
+
       ORIGINAL SCENARIO SCRIPT:
 
       1. Navigate to the site root. Find the organizer/admin area -- try obvious
@@ -130,7 +141,11 @@ scenarios:
       - Room double-booking is blocked or visibly flagged
       - Conflict indicators clear after the sessions are moved apart
     dependsOn:
-      - CNT-S3
+      - CFP-S4
+    inputs:
+      sessionUrl:
+        from: CFP-S4
+        output: sessionUrl
   - id: AIA-S2
     name: Auto-schedule assist and publish the agenda
     kind: browser

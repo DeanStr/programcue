@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import socket
 import ssl
 import subprocess
 import tempfile
@@ -29,7 +30,9 @@ SCAN_TIMEOUT_SECONDS = 720
 MAX_CONTAINER_LIFETIME_SECONDS = 40 * 60
 CHUNK_BYTES = 1024 * 1024
 SCAN_DIRECTORY = Path("/tmp/program-cue-scans")
-READINESS_FILE = Path("/tmp/program-cue-scanner-ready")
+CLAMD_SOCKET = "/tmp/clamd.sock"
+READINESS_TIMEOUT_SECONDS = 2
+MAX_SIGNATURE_AGE_SECONDS = 7 * 24 * 60 * 60
 INTERCEPTION_CA = Path("/etc/cloudflare/certs/cloudflare-containers-ca.crt")
 IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$")
 SCAN_LOCK = threading.BoundedSemaphore(1)
@@ -85,8 +88,37 @@ class ClamScanError(Exception):
 
 
 def clamav_ready() -> bool:
-    sockets = [Path("/run/clamav/clamd.sock"), Path("/tmp/clamd.sock")]
-    return READINESS_FILE.is_file() and any(path.exists() for path in sockets)
+    # Query the running daemon: clamdscan --version can report the client
+    # version successfully even when clamd is unavailable. A startup marker
+    # also cannot track database reloads or signatures ageing out.
+    try:
+        deadline = time.monotonic() + READINESS_TIMEOUT_SECONDS
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+            connection.settimeout(READINESS_TIMEOUT_SECONDS)
+            connection.connect(CLAMD_SOCKET)
+            connection.sendall(b"zVERSION\0")
+            response = bytearray()
+            while not response.endswith(b"\0"):
+                remaining = deadline - time.monotonic()
+                if remaining <= 0 or len(response) >= 256:
+                    return False
+                connection.settimeout(remaining)
+                chunk = connection.recv(256 - len(response))
+                if not chunk:
+                    return False
+                response.extend(chunk)
+        version = response[:-1].decode("ascii")
+        if not re.fullmatch(r"ClamAV [^/\s]+/\d+/[^/]+", version):
+            return False
+        # clamd formats this timestamp in its local timezone; both processes
+        # run in the same container and use the same timezone.
+        signature_epoch = time.mktime(
+            time.strptime(version.rsplit("/", 1)[1], "%a %b %d %H:%M:%S %Y")
+        )
+        age = time.time() - signature_epoch
+        return -86400 <= age <= MAX_SIGNATURE_AGE_SECONDS
+    except (OSError, ValueError, UnicodeError, OverflowError):
+        return False
 
 
 def require_unprivileged_runtime() -> None:

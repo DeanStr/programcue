@@ -75,6 +75,21 @@ releases decisions and makes the proposals unavailable for review. The importer
 preserves the original step text and all 98 criteria; tests verify collection
 order and dependency behavior with the installed public AEK CLI.
 
+Content setup and scheduling each consume CFP-S4's accepted-session handoff;
+neither depends on speaker headshot uploads, content approval or ZIP export.
+CRM depends on CFP-S1's event setup and establishes any missing contacts through
+its original script. Speaker progress still requires the portal-edit scenario,
+and content review still requires the upload scenario. A blocked upload therefore
+retains unavailable coverage without preventing independent setup or scheduling.
+
+Checkpoints are published once, after all their observations are captured. Wait
+for settled results, verify persistence where requested, and cite the actual
+screenshot steps alongside snapshots. Screenshots outside those step references
+cannot support a checkpoint, and long snapshot excerpts can omit required values.
+The importer adds specific capture guidance for decisions, transferred session
+metadata, closure locks, both aggregate sort orders and restored content. These
+changes require a fresh run; they do not repair or regrade earlier sealed evidence.
+
 ## Install and validate
 
 Use Node 24.11+ and the installed subscription CLIs. Local execution requires

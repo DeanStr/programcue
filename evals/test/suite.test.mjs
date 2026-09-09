@@ -310,13 +310,11 @@ test("blocked observation reduces coverage while a missing completed receipt is 
   }
 });
 
-test("AEK runs abstract reviews before decisions and blocks decisions when review setup is unavailable", () => {
+test("AEK preserves review prerequisites while upload blockers leave content setup, scheduling and CRM reachable", () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "programcue-review-sequence-"));
   try {
     const specs = loadSpecs(path.join(root, "specs/upstream"));
-    const selected = specs.filter((s) =>
-      ["call-for-papers", "abstract-management", "speaker-management"].includes(s.id),
-    );
+    const selected = specs;
     const declarations = Object.fromEntries(
       selected.flatMap((s) => s.scenarios.map((scenario) => [scenario.id, scenario])),
     );
@@ -332,7 +330,7 @@ test("AEK runs abstract reviews before decisions and blocks decisions when revie
       if (id === 'ABS-S2' && !prior.includes('CFP-S3')) throw new Error('Round progression preceded source review');
       if (id === 'CFP-S4' && !prior.includes('ABS-S3')) throw new Error('Abstract scoring did not precede decisions');
       prior.push(id); fs.writeFileSync('order.json', JSON.stringify(prior));
-      const blocked = id === 'CFP-S1-PUBLIC' || id === 'ABS-S2-AI' || (id === 'ABS-S2' && process.env.SEQUENCE_BLOCK_SETUP === '1');
+      const blocked = id === 'CFP-S1-PUBLIC' || id === 'ABS-S2-AI' || (id === 'ABS-S2' && process.env.SEQUENCE_BLOCK === 'reviews') || (['SPK-S2', 'CNT-S2'].includes(id) && process.env.SEQUENCE_BLOCK === 'uploads');
       const outputs = Object.fromEntries(Object.keys(declarations[id].outputs ?? {}).map(name => [name, {value: 'https://example.com/' + name, evidenceRefs: ['step:1']}]));
       console.log(JSON.stringify({version: 1, outcome: blocked ? 'blocked' : 'completed',
         summary: 'Synthetic ordering evidence; not product acceptance', observations: [], ...(blocked ? {} : {outputs})}));
@@ -345,7 +343,8 @@ test("AEK runs abstract reviews before decisions and blocks decisions when revie
         YAML.stringify({
           id: spec.id,
           title: spec.title,
-          weight: index === 0 ? 34 : 33,
+          weight: spec.weight,
+          optional: spec.optional,
           description: "Synthetic dependency contract",
           scenarios: spec.scenarios.map((s) => ({
             id: s.id,
@@ -374,8 +373,9 @@ test("AEK runs abstract reviews before decisions and blocks decisions when revie
         }),
       );
     }
-    for (const blocked of [false, true]) {
-      const runs = blocked ? "blocked-runs" : "complete-runs";
+    for (const mode of ["none", "reviews", "uploads"]) {
+      const blocked = mode === "reviews";
+      const runs = `${mode}-runs`;
       fs.rmSync(path.join(directory, "order.json"), { force: true });
       fs.writeFileSync(
         path.join(directory, "config.yaml"),
@@ -388,12 +388,16 @@ test("AEK runs abstract reviews before decisions and blocks decisions when revie
           paths: { specs: "specs", runs },
         }),
       );
-      const result = spawnSync(process.execPath, [aek, "collect", "--config", "config.yaml"], {
-        cwd: directory,
-        encoding: "utf8",
-        timeout: 30_000,
-        env: { ...process.env, SEQUENCE_BLOCK_SETUP: blocked ? "1" : "0" },
-      });
+      const result = spawnSync(
+        process.execPath,
+        [aek, "collect", "--config", "config.yaml", "--include-optional"],
+        {
+          cwd: directory,
+          encoding: "utf8",
+          timeout: 30_000,
+          env: { ...process.env, SEQUENCE_BLOCK: mode },
+        },
+      );
       assert.equal(result.status, 0, result.stdout + result.stderr);
       const run = path.join(directory, runs, fs.readdirSync(path.join(directory, runs))[0]);
       const evidence = (id) =>
@@ -404,7 +408,23 @@ test("AEK runs abstract reviews before decisions and blocks decisions when revie
       assert.ok(order.indexOf("CFP-S3") < order.indexOf("ABS-S2"));
       assert.equal(evidence("CFP-S4").outcome, blocked ? "blocked" : "completed");
       assert.equal(evidence("SPK-S1").outcome, blocked ? "blocked" : "completed");
+      assert.equal(evidence("CNT-S1").outcome, blocked ? "blocked" : "completed");
+      assert.equal(evidence("AIA-S1").outcome, blocked ? "blocked" : "completed");
+      assert.equal(evidence("AIA-S2").outcome, blocked ? "blocked" : "completed");
+      assert.equal(evidence("EMB-S1").outcome, blocked ? "blocked" : "completed");
+      assert.equal(evidence("CRM-S1").outcome, "completed");
+      assert.equal(evidence("CRM-S2").outcome, "completed");
+      if (mode === "uploads") {
+        assert.equal(evidence("SPK-S2").outcome, "blocked");
+        assert.equal(evidence("SPK-S3").outcome, "blocked");
+        assert.equal(evidence("CNT-S2").outcome, "blocked");
+        assert.equal(evidence("CNT-S3").outcome, "blocked");
+        assert.ok(!order.includes("SPK-S3"));
+        assert.ok(!order.includes("CNT-S3"));
+      }
       if (!blocked) {
+        for (const id of ["CNT-S1", "AIA-S1"])
+          assert.equal(evidence(id).inputs.sessionUrl.value, "https://example.com/sessionUrl");
         assert.equal(evidence("ABS-S2-AI").outcome, "blocked");
         assert.ok(order.indexOf("ABS-S3") < order.indexOf("ABS-S2-AI"));
         assert.ok(order.indexOf("ABS-S2-AI") < order.indexOf("CFP-S4"));

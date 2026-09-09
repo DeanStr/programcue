@@ -47,6 +47,13 @@ scenarios:
       cannot hide a missing capability.
 
 
+      CRM needs the fixture organization and canonical event, not completed
+      speaker uploads or bulk communications. Inspect existing contacts before
+      original step 3 and perform its import or manual-contact setup only where
+      needed. Do not assume the earlier roster import succeeded or use CRM
+      evidence to claim blocked speaker checks passed.
+
+
       ORIGINAL SCENARIO SCRIPT:
 
       1. Navigate to the clone's base URL. Sign in as organizer Jordan Alvarez
@@ -143,7 +150,7 @@ scenarios:
       - Screenshot of duplicate merge comparison and the post-merge single
         record (or observation that merge is absent)
     dependsOn:
-      - SPK-S3
+      - CFP-S1
   - id: CRM-S2
     name: Source a speaker through the pipeline and reuse across events
     kind: browser

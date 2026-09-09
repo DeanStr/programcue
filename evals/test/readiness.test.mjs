@@ -84,7 +84,7 @@ test("Worker readiness retries startup 503 but fails on unexpected HTTP response
   }
 });
 
-test("ClamAV readiness retries only an absent ready file and bounds Docker commands", async () => {
+test("ClamAV readiness retries only an unavailable daemon and bounds Docker commands", async () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "programcue-readiness-"));
   const docker = path.join(directory, "docker");
   const previousPath = process.env.PATH;

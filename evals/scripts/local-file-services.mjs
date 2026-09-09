@@ -48,22 +48,32 @@ export async function waitForClamav(container, { signal, timeoutMs = 90_000 } = 
   while (Date.now() < deadline) {
     signal?.throwIfAborted();
     try {
-      await execute("docker", ["exec", container, "test", "-f", "/tmp/program-cue-scanner-ready"], {
-        timeout: Math.min(5000, deadline - Date.now()),
-        signal,
-      });
+      await execute(
+        "docker",
+        [
+          "exec",
+          "--user",
+          "clamav",
+          container,
+          "python3",
+          "-c",
+          "import sys; sys.path.insert(0, '/opt/program-cue-scanner'); from scanner_server import clamav_ready; sys.exit(0 if clamav_ready() else 1)",
+        ],
+        {
+          timeout: Math.min(5000, deadline - Date.now()),
+          signal,
+        },
+      );
       return;
     } catch (error) {
-      // Only test(1)'s missing readiness file is a retryable startup condition.
+      // Only the readiness probe's explicit false result is retryable.
       // Docker failures carry diagnostics; timeouts and spawn failures are fatal.
       if (error.code !== 1 || error.stderr?.trim())
         throw new Error(`ClamAV readiness command failed: ${error.message}`, { cause: error });
       await delay(Math.min(500, Math.max(0, deadline - Date.now())), undefined, { signal });
     }
   }
-  throw new Error(
-    "ClamAV readiness file is still absent; inspect container logs and signature freshness",
-  );
+  throw new Error("ClamAV is not ready with fresh loaded signatures; inspect container logs");
 }
 
 export function createLocalFileServices({ env, container, getBucket, dispatchCallback, record }) {
