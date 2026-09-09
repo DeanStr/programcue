@@ -23,6 +23,7 @@ import {
   type CoSpeakerInvitation,
   SubmissionStateError,
 } from "./submission-repository-shared";
+import { draftPayloadSchema } from "./submission-schema";
 
 export class SubmissionCoSpeakerRepository {
   constructor(private readonly env: CloudflareEnvironment) {}
@@ -57,7 +58,6 @@ export class SubmissionCoSpeakerRepository {
     invitationId: string,
     expectedClaimTokenHash: string | null = null,
     sessionPersistence: PreparedApplicantSession["persistence"] | null = null,
-    proposedBiography: string | null = null,
   ) {
     if (!applicant.verified) {
       throw new SubmissionStateError(
@@ -78,6 +78,8 @@ export class SubmissionCoSpeakerRepository {
              event.organisation_id AS organisationId,
              speaker.submission_id AS submissionId,
              submission.status AS submissionStatus,
+             revision.id AS speakerRevisionId,
+             revision.speaker_snapshot_json AS speakerSnapshotJson,
              form.kind AS formKind,
              (SELECT COUNT(*) FROM sessions session
                WHERE session.source_submission_id = speaker.submission_id
@@ -113,6 +115,14 @@ export class SubmissionCoSpeakerRepository {
           ON submission.id = speaker.submission_id
          AND submission.event_id = speaker.event_id
         JOIN events event ON event.id = speaker.event_id
+        LEFT JOIN submission_revisions revision
+          ON revision.submission_id = submission.id
+         AND revision.event_id = submission.event_id
+         AND revision.revision_number = (
+           SELECT MAX(latest.revision_number) FROM submission_revisions latest
+            WHERE latest.submission_id = submission.id
+              AND latest.event_id = submission.event_id
+         )
         JOIN form_versions version
           ON version.id = submission.form_version_id
          AND version.event_id = submission.event_id
@@ -129,6 +139,8 @@ export class SubmissionCoSpeakerRepository {
         organisationId: string;
         submissionId: string;
         submissionStatus: string;
+        speakerRevisionId: string | null;
+        speakerSnapshotJson: string | null;
         formKind: "submission" | "direct_session";
         derivedSessionCount: number;
         sessionId: string | null;
@@ -184,6 +196,23 @@ export class SubmissionCoSpeakerRepository {
         "This accepted application is missing its published acceptance plan.",
       );
     }
+    if (!invitation.speakerRevisionId || !invitation.speakerSnapshotJson) {
+      throw new SubmissionStateError(
+        "The latest submission speaker revision is unavailable for this co-speaker claim.",
+      );
+    }
+    const proposedSpeaker = draftPayloadSchema.shape.speakers
+      .parse(JSON.parse(invitation.speakerSnapshotJson))
+      .find(
+        (speaker) =>
+          speaker.email.toLowerCase() === applicant.email.toLowerCase(),
+      );
+    if (!proposedSpeaker) {
+      throw new SubmissionStateError(
+        "The latest submission speaker revision does not contain this co-speaker claim.",
+      );
+    }
+    const proposedBiography = proposedSpeaker.biography ?? null;
     const operationId = crypto.randomUUID();
     const draftRebuild = await this.draftConflictRebuildForClaim({
       organisationId: invitation.organisationId,
@@ -217,6 +246,12 @@ export class SubmissionCoSpeakerRepository {
                    OR speaker.invitation_expires_at > unixepoch())
               AND (? IS NULL OR speaker.claim_token_hash = ?)
               AND version.form_id = ?
+              AND ? = (
+                SELECT revision.id FROM submission_revisions revision
+                 WHERE revision.submission_id = speaker.submission_id
+                   AND revision.event_id = speaker.event_id
+                 ORDER BY revision.revision_number DESC LIMIT 1
+              )
          )
            AND NOT EXISTS (
              SELECT 1
@@ -288,6 +323,7 @@ export class SubmissionCoSpeakerRepository {
         expectedClaimTokenHash,
         expectedClaimTokenHash,
         formId,
+        invitation.speakerRevisionId,
         invitationId,
         invitationId,
         applicant.personId,
@@ -570,10 +606,6 @@ export class SubmissionCoSpeakerRepository {
         this.env.DB.prepare(
           `UPDATE people
               SET email_verified = 1,
-                  biography = CASE
-                    WHEN (biography IS NULL OR trim(biography) = '')
-                      AND ? IS NOT NULL AND trim(?) <> ''
-                    THEN ? ELSE biography END,
                   updated_at = unixepoch()
             WHERE id = ?
               AND EXISTS (
@@ -581,15 +613,42 @@ export class SubmissionCoSpeakerRepository {
                  WHERE id = ? AND identifier = ?
               )`,
         ).bind(
-          proposedBiography,
-          proposedBiography,
-          proposedBiography,
           applicant.personId,
           sessionPersistence.sessionId,
           sessionPersistence.identifier,
         ),
       );
     }
+    statements.push(
+      this.env.DB.prepare(
+        `UPDATE people
+            SET biography = ?, profile_revision = profile_revision + 1,
+                last_operation_id = ?, updated_at = unixepoch()
+          WHERE id = ? AND (biography IS NULL OR trim(biography) = '')
+            AND ? IS NOT NULL AND trim(?) <> ''
+            AND EXISTS (
+              SELECT 1 FROM submission_speakers speaker
+              JOIN events event ON event.id = speaker.event_id
+               WHERE speaker.id = ? AND speaker.event_id = ?
+                 AND speaker.person_id = people.id
+                 AND speaker.invitation_status = 'claimed'
+                 AND event.last_operation_id = ?
+            )`,
+      ).bind(
+        proposedBiography,
+        operationId,
+        applicant.personId,
+        proposedBiography,
+        proposedBiography,
+        invitationId,
+        invitation.eventId,
+        operationId,
+      ),
+      this.env.DB.prepare(
+        `SELECT COALESCE(biography, '') AS biography,
+                profile_revision AS profileRevision FROM people WHERE id = ?`,
+      ).bind(applicant.personId),
+    );
     const results = await this.env.DB.batch(statements);
     const eventClaimed = results[0];
     const draftUpdated = draftRebuild.statements.length ? results[1] : null;
@@ -632,6 +691,12 @@ export class SubmissionCoSpeakerRepository {
         "This co-speaker invitation is no longer available.",
       );
     }
+    return requireValue(
+      results.at(-1)?.results[0] as
+        | { biography: string; profileRevision: number }
+        | undefined,
+      "The claimed co-speaker profile is unavailable.",
+    );
   }
 
   private async draftConflictRebuildForClaim(input: {

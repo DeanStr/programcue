@@ -82,6 +82,15 @@ scenarios:
       publish portalUrl only from observed evidence. After the multi-event
       probe, restore the organizer's canonical event before finishing.
       Completion here proves neither anonymous access nor applicant validation.
+      Program Cue applications intentionally allow one or more event tracks
+      through the protected Tracks checkbox group; organisers confirm one
+      programme track at acceptance. Select the requested fixture track using
+      this control and verify its persisted value. Record the difference from
+      the upstream track-dropdown request explicitly; do not replace the
+      protected field, block the remaining workflow solely on its presentation,
+      or claim that a dropdown was observed. Keep the upstream criterion text
+      and grading unchanged. Continue to inspect the actual Format and Audience
+      level dropdowns.
 
 
       ORIGINAL SCENARIO SCRIPT:
@@ -270,10 +279,18 @@ scenarios:
       claim the full CFP-05 requirement passed merely because a session was
       pre-captured. Always exercise original step 5's dropdown and
       conditional-field checks as the authenticated speaker, as well as step 4's
-      validation check: CFP-S1-PUBLIC may be blocked or unselected. These
-      observations establish authenticated behavior only; they do not prove
-      anonymous verification succeeded or that a security challenge is an
-      account requirement.
+      validation check: CFP-S1-PUBLIC may be blocked or unselected. Program Cue
+      applications intentionally allow one or more event tracks through the
+      protected Tracks checkbox group; organisers confirm one programme track at
+      acceptance. Select the requested fixture track using this control and
+      verify its persisted value. Record the difference from the upstream
+      track-dropdown request explicitly; do not replace the protected field,
+      block the remaining workflow solely on its presentation, or claim that a
+      dropdown was observed. Keep the upstream criterion text and grading
+      unchanged. Continue to inspect the actual Format and Audience level
+      dropdowns. These observations establish authenticated behavior only; they
+      do not prove anonymous verification succeeded or that a security challenge
+      is an account requirement.
 
 
       Use the bound portalUrl from CFP-S1; verify the record before continuing.

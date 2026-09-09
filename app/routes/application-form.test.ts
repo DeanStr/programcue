@@ -399,6 +399,23 @@ describe("public application mutations", () => {
         speakerId,
       );
 
+      const claimedPortal = await loader({
+        request: new Request(claimDestination, {
+          headers: { cookie: claimCookie },
+        }),
+        params: { slug: "form" },
+        context: context(),
+      } as never);
+      if (
+        claimedPortal instanceof Response ||
+        "data" in claimedPortal ||
+        !claimedPortal.speakerProfile
+      ) {
+        throw new Error("Expected the claimed speaker profile.");
+      }
+      expect(claimedPortal.speakerProfile.biography).toBe(
+        "Biography supplied with the invitation.",
+      );
       const updated = await action({
         request: new Request(claimDestination, {
           method: "POST",
@@ -409,7 +426,7 @@ describe("public application mutations", () => {
           },
           body: new URLSearchParams({
             _intent: "update_profile",
-            revision: "1",
+            revision: String(claimedPortal.speakerProfile.revision),
             name: "Claimed speaker",
             biography: "Biography owned by the claimed speaker.",
           }),

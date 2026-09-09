@@ -561,6 +561,10 @@ test("Marcus claims his submitted co-speaker invitation before review assignment
     await page.getByRole("button", { name: "Add co-speaker" }).click();
     await page.getByLabel("Speaker 2 name").fill("Marcus Okafor");
     await page.getByLabel("Email").nth(1).fill(MARCUS_EMAIL);
+    await page
+      .getByLabel("Biography")
+      .last()
+      .fill("Marcus helps teams ship reliable platforms.");
     await page.getByRole("button", { name: "Save draft", exact: true }).click();
     await expect(
       page.getByRole("status").filter({ hasText: "Your draft has been saved" }),
@@ -604,6 +608,12 @@ test("Marcus claims his submitted co-speaker invitation before review assignment
       await expect(
         marcusPage.getByText("Your claimed speaker profile", { exact: true }),
       ).toBeVisible();
+      await marcusPage
+        .getByText("Your claimed speaker profile", { exact: true })
+        .click();
+      await expect(
+        marcusPage.getByRole("textbox", { name: "Biography", exact: true }),
+      ).toHaveValue("Marcus helps teams ship reliable platforms.");
     } finally {
       await marcusContext.close();
     }

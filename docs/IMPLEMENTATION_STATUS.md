@@ -11,15 +11,18 @@ Git history retains earlier committed work logs.
 
 - The modular monolith has connected Worker/D1-backed product slices. Repository
   coverage does not establish replacement readiness or live-provider acceptance.
-- Source `00d91286` passed the full release gate and was deployed on 9 September.
-  Co-speaker evaluation access and readable expanded AI evidence are live.
-- The latest deployed run stopped at template setup: creating a decision version
-  retired the confirmation version because the UI lacked **New template**.
-  All 22 scenarios were blocked, coverage was 0%, and 157 artifacts verified.
-- The current candidate adds explicit independent template creation; its browser
-  check preserves both published categories. Fresh deployed acceptance is pending.
-- The fixture was reset at **01:47 UTC** on 9 September; all four saved persona
-  sessions were invalidated and production health matched the deployed revision.
+- Source `f7d0d63e` was deployed on 9 September with independent template
+  creation, co-speaker evaluation access and readable expanded AI evidence.
+- The latest deployed run (`2026-09-09T02-28-52`) published both required
+  templates and completed CFP-S1/CFP-S2. ABS-S1 claimed Marcus's invitation but
+  observed an empty profile biography; Codex's usage limit then stopped the run.
+  Speaker, content and scheduling acceptance remains unexercised in this run.
+- The current candidate initializes empty biographies consistently across both
+  claim paths and clarifies multiple-track evaluation guidance. Local validation
+  is recorded below; deployment and fresh independent acceptance are pending.
+- The fixture was reset at **03:16 UTC** on 9 September; all four saved persona
+  sessions were invalidated, clean baselines verified and production health
+  matched `f7d0d63e`.
 
 Status terms:
 
@@ -36,7 +39,7 @@ Status terms:
 
 | Surface | Latest retained evidence | Boundary |
 | --- | --- | --- |
-| Application | `00d91286bee3825e22cf6e7050ff5b40c2421145`, Worker `d34e862a-ee1a-4484-af2d-2db6df14031b`, deployed 9 September; health matched before evaluation and after reset. | Co-speaker access and AI-result wrapping are live. Independent template creation is a subsequent candidate; downstream acceptance remains outstanding. |
+| Application | `f7d0d63ead9a017b1cd109aa22aeadc7fceb66c3`, Worker `a56600e5-b48c-40a2-a002-a8648d70dbbf`, deployed 9 September; health matched before evaluation and after reset. | Independent template creation, co-speaker access and AI-result wrapping are live. Claimed biography initialization is a subsequent candidate; downstream acceptance remains outstanding. |
 | Public website | Bundle `67d5b4b4`, Worker `e9398ee9-5a85-4c73-b751-0de7468c0032`, deployed and exercised on 5 September. | Separate website release; includes the approved film and guide pages. |
 | Scanner | Source `ae6133c`, deployed on 17 August with upload, scan, shutdown and erasure acceptance. | Later scanner changes and sustained burst capacity need separate acceptance. |
 
@@ -224,8 +227,31 @@ and all dependent checks. The first preparation reset returned 409; its cleanup
 reset succeeded before the fresh run. Final reset completed at
 **01:47:25.999 UTC**, with all saved sessions invalid and `00d91286` healthy.
 Integrity root: `576e5858571dfc1b3c46e46d492b2e43ea9a87c79c5f561fddca4585c0434ff6`.
-Current release, review, evaluation and reset receipts are in
+That run's release, review, evaluation and reset receipts are in
 `.artifacts/acceptance-prerequisites/`.
+
+The subsequent run `2026-09-09T02-28-52` on deployed `f7d0d63e` retained both
+Submission confirmation and Decision templates Live after reload, published the
+CFP, exercised draft/required-field/revision behavior and recorded the organiser
+proposal handoff. ABS-S1 saved Marcus's proposed biography and completed his
+signed-in claim, but his claimed profile biography was empty. The run then
+stopped on Codex's usage limit without final judging; later workflows and AI
+result wrapping were not freshly exercised. Tracks checkboxes implement the
+recorded one-or-more-track decision; evaluator guidance now preserves that
+behavior while recording the upstream dropdown difference without changing
+criteria or grading.
+
+The biography candidate copies the latest submitted speaker biography into an
+empty profile only with a successful claim, preserves existing biographies and
+increments the profile revision. Both claim paths use this rule. Focused
+validation passed: 59 submission Worker tests, 13 application-route tests,
+the Marcus Chromium claim/reload workflow,
+generated TypeScript checks, 30 evaluator tests and all three evaluator
+configurations. Local check receipts are in `.artifacts/claim-biography-review/`; deployment is pending.
+Latest run/release receipts are in `.artifacts/acceptance-template-rerun/`.
+The requested fresh cleanup reset completed at **03:16:41.553 UTC**; all four
+prior persona sessions were invalid and clean applicant/reviewer baselines and
+`f7d0d63e` health verified. Receipts: `.artifacts/fixture-reset-20260909-0317/`.
 
 Reports are retained under `evals/.agent-eval/runs/<run-id>/report.html`.
 Previous release receipts are in `.artifacts/relative-weights-ai-release/`, the
@@ -236,7 +262,7 @@ Verified artifact roots:
 
 - Active local regression: `5c7afb60bb4a86f5937aacdd786fe0de16ff5b0c5d798dc16517334b5b5c5415`.
 - Local upstream: `86268503e077e1d7560fcf7d40b2cbb5babb7724e64995fe2b5276aef780d427`.
-- Latest deployed upstream: `576e5858571dfc1b3c46e46d492b2e43ea9a87c79c5f561fddca4585c0434ff6`.
+- Earlier 9 September template-blocked run: `576e5858571dfc1b3c46e46d492b2e43ea9a87c79c5f561fddca4585c0434ff6`.
 
 ## Deployment evidence
 
@@ -308,10 +334,11 @@ acknowledgement latency remain outstanding.
 
 ## Remaining acceptance work
 
-1. **Deployed evaluation:** release independent template creation and run fresh
-   with both required templates Live. Verify the deployed co-speaker claim and
-   expanded AI results, then decisions, speaker, content and scheduling; reset
-   afterward. Anonymous verification still needs a supported browser.
+1. **Deployed evaluation:** release claimed-biography initialization and rerun
+   when evaluator quota is available, retaining both required templates Live.
+   Verify biography preservation and expanded AI results, then decisions,
+   speaker, content and scheduling; reset afterward. Anonymous verification
+   still needs a supported browser.
 2. **Provider paths:** exercise Airtable authority/recovery, Accelevents live
    reconciliation, external AI/tool-loop/assessment and fresh provider-error
    callbacks. Verify newer schedule-change emails, reminder cron and controlled

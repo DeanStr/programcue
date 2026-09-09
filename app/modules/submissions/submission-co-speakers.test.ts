@@ -1257,6 +1257,144 @@ describe("Submissions D1 vertical slice", () => {
     });
   });
 
+  describe("claimed biography initialization", () => {
+    for (const path of ["signed-in", "email-link"] as const) {
+      it.each([null, "   ", "My existing biography"])(
+        `${path} claim initializes only an empty biography (%j)`,
+        async (existingBiography) => {
+          const { service, id, slug, testEnv } = await publishedForm();
+          const primary = await verifiedApplicant(service, slug);
+          const coSpeaker = await verifiedApplicant(service, slug);
+          await testEnv.DB.prepare(
+            "UPDATE people SET biography = ? WHERE id = ?",
+          )
+            .bind(existingBiography, coSpeaker.personId)
+            .run();
+          const before = await testEnv.DB.prepare(
+            "SELECT profile_revision AS revision FROM people WHERE id = ?",
+          )
+            .bind(coSpeaker.personId)
+            .first<{ revision: number }>();
+          const submissionId = await service.createDraft(slug, primary);
+          const draft = (
+            await service.repository.getApplicantDrafts(id, primary)
+          ).find((candidate) => candidate.id === submissionId)!;
+          const proposedBiography =
+            "Marcus helps teams ship reliable platforms.";
+          await service.submitDraft(slug, primary, {
+            submissionId,
+            revision: draft.revision,
+            answers: validAnswers,
+            speakers: [
+              { name: primary.name, email: primary.email },
+              {
+                name: "Marcus",
+                email: coSpeaker.email,
+                biography: proposedBiography,
+              },
+            ],
+          });
+          const invitation = (
+            await service.repository.getCoSpeakerInvitations(id, coSpeaker)
+          )[0]!;
+          const expectedBiography = existingBiography?.trim()
+            ? existingBiography
+            : proposedBiography;
+          const expectedRevision =
+            before!.revision + (existingBiography?.trim() ? 0 : 1);
+          if (path === "signed-in") {
+            await service.claimCoSpeaker(slug, coSpeaker, invitation.id);
+          } else {
+            const delivery = await testEnv.DB.prepare(
+              `SELECT source_values_json AS sourceValuesJson FROM communication_deliveries
+                WHERE source_id = ? AND event_id = ? ORDER BY created_at DESC LIMIT 1`,
+            )
+              .bind(invitation.id, viewer.eventId)
+              .first<{ sourceValuesJson: string }>();
+            const claimUrl = new URL(
+              String(JSON.parse(delivery!.sourceValuesJson)["claim.url"]),
+            );
+            const claimed = await service.claimCoSpeakerToken(
+              slug,
+              invitation.id,
+              claimUrl.searchParams.get("claim")!,
+            );
+            expect(claimed.applicant).toMatchObject({
+              biography: expectedBiography,
+              profileRevision: expectedRevision,
+            });
+          }
+          await expect(
+            testEnv.DB.prepare(
+              "SELECT biography, profile_revision AS profileRevision FROM people WHERE id = ?",
+            )
+              .bind(coSpeaker.personId)
+              .first(),
+          ).resolves.toEqual({
+            biography: expectedBiography,
+            profileRevision: expectedRevision,
+          });
+          const reloaded = (
+            await service.repository.getApplicantDrafts(id, primary)
+          ).find((candidate) => candidate.id === submissionId)!;
+          expect(reloaded.speakers[1]).toMatchObject({
+            invitationStatus: "claimed",
+            biography: expectedBiography,
+          });
+          const detail = await service.getAdminSubmission(viewer, submissionId);
+          expect(detail?.speakers[1]?.submittedBiography).toBe(
+            proposedBiography,
+          );
+        },
+      );
+    }
+
+    it("does not initialize a profile when a signed-in claim loses its invitation race", async () => {
+      const { service, id, slug, testEnv } = await publishedForm();
+      const primary = await verifiedApplicant(service, slug);
+      const coSpeaker = await verifiedApplicant(service, slug);
+      const submissionId = await service.createDraft(slug, primary);
+      const draft = (
+        await service.repository.getApplicantDrafts(id, primary)
+      ).find((candidate) => candidate.id === submissionId)!;
+      await service.submitDraft(slug, primary, {
+        submissionId,
+        revision: draft.revision,
+        answers: validAnswers,
+        speakers: [
+          { name: primary.name, email: primary.email },
+          {
+            name: "Marcus",
+            email: coSpeaker.email,
+            biography: "Must remain unclaimed.",
+          },
+        ],
+      });
+      const invitation = (
+        await service.repository.getCoSpeakerInvitations(id, coSpeaker)
+      )[0]!;
+      const racingEnv = withNthBatchRace(testEnv, 1, async () => {
+        await testEnv.DB.prepare(
+          "UPDATE submission_speakers SET invitation_status = 'expired' WHERE id = ?",
+        )
+          .bind(invitation.id)
+          .run();
+      });
+      await expect(
+        new SubmissionService(racingEnv).claimCoSpeaker(
+          slug,
+          coSpeaker,
+          invitation.id,
+        ),
+      ).rejects.toThrow(/no longer available/i);
+      await expect(
+        testEnv.DB.prepare("SELECT biography FROM people WHERE id = ?")
+          .bind(coSpeaker.personId)
+          .first(),
+      ).resolves.toEqual({ biography: null });
+    });
+  });
+
   describe("claim revision guards", () => {
     it("rejects a co-speaker claim without its latest exact speaker revision", async () => {
       const { service, id, slug, testEnv } = await publishedForm();

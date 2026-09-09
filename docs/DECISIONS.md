@@ -2291,3 +2291,17 @@ The release audit rejected `js-yaml` 4.3.1 and Miniflare’s exact `sharp` 0.35.
 ### 9 September 2026 — Explicit creation of independent email templates
 
 Communications provides **New template**, which opens an empty editor through an explicit creation URL. Saving that editor creates a new template identity; editing an existing template continues its version history. Creating and publishing a Decision template must leave the separately published Submission confirmation template live. This corrects a product navigation gap exposed by fresh-event evaluation setup.
+
+### 9 September 2026 — Consistent claimed biographies and track evaluation evidence
+
+Both signed-in and email-link co-speaker claims initialize an empty person
+biography from the latest exact submitted speaker revision. Existing nonblank
+biographies remain speaker-owned. Initialization is guarded by the successful
+claim transaction and advances the profile revision; a failed claim cannot
+publish the proposed biography to an existing profile. Submitted snapshots remain
+immutable. A changed source revision requires retrying the claim.
+
+The upstream track-dropdown request does not supersede the recorded one-or-more
+track product decision. Evaluation guidance uses the protected checkbox group,
+records the presentation difference and continues available checks; original
+criterion text, weights and grading remain unchanged.

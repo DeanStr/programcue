@@ -302,16 +302,15 @@ export class SubmissionCoSpeakerWorkflows extends SubmissionServiceFoundation {
         "The latest submission speaker revision does not contain this co-speaker claim.",
       );
     }
-    const biography = matchingSpeaker.biography;
     const personId = crypto.randomUUID();
     await this.env.DB.batch([
       this.env.DB.prepare(
         `INSERT INTO people (
            id, email, display_name, email_verified, biography, profile_status,
            created_at, updated_at
-         ) VALUES (?, ?, ?, 0, ?, 'draft', unixepoch(), unixepoch())
+         ) VALUES (?, ?, ?, 0, NULL, 'draft', unixepoch(), unixepoch())
          ON CONFLICT(email) DO NOTHING`,
-      ).bind(personId, claim.email, claim.displayName, biography ?? null),
+      ).bind(personId, claim.email, claim.displayName),
     ]);
     const person = await this.env.DB.prepare(
       `SELECT id AS personId, email, display_name AS name,
@@ -339,18 +338,16 @@ export class SubmissionCoSpeakerWorkflows extends SubmissionServiceFoundation {
     if (!preparedSession.applicant.verified) {
       throw new Error("A prepared co-speaker claim session must be verified.");
     }
-    await this.repository.claimCoSpeaker(
+    const claimedProfile = await this.repository.claimCoSpeaker(
       form.id,
       preparedSession.applicant,
       speakerId,
       expectedClaimTokenHash,
       preparedSession.persistence,
-      biography ?? null,
     );
     const claimedApplicant = {
       ...preparedSession.applicant,
-      biography:
-        preparedSession.applicant.biography.trim() || biography?.trim() || "",
+      ...claimedProfile,
     };
     return {
       applicant:
