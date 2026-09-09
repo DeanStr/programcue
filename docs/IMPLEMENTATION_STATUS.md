@@ -11,9 +11,10 @@ Git history retains earlier committed work logs.
 
 - The modular monolith has connected Worker/D1-backed product slices. Repository
   coverage does not establish replacement readiness or live-provider acceptance.
-- Source `6e01f396` was deployed on 9 September after the full release gate.
-  It includes claimed-biography initialization, full-endpoint AI confirmation
-  and relative-weight evidence labels alongside the earlier template/access fixes.
+- Source `5a758933` was deployed after the full release gate and verified on
+  9 September at 21:58 UTC. It adds explicit CRM returning-speaker counts and their definition
+  to the earlier biography, AI confirmation/weight-label and template/access fixes.
+  Exact-revision health, the served CRM bundle and `/evaluate` access page passed.
 - Scanner source `7b27ce4d` was released on 9 September at 16:24 UTC.
   Fresh deployed `/evaluate` run `2026-09-09T16-27-25` verified headshot upload,
   clean scan/release within 65 seconds, rendered portrait and organiser download.
@@ -43,7 +44,7 @@ Status terms:
 
 | Surface | Latest retained evidence | Boundary |
 | --- | --- | --- |
-| Application | `6e01f39632d4d2a7e8134ebe200a26eaa4abcb28`, Worker `f1e0ddb0-2045-461d-8312-81337d360640`, deployed 9 September at 05:42 UTC; exact-revision health passed before evaluation and after reset. | Claimed biography, weighted scoring, AI assessment and accepted-session handoff have bounded deployed evidence. The latest run also verified scheduling/conflict handling; external endpoint-change confirmation remains locally tested. |
+| Application | `5a7589332723d2833e52ef85936b770a2ebc4098`, Worker `69e9daae-ccb7-4702-b901-7ce7947c732e`, deployment verified 9 September at 21:58 UTC; exact-revision health, CRM bundle equality and `/evaluate` access-page Chromium checks passed. | CRM returning-speaker visibility is deployed; its workflows passed locally. Earlier bounded provider/workflow acceptance remains historical. No fresh evaluation or provider request was performed during this release; the fixture was unchanged. |
 | Public website | Bundle `67d5b4b4`, Worker `e9398ee9-5a85-4c73-b751-0de7468c0032`, deployed and exercised on 5 September. | Separate website release; includes the approved film and guide pages. |
 | Scanner | Source `7b27ce4dabbd46e3ce26ebec64b506cc505a0ec7`, Worker `370e3d6b-1ce2-4e54-bcb2-ecb4d0e9c4e8`, deployed 9 September at 16:24 UTC; exact-revision health and real headshot scan/release/download passed. | Fresh signatures and cold-start recovery verified; sustained burst capacity remains outstanding. |
 
@@ -119,7 +120,8 @@ change. The latest complete gate supersedes older test-count histories.
 | Scope | Recorded result | Limit |
 | --- | --- | --- |
 | Evaluator access corrections | The installed AEK package includes checkpoint-aware image delivery, corrected login-route detection and opt-in read-only preview evidence. The real local merged-email workflow was readable through AEK with its sandbox intact; 30 evaluator tests and three configurations passed. The coordinator consumes AEK plan version 2. | A deployed anonymous probe no longer excluded challenge frames but obtained no token; genuine verification remains manual. AI disclosure authorization is now explicit in the scenario context; no new live AI generation is claimed. Receipts: `.artifacts/evaluator-access-fixes/`. |
-| CRM returning-speaker visibility | The directory always shows the returning-speaker count, including zero, with its active-event/session definition. Three real Chromium CRM workflows, generated TypeScript checks and focused Biome checks passed. | Local source evidence only; not deployed. Receipts: `.artifacts/crm-returning-count/`. |
+| CRM returning-speaker visibility | The directory always shows the returning-speaker count, including zero, with its active-event/session definition. Three real Chromium CRM workflows, generated TypeScript checks and focused Biome checks passed. | Deployed in `5a758933`; served CRM bundle matches the tested build. No new authenticated production CRM workflow was performed. Receipts: `.artifacts/crm-returning-count/` and `.artifacts/release-5a758933/`. |
+| `5a758933`, 9 September | `npm run deploy` passed the full `npm run check` gate in 616.1 s: 661 unit, 1,950 Worker, one Agent and 15 scanner tests; types, quality, build, configuration, schema/recovery/OpenAPI and dependency policy; 223 main browser, 12 evaluation and 16 website checks. Production preflight/schema/health passed; all 58 migrations were already applied. Deployed CRM bundle and `/evaluate` access-page checks passed. | Two opt-in performance checks skipped; 7 low/3 moderate dependency advisories remain. Browser workflows used local fixtures; production checks did not mutate the evaluation fixture. Receipts: `.artifacts/release-5a758933/`. |
 | `7b27ce4d`, 9 September | Release gate passed after recheck: 661 unit, 1,950 Worker, one Agent, 15 scanner; types, quality, build, configuration, schema/recovery/OpenAPI and dependency policy; all main browser cases passed across the initial run and isolated retry, followed by 12 evaluation and 16 website checks. Two Astra/high source reviews found no actionable issues. | Initial `npm run check` exited 1 on an unchanged pointer-resize test; isolated retry passed on the same build. Two opt-in measurements skipped; 7 low/3 moderate advisories remain. Receipts: `.artifacts/scanner-release-7b27ce4d/`. |
 | `6e01f396`, 9 September | Serial `npm run deploy` passed the full `npm run check` gate in 582.0 s: 661 unit, 1,950 Worker, one Agent and 14 scanner tests; configuration, types, quality, build, schema/recovery/OpenAPI and dependency policy; 223 main browser, 12 evaluation and 16 website checks. Production preflight/schema/health passed; 58 migrations already applied, none pending. Deployed `/evaluate` access-page Chromium smoke passed. Receipts: `.artifacts/release-6e01f396/`. | Two opt-in performance measurements skipped; 7 low and 3 moderate dependency advisories remain. Browser suites use local fixtures; the deployed smoke verified access-page availability, not fresh workflow or provider acceptance. |
 | Production-health evaluator correction | Actual top-level health contract validated; 25 evaluator tests, three configurations and `check:core` passed (351.0 s). | Readiness does not prove product acceptance. |
