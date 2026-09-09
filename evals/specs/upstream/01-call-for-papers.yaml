@@ -65,21 +65,23 @@ scenarios:
       publishing the CFP, open Communications in this new event and create,
       save, preview and publish two active email templates: Submission
       confirmation and Decision (the actual categories, not Ad hoc or Task
-      reminder). Use explicit synthetic event copy. For these controlled
-      evaluation messages, set the required footer to Evaluation fixture
-      followed by the observed fixture event location, and record that synthetic
-      footer value; this does not verify an organisation mailing address. Do not
-      change the organisation postal address or provider credentials. Verify
-      each published version and active status after reload. A verified sender
-      alone is not template readiness. Missing required configuration is a setup
-      blocker; do not claim a queued confirmation or decision email was
-      delivered. This scenario owns original CFP-S1 steps 1–8 and 12. Anonymous
-      steps 9–11 run separately in CFP-S1-PUBLIC; do not perform them here or
-      treat their unavailable evidence as a publication failure. Verify the
-      published version and publish portalUrl only from observed evidence. After
-      the multi-event probe, restore the organizer's canonical event before
-      finishing. Completion here proves neither anonymous access nor applicant
-      validation.
+      reminder). Use New template for each independent template; editing one
+      published template creates a replacement version rather than a second
+      template. Verify both template names remain Live after reload. Use
+      explicit synthetic event copy. For these controlled evaluation messages,
+      set the required footer to Evaluation fixture followed by the observed
+      fixture event location, and record that synthetic footer value; this does
+      not verify an organisation mailing address. Do not change the organisation
+      postal address or provider credentials. Verify each published version and
+      active status after reload. A verified sender alone is not template
+      readiness. Missing required configuration is a setup blocker; do not claim
+      a queued confirmation or decision email was delivered. This scenario owns
+      original CFP-S1 steps 1–8 and 12. Anonymous steps 9–11 run separately in
+      CFP-S1-PUBLIC; do not perform them here or treat their unavailable
+      evidence as a publication failure. Verify the published version and
+      publish portalUrl only from observed evidence. After the multi-event
+      probe, restore the organizer's canonical event before finishing.
+      Completion here proves neither anonymous access nor applicant validation.
 
 
       ORIGINAL SCENARIO SCRIPT:

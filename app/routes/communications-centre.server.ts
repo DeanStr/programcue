@@ -169,8 +169,16 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     communicationService.getScheduleChangeNotificationSetting(viewer),
   ]);
   const requestedTemplate = search.get("template");
-  const selected =
-    requestedTemplate !== null
+  const createTemplate = search.get("new") === "1";
+  if (createTemplate && requestedTemplate !== null) {
+    throw new Response(
+      "Choose a template version or create a new template, not both.",
+      { status: 400 },
+    );
+  }
+  const selected = createTemplate
+    ? null
+    : requestedTemplate !== null
       ? (centre.templates.find((version) => version.id === requestedTemplate) ??
         null)
       : categoryPreset?.success

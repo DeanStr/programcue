@@ -36,7 +36,9 @@ The split changes the evaluation fingerprint and requires a fresh run.
 CFP-S1 creates a blank DevFlow Conf 2027 event for the chained run, with explicit
 reuse of the configured evaluation sender where available. Before CFP publication,
 it creates and publishes active Submission confirmation and Decision email
-templates with an explicit synthetic footer (Evaluation fixture plus the observed
+templates through **New template** for each category. Editing a published template
+creates a replacement version, so both independent template names must remain
+Live after reload. Use an explicit synthetic footer (Evaluation fixture plus the observed
 event location). This does not verify an organisation mailing address. Sender
 verification alone is not
 notification readiness. The populated Future

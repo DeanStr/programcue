@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Form, Link } from "react-router";
 
 import { DraftRecoveryStatus } from "~/components/draft-recovery-feedback";
-import { Button } from "~/components/ui/button";
+import { Button, ButtonLink } from "~/components/ui/button";
 import { EmptyState } from "~/components/ui/states";
 import {
   type MergeValues,
@@ -45,6 +45,9 @@ export function TemplateVersionList({
           <span className="pc-num">{loaderData.templates.length}</span>
         </span>
       </div>
+      <ButtonLink to="?new=1" size="small">
+        New template
+      </ButtonLink>
       <div className="template-list">
         {loaderData.templates.length ? (
           loaderData.templates.map((template) => (

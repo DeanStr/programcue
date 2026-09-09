@@ -9,27 +9,17 @@ Git history retains earlier committed work logs.
 
 ## Current position
 
-- The modular monolith has connected Worker/D1-backed product slices across the
-  main application workflow. Repository coverage does not establish replacement
-  readiness or live-provider acceptance.
-- Source `b2335e77` passed the full release gate and was deployed on 8 September.
-  Exact relative rubric weights and explicit AI destination confirmation are live.
-- The latest deployed evaluation completed seven scenarios at **28.346%** coverage;
-  the score is withheld, and all **481 artifacts verified**. Saved 2:1 weights,
-  blind scoring, round progression, AI generation and a persisted override passed.
-- Decisions stopped at missing evaluation setup: no active decision-email template
-  and an unclaimed co-speaker. Speaker/content/scheduling remain unexercised.
-  Anonymous verification is still unavailable; expanded AI-result text clips.
-- The fixture was reset and old-session invalidation checked at **19:19 UTC** on 8 September.
-- Current candidate adds explicit template setup and a separately authenticated
-  Marcus claim before review assignment, plus wrapping for expanded AI evidence.
-  Focused checks passed: 71 Worker tests, 30 evaluator tests and all three
-  configurations, TypeScript, desktop/mobile AI evidence and co-speaker claim
-  browsers, and production-shaped Marcus selection/reload. Review caught and
-  fixed a missing root-banner mapping before release. Deployment and fresh
-  acceptance evidence are pending. The first release attempt passed core checks
-  (661 unit, 1,937 Worker and one agent test) but stopped at newly reported
-  high-severity dependency advisories; the candidate patches js-yaml and Sharp.
+- The modular monolith has connected Worker/D1-backed product slices. Repository
+  coverage does not establish replacement readiness or live-provider acceptance.
+- Source `00d91286` passed the full release gate and was deployed on 9 September.
+  Co-speaker evaluation access and readable expanded AI evidence are live.
+- The latest deployed run stopped at template setup: creating a decision version
+  retired the confirmation version because the UI lacked **New template**.
+  All 22 scenarios were blocked, coverage was 0%, and 157 artifacts verified.
+- The current candidate adds explicit independent template creation; its browser
+  check preserves both published categories. Fresh deployed acceptance is pending.
+- The fixture was reset at **01:47 UTC** on 9 September; all four saved persona
+  sessions were invalidated and production health matched the deployed revision.
 
 Status terms:
 
@@ -46,7 +36,7 @@ Status terms:
 
 | Surface | Latest retained evidence | Boundary |
 | --- | --- | --- |
-| Application | `b2335e77784689c7d49eede66be9ef755919427e`, Worker `8261f589-1b93-4988-9100-b18bcee7ed7d`, deployed 8 September; health matched before evaluation and after final reset. | Exact relative scoring and explicit AI assessment confirmation verified in deployed `/evaluate`; later workflows still have acceptance gaps. |
+| Application | `00d91286bee3825e22cf6e7050ff5b40c2421145`, Worker `d34e862a-ee1a-4484-af2d-2db6df14031b`, deployed 9 September; health matched before evaluation and after reset. | Co-speaker access and AI-result wrapping are live. Independent template creation is a subsequent candidate; downstream acceptance remains outstanding. |
 | Public website | Bundle `67d5b4b4`, Worker `e9398ee9-5a85-4c73-b751-0de7468c0032`, deployed and exercised on 5 September. | Separate website release; includes the approved film and guide pages. |
 | Scanner | Source `ae6133c`, deployed on 17 August with upload, scan, shutdown and erasure acceptance. | Later scanner changes and sustained burst capacity need separate acceptance. |
 
@@ -121,7 +111,7 @@ change. The latest complete gate supersedes older test-count histories.
 
 | Scope | Recorded result | Limit |
 | --- | --- | --- |
-| `b2335e77`, 8 September | Ordered serial `npm run deploy` passed the full gate in 949.2 s: 661 unit, 1,936 Worker, one Agent, 96 configuration and 14 scanner tests; types, quality, build, schema/recovery/OpenAPI and dependency audit; 221 main browser, 11 evaluation and 16 website checks, including Firefox/WebKit smoke. Preflight/schema/health passed; 58 migrations applied, none pending. | Two opt-in performance measurements skipped. First gate exposed queue-heading navigation and changed visuals; both fixed and browser-tested. Next gate found a stale film screenshot hash, refreshed after inspection. Astra/high review caught prompt-hash retry incompatibility; unnecessary prompt edit removed. Final code and follow-up reviews clean. Evaluation guidance: 29 tests and all three configurations pass. |
+| `00d91286`, 9 September | Serial `npm run deploy` passed the full gate in 988.0 s: 661 unit, 1,937 Worker, one Agent, 96 configuration and 14 scanner tests; types, quality, build, schema/recovery/OpenAPI and dependency policy; 222 main browser, 12 evaluation and 16 website checks. Preflight/schema/health passed; 58 migrations applied, none pending. | Two opt-in performance measurements skipped; 7 low and 3 moderate dependency advisories remain. The first attempt stopped at high-severity js-yaml/Sharp advisories, patched without changing toolchain versions. Three Astra/high reviews finished clean after repairing the new co-speaker root-banner mapping. Evaluator: 30 tests and all three configurations passed. |
 | Production-health evaluator correction | Actual top-level health contract validated; 25 evaluator tests, three configurations and `check:core` passed (351.0 s). | Readiness does not prove product acceptance. |
 | Form-recovery fixes | Shared load/restore choice reconciliation preserves custom fields, stable routing/conditions and revision tokens; removed choices require repair. Validation returns 400; actual revision conflicts retain 409. Toolbar stays below topbar/banner. Focused checks and the full gate passed. Deployed rename → restore → mouse/keyboard save → reload → immutable publication passed. | Bounded production workflow; not full submission/provider acceptance. |
 | Follow-up Astra/high review | `codex exec review --uncommitted` reported no actionable findings. Focused tests/types/build passed, as did 25 evaluator tests, three configurations and a clean serial run of all six evaluation-browser tests. | An earlier browser run overlapped a rebuild and is invalid evidence; the serial rerun resolved it. No additional source fixes or deployment. |
@@ -155,6 +145,7 @@ Requested CLI model/effort receipts do not confirm a resolved provider snapshot.
 | Deployed `/evaluate` `2026-09-08T14-46-23` | Score withheld at **13.008%** coverage; four scenarios completed, 17 blocked and 17 manual checks pending. The 60% gate exited 2; provisional 67.045% is not acceptance. | Application/evaluator `b946bfd4`; all **373 artifacts verified**. Co-author setup, CFP review and real advancement succeeded. Optional AI approval rejection blocked ABS-S2 and its dependants; speaker/content/scheduling were not exercised. Reset/session invalidation and exact deployed health verified. |
 | Deployed `/evaluate` `2026-09-08T17-27-38` | Aborted after CFP-S1; CFP-S2 ended `agent_error` when approval rejected output recording and inaccurate completion claims. No completed grading or acceptance score. | Application/evaluator `b2335e77`. The observed organizer URL was valid; clarified its opaque ID and queue context before a fresh run. Integrity verification reports unindexed aborted-scenario artifacts; retained only as diagnostics. Reset/session invalidation verified at 17:50 UTC. |
 | Deployed `/evaluate` `2026-09-08T17-55-36` | Score withheld at **28.346%** coverage; seven scenarios completed, 15 blocked and 17 manual checks pending. The 60% gate exited 2; provisional 93.655% is not acceptance. | Application `b2335e77`, evaluator `1d3b00bb`; all **481 artifacts verified**. Exact 2:1 scoring and AI generation/override passed. CFP-S4 lacked an active decision template and claimed co-speaker; downstream workflows blocked. Final reset/session invalidation and deployed health verified. |
+| Deployed `/evaluate` `2026-09-09T01-26-10` | Score withheld at **0%** coverage; 22 scenarios blocked, 17 manual checks pending. | Application/evaluator `00d91286`; all **157 artifacts verified**. CFP-S1 published a decision version of the confirmation template, retiring the latter, then correctly stopped without publishing the CFP. The missing independent-creation action is a product UI gap. Final reset and invalidation of all four personas verified at 01:47 UTC. |
 
 The earlier recovery/save blocker is resolved: both the direct deployed smoke
 and independent evaluator published successfully. Anonymous Start application
@@ -226,8 +217,18 @@ Final cleanup completed at **19:19:27 UTC**. Old organiser sessions were invalid
 applicant/reviewer baselines clean, no persona selected and deployed `b2335e77`
 healthy. Integrity root: `4bdfb809bf5be2c0109430fc03f7a55264553d46185d9cf3bfef23c5ab683e45`.
 
+The 9 September run `2026-09-09T01-26-10` demonstrated the missing independent
+email-template action: confirmation v1 became retired when decision v2 was
+published on the same template. The evaluation correctly withheld CFP publication
+and all dependent checks. The first preparation reset returned 409; its cleanup
+reset succeeded before the fresh run. Final reset completed at
+**01:47:25.999 UTC**, with all saved sessions invalid and `00d91286` healthy.
+Integrity root: `576e5858571dfc1b3c46e46d492b2e43ea9a87c79c5f561fddca4585c0434ff6`.
+Current release, review, evaluation and reset receipts are in
+`.artifacts/acceptance-prerequisites/`.
+
 Reports are retained under `evals/.agent-eval/runs/<run-id>/report.html`.
-Latest release receipts are in `.artifacts/relative-weights-ai-release/`, the
+Previous release receipts are in `.artifacts/relative-weights-ai-release/`, the
 completed evaluation/reset in `.artifacts/relative-weights-ai-rerun/`, and the
 review loop in `.artifacts/relative-weights-ai-review/`. Earlier accepted-session
 diagnostics remain in `.artifacts/deployed-accepted-session-smoke-20260908-retry/`.
@@ -235,7 +236,7 @@ Verified artifact roots:
 
 - Active local regression: `5c7afb60bb4a86f5937aacdd786fe0de16ff5b0c5d798dc16517334b5b5c5415`.
 - Local upstream: `86268503e077e1d7560fcf7d40b2cbb5babb7724e64995fe2b5276aef780d427`.
-- Latest deployed upstream: `d6b389a653452f198945e431c8cc83b2c0069c569e43630c69f87b86b2a83e03`.
+- Latest deployed upstream: `576e5858571dfc1b3c46e46d492b2e43ea9a87c79c5f561fddca4585c0434ff6`.
 
 ## Deployment evidence
 
@@ -307,10 +308,10 @@ acknowledgement latency remain outstanding.
 
 ## Remaining acceptance work
 
-1. **Deployed evaluation:** configure required submission/decision templates and
-   complete the co-speaker claim before acceptance. Run fresh to reach decisions,
-   speaker, content and scheduling, then reset. Fix expanded AI-result text clipping.
-   Anonymous verification still needs a supported browser.
+1. **Deployed evaluation:** release independent template creation and run fresh
+   with both required templates Live. Verify the deployed co-speaker claim and
+   expanded AI results, then decisions, speaker, content and scheduling; reset
+   afterward. Anonymous verification still needs a supported browser.
 2. **Provider paths:** exercise Airtable authority/recovery, Accelevents live
    reconciliation, external AI/tool-loop/assessment and fresh provider-error
    callbacks. Verify newer schedule-change emails, reminder cron and controlled
