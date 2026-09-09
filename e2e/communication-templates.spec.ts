@@ -12,18 +12,16 @@ test("new email templates preserve separately published confirmation and decisio
   test.setTimeout(60_000);
   page.setDefaultTimeout(10_000);
   await resetDemoEvent(request);
-  await page
-    .context()
-    .addCookies([
-      {
-        name: "program_cue_event",
-        value: "evt-foe-2025",
-        domain: "127.0.0.1",
-        path: "/",
-        httpOnly: true,
-        sameSite: "Lax",
-      },
-    ]);
+  await page.context().addCookies([
+    {
+      name: "program_cue_event",
+      value: "evt-foe-2025",
+      domain: "127.0.0.1",
+      path: "/",
+      httpOnly: true,
+      sameSite: "Lax",
+    },
+  ]);
   await page.goto("/admin/communications");
   await page.locator("body[data-hydrated='true']").waitFor();
   const ids: string[] = [];
