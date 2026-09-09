@@ -14,26 +14,19 @@ Git history retains earlier committed work logs.
 - Source `6e01f396` was deployed on 9 September after the full release gate.
   It includes claimed-biography initialization, full-endpoint AI confirmation
   and relative-weight evidence labels alongside the earlier template/access fixes.
-- The latest deployed run (`2026-09-09T08-36-28`) completed nine scenarios:
-  Marcus's claimed biography persisted, 2:1 scoring and AI assessment worked,
-  decisions released, and the accepted-session handoff reached speaker onboarding.
-  A headshot scan failed after repeated `scanner_not_ready` responses, blocking
-  subsequent speaker, content, scheduling and widget scenarios. Overall score
-  withheld at **36.288% coverage**; 17 manual checks remain pending.
+- Scanner source `7b27ce4d` was released on 9 September at 16:24 UTC.
+  Fresh deployed `/evaluate` run `2026-09-09T16-27-25` verified headshot upload,
+  clean scan/release within 65 seconds, rendered portrait and organiser download.
+  Three real sessions were scheduled with persisted placements and conflict checks.
+- The run completed 11 scenarios, blocked ten and stopped on a provider error in
+  the final CRM scenario. AEK misclassified `/admin/sessions/new` as a login wall;
+  checkpoint-image selection and iframe access also limited evidence. The partial
+  report is not an acceptance result; aborted CRM artifacts remain unindexed.
 - External endpoint path/query confirmation and AI review-aid evidence labels
-  retain local regression evidence; this deployed run used Workers AI and did
-  not exercise those specific paths.
-- The fixture was reset at **10:32:29 UTC** on 9 September; all four saved persona
-  sessions were invalidated, clean baselines verified and production health
-  matched `6e01f396`.
-- Local scanner changes replace the startup marker with bounded probes of the
-  daemon's loaded signatures. A real container returned 503 with stale loaded
-  signatures and recovered to 200 after FreshClam updated and reloaded them.
-  The rebuilt container passed clean/EICAR upload
-  and latest-version ZIP browser checks. Evaluation guidance now captures full
-  checkpoint evidence before publication; independent content setup, scheduling
-  and CRM branches pass synthetic dependency tests. These changes are **not yet
-  deployed or verified by a fresh production evaluation**.
+  retain local regression evidence; the fresh run did not exercise those paths.
+- The fixture was reset at **19:02:08 UTC** on 9 September. All four saved persona
+  sessions were invalidated, clean applicant/reviewer baselines and no selected
+  persona verified, and application health matched `6e01f396`.
 
 Status terms:
 
@@ -50,9 +43,9 @@ Status terms:
 
 | Surface | Latest retained evidence | Boundary |
 | --- | --- | --- |
-| Application | `6e01f39632d4d2a7e8134ebe200a26eaa4abcb28`, Worker `f1e0ddb0-2045-461d-8312-81337d360640`, deployed 9 September at 05:42 UTC; exact-revision health passed before evaluation and after reset. | Claimed biography, weighted scoring, AI assessment and accepted-session handoff have bounded deployed evidence. Scanner readiness blocks broader acceptance; external endpoint-change confirmation remains locally tested. |
+| Application | `6e01f39632d4d2a7e8134ebe200a26eaa4abcb28`, Worker `f1e0ddb0-2045-461d-8312-81337d360640`, deployed 9 September at 05:42 UTC; exact-revision health passed before evaluation and after reset. | Claimed biography, weighted scoring, AI assessment and accepted-session handoff have bounded deployed evidence. The latest run also verified scheduling/conflict handling; external endpoint-change confirmation remains locally tested. |
 | Public website | Bundle `67d5b4b4`, Worker `e9398ee9-5a85-4c73-b751-0de7468c0032`, deployed and exercised on 5 September. | Separate website release; includes the approved film and guide pages. |
-| Scanner | Source `ae6133c`, deployed on 17 August with upload, scan, shutdown and erasure acceptance. | Later scanner changes and sustained burst capacity need separate acceptance. |
+| Scanner | Source `7b27ce4dabbd46e3ce26ebec64b506cc505a0ec7`, Worker `370e3d6b-1ce2-4e54-bcb2-ecb4d0e9c4e8`, deployed 9 September at 16:24 UTC; exact-revision health and real headshot scan/release/download passed. | Fresh signatures and cold-start recovery verified; sustained burst capacity remains outstanding. |
 
 These are recorded observations, not current health checks. Use the
 [deployment runbook](DEPLOYMENT.md) for release procedures.
@@ -125,6 +118,7 @@ change. The latest complete gate supersedes older test-count histories.
 
 | Scope | Recorded result | Limit |
 | --- | --- | --- |
+| `7b27ce4d`, 9 September | Release gate passed after recheck: 661 unit, 1,950 Worker, one Agent, 15 scanner; types, quality, build, configuration, schema/recovery/OpenAPI and dependency policy; all main browser cases passed across the initial run and isolated retry, followed by 12 evaluation and 16 website checks. Two Astra/high source reviews found no actionable issues. | Initial `npm run check` exited 1 on an unchanged pointer-resize test; isolated retry passed on the same build. Two opt-in measurements skipped; 7 low/3 moderate advisories remain. Receipts: `.artifacts/scanner-release-7b27ce4d/`. |
 | `6e01f396`, 9 September | Serial `npm run deploy` passed the full `npm run check` gate in 582.0 s: 661 unit, 1,950 Worker, one Agent and 14 scanner tests; configuration, types, quality, build, schema/recovery/OpenAPI and dependency policy; 223 main browser, 12 evaluation and 16 website checks. Production preflight/schema/health passed; 58 migrations already applied, none pending. Deployed `/evaluate` access-page Chromium smoke passed. Receipts: `.artifacts/release-6e01f396/`. | Two opt-in performance measurements skipped; 7 low and 3 moderate dependency advisories remain. Browser suites use local fixtures; the deployed smoke verified access-page availability, not fresh workflow or provider acceptance. |
 | Production-health evaluator correction | Actual top-level health contract validated; 25 evaluator tests, three configurations and `check:core` passed (351.0 s). | Readiness does not prove product acceptance. |
 | Form-recovery fixes | Shared load/restore choice reconciliation preserves custom fields, stable routing/conditions and revision tokens; removed choices require repair. Validation returns 400; actual revision conflicts retain 409. Toolbar stays below topbar/banner. Focused checks and the full gate passed. Deployed rename → restore → mouse/keyboard save → reload → immutable publication passed. | Bounded production workflow; not full submission/provider acceptance. |
@@ -161,6 +155,7 @@ Requested CLI model/effort receipts do not confirm a resolved provider snapshot.
 | Deployed `/evaluate` `2026-09-08T17-55-36` | Score withheld at **28.346%** coverage; seven scenarios completed, 15 blocked and 17 manual checks pending. The 60% gate exited 2; provisional 93.655% is not acceptance. | Application `b2335e77`, evaluator `1d3b00bb`; all **481 artifacts verified**. Exact 2:1 scoring and AI generation/override passed. CFP-S4 lacked an active decision template and claimed co-speaker; downstream workflows blocked. Final reset/session invalidation and deployed health verified. |
 | Deployed `/evaluate` `2026-09-09T01-26-10` | Score withheld at **0%** coverage; 22 scenarios blocked, 17 manual checks pending. | Application/evaluator `00d91286`; all **157 artifacts verified**. CFP-S1 published a decision version of the confirmation template, retiring the latter, then correctly stopped without publishing the CFP. The missing independent-creation action is a product UI gap. Final reset and invalidation of all four personas verified at 01:47 UTC. |
 | Deployed `/evaluate` `2026-09-09T08-36-28` | Score withheld at **36.288%** coverage; nine scenarios completed, 13 blocked and 17 manual checks pending. The 60% coverage gate exited 2; provisional 88.87% is not acceptance. | Deployed/evaluator source `6e01f396` with the deployment-audit edit present; all **615 artifacts verified**. Biography, 2:1 scoring, AI assessment, decision release and speaker onboarding progressed. Scanner readiness blocked SPK-S2 and its dependants; anonymous verification separately blocked. Final reset/session invalidation and health verified at 10:32 UTC. |
+| Deployed `/evaluate` `2026-09-09T16-27-25` | 11 completed, ten blocked, final CRM scenario `agent_error` / provider exit 1. No complete acceptance score; artifact verification fails on unindexed aborted CRM evidence. | Application `6e01f396`, scanner/evaluator `7b27ce4d`. Headshot clean release/render/download, claimed biography, 2:1 scoring, decision handoff and three persisted schedule placements verified. AEK login-wall detection, evidence access and approval restrictions blocked remaining work. Final reset/session invalidation verified at 19:02 UTC. |
 
 The earlier recovery/save blocker is resolved: both the direct deployed smoke
 and independent evaluator published successfully. Anonymous Start application
@@ -320,6 +315,22 @@ persona sessions, clean baselines, no selected persona and exact deployed health
 were verified. Run/reset/scanner receipts:
 `.artifacts/deployed-fixes-evaluation-20260909/`.
 
+
+The scanner release run `2026-09-09T16-27-25` supersedes the earlier readiness
+blocker: the real 569-byte headshot was uploaded at 18:14:19 UTC and released at
+18:15:24. Two cold-start readiness responses preceded a clean verdict using
+ClamAV 1.4.6/signatures 28118; portrait reload and organiser download passed.
+Independent dependencies let scheduling and CRM progress despite content blocks.
+AEK's route classifier incorrectly treats the authenticated `/admin/sessions/new`
+form as a login wall, blocking content setup and the publication scenario.
+Correct checkpoint screenshots were retained, but the Codex judge's 30-image
+selection omitted some of them; excluded frames also blocked anonymous security
+and merged-email preview checks. Approval review rejected AI disclosure and later
+CRM evidence calls as post-finalization actions; CRM collection then exited 1.
+The partial report predates CRM completion and is not final acceptance. Cleanup
+reset and old-session invalidation passed; production was not left populated.
+Receipts and diagnostic evidence: `.artifacts/scanner-release-7b27ce4d/`.
+
 Reports are retained under `evals/.agent-eval/runs/<run-id>/report.html`.
 Previous release receipts are in `.artifacts/relative-weights-ai-release/`, the
 completed evaluation/reset in `.artifacts/relative-weights-ai-rerun/`, and the
@@ -330,7 +341,7 @@ Verified artifact roots:
 - Active local regression: `5c7afb60bb4a86f5937aacdd786fe0de16ff5b0c5d798dc16517334b5b5c5415`.
 - Local upstream: `86268503e077e1d7560fcf7d40b2cbb5babb7724e64995fe2b5276aef780d427`.
 - Earlier 9 September template-blocked run: `576e5858571dfc1b3c46e46d492b2e43ea9a87c79c5f561fddca4585c0434ff6`.
-- Latest deployed run: `054d6d8c100807c501edd5e0a9da8ae7dd59f677b691c84cfe2a594f0f454e3f`.
+- Completed deployed run `2026-09-09T08-36-28`: `054d6d8c100807c501edd5e0a9da8ae7dd59f677b691c84cfe2a594f0f454e3f`.
 
 ## Deployment evidence
 
@@ -342,7 +353,7 @@ provider paths.
 | Identity and mail | Owner Turnstile/Resend magic link, delivered/bounced receipts, Google and hardened Microsoft sign-in. | Fresh email-link/Microsoft identity creation and third-party failure callbacks, broader recipients and controlled SBEK inbox evidence. |
 | Calendars | Google/Microsoft connections and invitation create/update/cancel lifecycles. | Fresh provider-error exercise and any provider-requested verification; historical flagged callback follow-up. |
 | Participant operations | Live preview, structured task validation/completion and draft discard/replacement under `6c811a3`; multi-role acceptance under `1ba0531` on 2 September. | Newer task/reminder behavior and positive co-participant presentation where the canonical fixture lacks such a session. |
-| Files/scanner | Historical Uppy/R2 upload, clean release, EICAR quarantine, error/retry and erasure evidence; `ae6133c` exercised shutdown. On 9 September a fresh headshot remained quarantined and failed after repeated `scanner_not_ready` responses. | Restore current scanner readiness, then verify portrait release, sustained capacity and broader erasure. |
+| Files/scanner | Historical Uppy/R2 upload, clean release, EICAR quarantine, error/retry and erasure evidence; `ae6133c` exercised shutdown. Scanner `7b27ce4d` subsequently passed deployed headshot scan/release, portrait reload and download on 9 September. | Sustained capacity and broader erasure; the earlier failed scanner instance's root cause remains unverified. |
 | AI | DeepSeek structured readiness through Workers AI; malformed/over-budget output failed explicitly. | Full agent tool-loop, assessments and external model providers. |
 | Operations | Retained structured logs, empty Queue/DLQ inspection, scoped alert firing, one delayed owner alert email and exact private-R2 backup restore. | Autonomous post-fix backup, timely repeatable alerts, trace continuity and measured RPO/RTO. |
 
@@ -402,13 +413,12 @@ acknowledgement latency remain outstanding.
 
 ## Remaining acceptance work
 
-1. **Deployed evaluation:** release and verify the local scanner readiness fix,
-   including headshot release, then rerun with corrected checkpoint guidance and
-   independent content/scheduling/CRM branches; reset afterward. Local receipts:
-   `.artifacts/scanner-readiness-evidence-fix/`. The previous scanner failure's
-   deployed root cause remains unverified. Biography preservation, readable AI
-   results and decision handoff passed the latest bounded run. Anonymous
-   verification still needs a supported browser.
+1. **Deployed evaluation:** resolve AEK's false login-wall detection for direct
+   session creation and checkpoint-image delivery; establish supported iframe
+   interaction and approval scope, then rerun remaining content/publication,
+   widgets and CRM checks and reset afterward. Scanner headshot release and
+   independent scheduling now have bounded deployed evidence. Receipts:
+   `.artifacts/scanner-release-7b27ce4d/`.
 2. **Provider paths:** exercise Airtable authority/recovery, Accelevents live
    reconciliation, external AI/tool-loop/assessment and fresh provider-error
    callbacks. Verify newer schedule-change emails, reminder cron and controlled
