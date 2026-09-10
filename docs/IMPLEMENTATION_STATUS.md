@@ -1,6 +1,6 @@
 # Verified implementation status
 
-Evidence recorded through **9 September 2026**.
+Evidence recorded through **10 September 2026**.
 This is the current capability,
 requirements and acceptance index; consolidation does not constitute a new
 verification or deployment. The [product specification](../sessionboard-replacement-full-scope-implementation-specification-with-competition-ux.md)
@@ -19,15 +19,20 @@ Git history retains earlier committed work logs.
   Fresh deployed `/evaluate` run `2026-09-09T16-27-25` verified headshot upload,
   clean scan/release within 65 seconds, rendered portrait and organiser download.
   Three real sessions were scheduled with persisted placements and conflict checks.
-- The run completed 11 scenarios, blocked ten and stopped on a provider error in
-  the final CRM scenario. AEK misclassified `/admin/sessions/new` as a login wall;
+- That 9 September run completed 11 scenarios, blocked ten and stopped on a
+  provider error in the final CRM scenario. AEK misclassified `/admin/sessions/new` as a login wall;
   checkpoint-image selection and iframe access also limited evidence. The partial
   report is not an acceptance result; aborted CRM artifacts remain unindexed.
 - External endpoint path/query confirmation and AI review-aid evidence labels
   retain local regression evidence; the fresh run did not exercise those paths.
-- The fixture was reset at **19:02:08 UTC** on 9 September. All four saved persona
+- Fresh run `2026-09-10T09-16-55` completed four scenarios, then failed at
+  ABS-S2 finalisation at its 1,200-second deadline. Raw browser evidence shows
+  correct round progression, Marcus's claimed biography and readable merged-email
+  text; its full-page preview screenshot is blank. Judging, AI generation, new
+  session creation and CRM were not reached. This is not an acceptance result.
+- The fixture was reset at **10:19:11 UTC** on 10 September. All four saved persona
   sessions were invalidated, clean applicant/reviewer baselines and no selected
-  persona verified, and application health matched `6e01f396`.
+  persona verified, and application health matched `5a758933`.
 
 Status terms:
 
@@ -148,6 +153,7 @@ Requested CLI model/effort receipts do not confirm a resolved provider snapshot.
 
 | Run | Outcome | Evidence and boundary |
 | --- | --- | --- |
+| Deployed upstream `2026-09-10T09-16-55` | Four scenarios completed; ABS-S2 browser called completed but provider finalisation failed at the configured 20-minute limit. No judge or score; `aek verify` rejects the aborted scenario’s unindexed artifacts. | Program Cue `5a758933`, installed AEK master `7a97ab5`, Astra agent/judge requested. Saved submissions/edits, claimed biography and reviewer isolation passed; raw ABS-S2 evidence shows correct 2-assigned/0-submitted progression and readable personalised preview text. Preview screenshot remains blank; AI, session creation, CRM and checkpoint-to-judge delivery untested. Fixture reset and all four old-session invalidations verified at 10:19 UTC. Receipts: `.artifacts/evaluation-20260910/`. |
 | Local regression `2026-09-07T02-12-32` | Nine criteria, 100% score and coverage with requested Astra/medium agent and judge; 265 artifacts verified. | Mailpit capture, real ClamAV clean/EICAR scans, versioned downloads/ZIP, anonymous denial and publication. Active baseline `2026-09-07T02-29-38-534Z-67a9d91b487d-ee63187c`; self-comparison has zero drift. Not the 98-criterion upstream suite or hosted-provider acceptance. |
 | Local upstream `2026-09-07T11-12-08` | Score withheld at 4.737% coverage; CFP-S1 completed, CFP-S2 blocked at applicant verification, 18 dependent scenarios blocked, 17 manual checks pending. | CLI exit 0 was completion without a coverage gate. Provisional 61.111% is not an acceptance score. Earlier `10-54-20` failed judge OAuth refresh and exhausted its setup call budget. |
 | Deployed `/evaluate` `2026-09-08T02-33-47` | Score withheld at 7.368% coverage; CFP-S1 completed, anonymous checks blocked, CFP-S2 ran but its required URL output was blocked, 18 downstream scenarios blocked, 17 manual checks pending. The 60% coverage gate exited 2. | Codex collection and requested Astra judging, 240 calls/scenario and 1,200 s deadline. All 202 artifacts verified. Provisional 89.286% is not an acceptance score. Health matched `f3f0b887` before and after reset. |
