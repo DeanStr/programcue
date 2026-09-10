@@ -2357,3 +2357,18 @@ Review rubric from the run's DevFlow fixture, sent through the configured Worker
 AI binding for one assessment and the specified human override. Provider/model
 inspection, product confirmation and automatic approval decisions remain enforced.
 Other providers, real customer data and provider-setting changes are outside scope.
+
+
+### Evaluation deadlines and opaque preview captures
+
+Production scenarios allow 1,800 seconds, including provider finalisation. The
+10 September round-setup run reached browser completion eight seconds before its
+former 1,200-second limit but lost the final provider output. A timeout remains
+an execution error with retained diagnostics, even when the child exits zero;
+missing output on an ordinary successful exit still fails its output contract.
+
+Use visible viewport captures for personalised email previews. Chromium omits
+opaque iframe pixels outside the current viewport from full-page captures;
+scrolling into view and back is not reliable. AEK rejects a full-page request
+when the included preview portion is outside the viewport, saves no misleading
+image and allows an explicit viewport retry. Keep the product sandbox intact.

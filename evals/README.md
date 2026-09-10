@@ -215,6 +215,10 @@ text and image evidence from the representative merged email preview only on
 `srcdoc` iframe whose sandbox was empty at attachment and has not changed.
 State-preserving iframe moves revoke eligibility. No interactive references are
 granted inside it. Other opaque frames remain excluded; the product sandbox is unchanged.
+For preview images, scroll the content into view and request `fullPage: false`;
+capture additional scroll positions for a tall preview. Chromium can leave an
+offscreen opaque iframe blank in full-page images even when its text is readable.
+AEK rejects that framing without saving an image, and permits a viewport retry.
 
 Production explicitly allows `https://challenges.cloudflare.com` so the collector
 can inspect and interact with the genuine verification frame. A read-only deployed
@@ -453,8 +457,11 @@ using this profile. No script here resets production or installs/reads reset sec
    capture Event organiser, Clean applicant + Create evaluator submitter account,
    Co-speaker (Marcus), and Clean reviewer respectively. Capture only after reset,
    which invalidates all prior sessions. Attendee remains anonymous.
-3. Run `npm run validate`, then `npm run run:production`. The configured readiness
-   command checks the production health response and records its reported source
+3. Run `npm run validate`, then `npm run run:production`. Each production scenario
+   has a 30-minute deadline including provider finalisation; this provides headroom
+   beyond the observed 20-minute round-setup workflow. A timeout is an execution
+   failure even if the browser called `done`; it does not count as completed work.
+   The configured readiness command checks the production health response and records its reported source
    revision in lifecycle diagnostics. Actual sending and provider work can occur.
 4. Retain actual controlled-inbox/scanner/calendar evidence. Complete declared
    manual checks with `aek finalize --config evalkit.production.yaml --run <run>`.

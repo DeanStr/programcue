@@ -42,7 +42,10 @@ variables:
   evaluationEnvironment: local
   canonicalEvent: Future of Events 2027
   canonicalPublicPath: /public/programme/future-of-events-2027
-instructions: "Evaluate Programcue by function and filled-state correctness, not
+instructions: "For personalised email preview evidence, scroll the preview into view
+  and take viewport screenshots with fullPage: false. Capture additional scroll
+  positions for tall previews; never treat readable text alone as visual evidence.
+  Evaluate Programcue by function and filled-state correctness, not
   resemblance to SessionBoard. Use the real interface and the configured
   non-secret fixture emails. Organizer navigation: Command Centre, Form builder,
   Review & selection, Participants, Content, Schedule, Programme,

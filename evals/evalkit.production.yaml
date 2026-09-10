@@ -18,7 +18,7 @@ browser:
 agent:
   provider: codex
   maxTurns: 120
-  timeoutSeconds: 1200
+  timeoutSeconds: 1800
 judge:
   provider: claude
   timeoutSeconds: 900
@@ -35,7 +35,10 @@ variables:
   evaluationEnvironment: production
   canonicalEvent: DevFlow Conf 2027
   canonicalPublicPath: /public/programme/devflow-conf-2027
-instructions: "Operator-authorized AI scope: in ABS-S2-AI, send the synthetic CI
+instructions: "For personalised email preview evidence, scroll the preview into view
+  and take viewport screenshots with fullPage: false. Capture additional scroll
+  positions for tall previews; never treat readable text alone as visual evidence.
+  Operator-authorized AI scope: in ABS-S2-AI, send the synthetic CI
   proposal's submitted content and Initial Review rubric from this run's DevFlow
   Conf 2027 evaluation fixture to Cloudflare Workers AI through Program Cue's
   configured AI binding for one first-pass assessment, then save the scenario's

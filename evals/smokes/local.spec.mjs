@@ -88,7 +88,7 @@ test("merged email preview renders inside its opaque sandbox on desktop and mobi
       headless: true,
       viewport: { width: 1440, height: 1000 },
       actionTimeoutMs: 10000,
-      maxToolCalls: 10,
+      maxToolCalls: 14,
       readOnlyFrames: config.browser.readOnlyFrames,
     }),
   );
@@ -117,6 +117,14 @@ test("merged email preview renders inside its opaque sandbox on desktop and mobi
     expect(snapshot).toContain("Hi Priya,");
     expect(snapshot).toContain("approved read-only preview");
     expect(snapshot).toContain("Your speaker workspace is ready.");
+    await call("scroll", { direction: "up" });
+    await call("scroll", { direction: "up" });
+    const rejected = await client.callTool({
+      name: "screenshot",
+      arguments: { label: "offscreen-preview", fullPage: true },
+    });
+    expect(rejected.isError).toBe(true);
+    expect(JSON.stringify(rejected.content)).toContain("Scroll the preview into view");
     await call("scroll", { direction: "down" });
     await call("scroll", { direction: "down" });
     await call("screenshot", { label: "aek-merged-preview", fullPage: false });
