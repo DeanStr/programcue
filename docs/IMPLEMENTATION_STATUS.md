@@ -11,10 +11,11 @@ Git history retains earlier committed work logs.
 
 - The modular monolith has connected Worker/D1-backed product slices. Repository
   coverage does not establish replacement readiness or live-provider acceptance.
-- Source `5a758933` was deployed after the full release gate and verified on
-  9 September at 21:58 UTC. It adds explicit CRM returning-speaker counts and their definition
-  to the earlier biography, AI confirmation/weight-label and template/access fixes.
-  Exact-revision health, the served CRM bundle and `/evaluate` access page passed.
+- Source `c2c402cf` was deployed after the full release gate on 13 September at
+  11:50 UTC; exact-revision production health passed. Reviewer reminders retain
+  names, and speaker file tasks support private headshot collection with scanning
+  and version history. Revised evaluation dependencies retain local evidence only;
+  no fresh deployed `/evaluate` run was performed, as requested.
 - Scanner source `7b27ce4d` was released on 9 September at 16:24 UTC.
   Fresh deployed `/evaluate` run `2026-09-09T16-27-25` verified headshot upload,
   clean scan/release within 65 seconds, rendered portrait and organiser download.
@@ -47,7 +48,7 @@ Status terms:
 
 | Surface | Latest retained evidence | Boundary |
 | --- | --- | --- |
-| Application | `5a7589332723d2833e52ef85936b770a2ebc4098`, Worker `69e9daae-ccb7-4702-b901-7ce7947c732e`, deployment verified 9 September at 21:58 UTC; exact-revision health, CRM bundle equality and `/evaluate` access-page Chromium checks passed. | CRM returning-speaker visibility is deployed; its workflows passed locally. Earlier bounded provider/workflow acceptance remains historical. No fresh evaluation or provider request was performed during this release; the fixture was unchanged. |
+| Application | `c2c402cf585f05915395d5556c34785ab3020515`, Worker `47962095-8de3-4dda-b4a9-f7935399fcc4`, deployed 13 September at 11:50 UTC; full release gate and exact-revision health passed. | Named reviewer reminders and private headshot tasks are deployed. Their browser/service checks were local; fresh deployed workflow and evaluation acceptance remain pending. The fixture was unchanged. |
 | Public website | Bundle `67d5b4b4`, Worker `e9398ee9-5a85-4c73-b751-0de7468c0032`, deployed and exercised on 5 September. | Separate website release; includes the approved film and guide pages. |
 | Scanner | Source `7b27ce4dabbd46e3ce26ebec64b506cc505a0ec7`, Worker `370e3d6b-1ce2-4e54-bcb2-ecb4d0e9c4e8`, deployed 9 September at 16:24 UTC; exact-revision health and real headshot scan/release/download passed. | Fresh signatures and cold-start recovery verified; sustained burst capacity remains outstanding. |
 
@@ -122,6 +123,7 @@ change. The latest complete gate supersedes older test-count histories.
 
 | Scope | Recorded result | Limit |
 | --- | --- | --- |
+| `c2c402cf`, 13 September | `npm run deploy` passed the full `npm run check` gate in 626.2 s: 665 unit, 1,954 Worker, one Agent and 15 scanner tests; types, quality, build, configuration, schema/recovery/OpenAPI and dependency policy; 224 main browser, 12 local evaluation-access and 16 website checks. All 58 migrations were already applied; preflight/schema and exact-revision production health passed. Two Astra/high code reviews found no actionable issues; 31 evaluation-configuration tests and all three AEK profiles passed. | Two opt-in performance checks skipped; 7 low/3 moderate dependency advisories remain. No deployed evaluation, provider-message test or fixture mutation was performed. Receipts: `.artifacts/reminder-headshot-fixes/`. |
 | Timeout and preview-capture corrections, 10–13 September | Production scenarios allow 1,800 seconds including provider finalisation. AEK `05823a0` preserves timeout diagnostics and rejects full-page captures that omit offscreen approved previews. 542 AEK tests, targeted types and installed-package local preview smoke passed. The 13 September deployed run finalized ABS-S2 in 922 seconds, captured rendered viewport previews and completed judging; 68 judge screenshot retrievals succeeded. | No timeout occurred, so timeout-error handling retains local regression evidence. The local upload smoke lacked scanner prerequisites; deployed headshot release/render/download subsequently passed. Receipts: `.artifacts/timeout-preview-fixes/`, `.artifacts/evaluation-20260913/`. |
 | Evaluator access corrections | The installed AEK package includes checkpoint-aware image delivery, corrected login-route detection and opt-in read-only preview evidence. The real local merged-email workflow was readable through AEK with its sandbox intact; 30 evaluator tests and three configurations passed. The coordinator consumes AEK plan version 2. | A deployed anonymous probe no longer excluded challenge frames but obtained no token; genuine verification remains manual. AI disclosure authorization is now explicit in the scenario context; no new live AI generation is claimed. Receipts: `.artifacts/evaluator-access-fixes/`. |
 | CRM returning-speaker visibility | The directory always shows the returning-speaker count, including zero, with its active-event/session definition. Three Chromium CRM workflows, generated types and focused Biome passed. The 13 September deployed run visibly showed five contacts, three events, zero returning speakers and the definition; top-company filtering, saved segments/notes, duplicate handling and pipeline history worked. | A new cross-event transfer was not demonstrated because the tested contact already belonged to DevFlow. Source/region/focus analytics were not observed. Receipts: `.artifacts/crm-returning-count/`, `.artifacts/release-5a758933/`, `.artifacts/evaluation-20260913/`. |
