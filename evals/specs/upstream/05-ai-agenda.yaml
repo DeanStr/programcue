@@ -15,6 +15,86 @@ description: >
   conflict-free draft; for this evaluation that AI layer is polish, judged only
   as "some assisted/auto-place capability exists".
 scenarios:
+  - id: AIA-SETUP
+    name: Prepare dedicated ready scheduling sessions
+    kind: browser
+    persona: organizer
+    requiresAuth: true
+    allowedPersonas:
+      - organizer
+      - speaker
+      - reviewer
+      - anonymous
+      - co_speaker
+    instructions: >-
+      PROGRAMCUE EXECUTION ADAPTATION: Use the configured fixture identities and
+      current saved persona. Replace every sign-out/sign-in role transition
+      below with switch_persona. For public checks switch to anonymous. Never
+      authenticate another identity in the current context. Do not repeat signup
+      when already authenticated; explicitly distinguish pre-provisioned access
+      from signup evidence.
+
+
+      Run the chained suite in the new DevFlow Conf 2027 event created by
+      CFP-S1, not the populated Future of Events 2027 showcase. After each
+      switch_persona, explicitly select DevFlow Conf 2027 through the event
+      picker when that role has event access; applicant pages use the observed
+      bound CFP URL. Accept the invitation to this event before opening its
+      reviewer workspace. Never substitute the showcase's form, schedule,
+      reviews or published programme. Fixture emails override literal example
+      addresses below. Record actual dates, track/format names and any
+      substituted fixture values. Follow the original criterion: substitutions
+      cannot hide a missing capability.
+
+
+      Prepare dedicated scheduling records through normal product UI in the
+      canonical event. First verify the bound accepted CI handoff. Preserve all
+      original proposals, reviews and decisions: AI Pair remains rejected and
+      Docs remains undecided. This intentionally replaces upstream AIA-S1 steps
+      5-6's instruction to reverse decisions. Use Create unscheduled session
+      (/admin/sessions/new) for four new direct sessions: Scheduling: Taming
+      40-Minute CI (Talk, Platform & Infra, Priya); Scheduling: Your AI Pair
+      Programmer (Talk, AI Engineering, Priya); Scheduling: Docs That Answer
+      Back (Talk, Developer Experience, Marcus); Scheduling: Agents in
+      Production Q&A (Lightning Talk, AI Engineering, Marcus). Reuse the fixture
+      identities through Find existing speaker and explicitly confirm the
+      displayed identity matches. These are direct sessions, not reviewed or
+      accepted proposals; never claim review/acceptance evidence for them.
+      Record the observed record URLs and title mapping for later scenarios. If
+      these dedicated records unexpectedly exist at setup start, stop and report
+      the stale setup rather than creating duplicates. Switch to each speaker
+      persona, confirm participation through their ordinary session workflow,
+      and publish their event speaker profile with required fields. Do not
+      fabricate confirmation, skip required fields or change privacy settings on
+      behalf of another persona. Return to organizer and inspect the schedule
+      readiness list after reload: all four dedicated sessions must be eligible,
+      have the intended linked speakers, and be unplaced. Preserve any actual
+      readiness blocker and report setup blocked. No file scans or other area's
+      deliverables are prerequisites. Do not publish the agenda here.
+
+
+      Use the bound sessionUrl from CFP-S4; verify the record before continuing.
+
+
+      ORIGINAL SCENARIO SCRIPT:
+
+      Complete the dedicated direct-session setup described above and verify
+      persisted readiness.
+
+
+      Missing optional features are findings: record them and continue the
+      reachable script. Use feature_not_found for an absent core capability and
+      blocked for unavailable access/evidence. Do not turn provider or
+      evidence-tool failures into product verdicts.
+    successSignals:
+      - Four dedicated unplaced sessions are eligible, with confirmed
+        participants and published speaker profiles
+    dependsOn:
+      - CFP-S4
+    inputs:
+      sessionUrl:
+        from: CFP-S4
+        output: sessionUrl
   - id: AIA-S1
     name: Build agenda structure, place sessions, trigger and resolve conflicts
     kind: browser
@@ -46,15 +126,14 @@ scenarios:
       cannot hide a missing capability.
 
 
-      Scheduling depends on the completed decision handoff, not content uploads,
-      approvals or ZIP export. Verify the bound CI session, then perform
-      original steps 4-6 to establish rooms, schedulable sessions and
-      shared-speaker assignments. Record any remaining acceptance prerequisites
-      as specific blockers; do not invent accepted sessions or successful file
-      scans.
-
-
-      Use the bound sessionUrl from CFP-S4; verify the record before continuing.
+      Use the four dedicated Scheduling: records created by AIA-SETUP,
+      explicitly recording the title mapping to the original fixture sessions.
+      Do not select the earlier CI session or the rejected/pending proposals.
+      Setup replaces original steps 5-6; this scenario owns original steps 1-4
+      and 7-11. Create rooms and exercise the actual placements and conflicts
+      with the two shared-Priya sessions. Record failed or absent conflict
+      behavior honestly; independent assisted placement and publication do not
+      prove this scenario succeeded.
 
 
       ORIGINAL SCENARIO SCRIPT:
@@ -87,21 +166,6 @@ scenarios:
          fixture rooms, add one extra room (e.g. "Overflow Room") the same way.
          Screenshot the room/track creation UI, then screenshot the builder
          showing the rooms/tracks available for scheduling.
-      5. Ensure at least three schedulable sessions exist. Prefer accepted
-      sessions
-         built from the fixture proposals ("Taming 40-Minute CI...", "Your AI Pair
-         Programmer Is Lying to You...", "Docs That Answer Back..."). If these
-         proposals exist from earlier areas but are NOT Accepted (e.g. "Your AI
-         Pair Programmer" was Rejected in area 01, "Docs That Answer Back" may
-         still be Pending), first change their status to Accepted as the organizer
-         so they become schedulable; only create fresh sessions with the fixture
-         titles, formats, and tracks if the proposals are absent entirely.
-      6. Ensure two of those sessions share the speaker Priya Raman -- assign
-      her to
-         the "Taming 40-Minute CI" session and also add her as a speaker on the
-         "Your AI Pair Programmer" session (edit the session's speaker list; if
-         speakers cannot be edited on a session, create an extra session with Priya
-         as speaker). Record whether sessions can carry speaker assignments at all.
       7. Place the "Taming 40-Minute CI" session into Day 1 (May 12) at 10:00 in
          Room 2A, using drag-and-drop or whatever click-to-assign mechanism the UI
          offers. Screenshot the grid with the session card visible in that slot.
@@ -141,11 +205,7 @@ scenarios:
       - Room double-booking is blocked or visibly flagged
       - Conflict indicators clear after the sessions are moved apart
     dependsOn:
-      - CFP-S4
-    inputs:
-      sessionUrl:
-        from: CFP-S4
-        output: sessionUrl
+      - AIA-SETUP
   - id: AIA-S2
     name: Auto-schedule assist and publish the agenda
     kind: browser
@@ -177,6 +237,17 @@ scenarios:
       cannot hide a missing capability.
 
 
+      This scenario owns original AIA-S2 steps 1-4 only and depends on ready
+      records, not successful conflict checks. Use the dedicated Scheduling:
+      sessions. Inspect current placements and any actual conflicts left by
+      AIA-S1; resolve them through ordinary placement controls before
+      auto-placement if required. Keep Scheduling: Agents in Production Q&A
+      unplaced for the assisted action (explicitly unplace it if earlier work
+      placed it). It already exists from setup; do not create or reuse a
+      content-area session. Record before/after evidence and report a failed
+      assist honestly. Publication runs independently in AIA-PUBLISH.
+
+
       ORIGINAL SCENARIO SCRIPT:
 
       1. Sign in as organizer Jordan Alvarez (as in AIA-S1) and open the
@@ -202,6 +273,72 @@ scenarios:
          Screenshot the grid afterward; record whether the previously unscheduled
          session(s) were placed into slots/rooms and whether any conflict indicators
          are visible on the result.
+
+
+      Missing optional features are findings: record them and continue the
+      reachable script. Use feature_not_found for an absent core capability and
+      blocked for unavailable access/evidence. Do not turn provider or
+      evidence-tool failures into product verdicts.
+    successSignals:
+      - Presence (or explicitly recorded absence) of an auto-schedule/AI-assist
+        control
+      - If triggered, unscheduled sessions become placed (any new conflict flags
+        recorded)
+    dependsOn:
+      - AIA-SETUP
+  - id: AIA-PUBLISH
+    name: Publish a valid agenda for public widgets
+    kind: browser
+    persona: organizer
+    requiresAuth: true
+    allowedPersonas:
+      - organizer
+      - speaker
+      - reviewer
+      - anonymous
+    instructions: >-
+      PROGRAMCUE EXECUTION ADAPTATION: Use the configured fixture identities and
+      current saved persona. Replace every sign-out/sign-in role transition
+      below with switch_persona. For public checks switch to anonymous. Never
+      authenticate another identity in the current context. Do not repeat signup
+      when already authenticated; explicitly distinguish pre-provisioned access
+      from signup evidence.
+
+
+      Run the chained suite in the new DevFlow Conf 2027 event created by
+      CFP-S1, not the populated Future of Events 2027 showcase. After each
+      switch_persona, explicitly select DevFlow Conf 2027 through the event
+      picker when that role has event access; applicant pages use the observed
+      bound CFP URL. Accept the invitation to this event before opening its
+      reviewer workspace. Never substitute the showcase's form, schedule,
+      reviews or published programme. Fixture emails override literal example
+      addresses below. Record actual dates, track/format names and any
+      substituted fixture values. Follow the original criterion: substitutions
+      cannot hide a missing capability.
+
+
+      This scenario owns original AIA-S2 steps 5-6. It does not depend on
+      conflict-test or auto-placement success. Inspect the live draft first,
+      then prepare a real conflict-free publication baseline through normal
+      placement controls: Scheduling: Taming 40-Minute CI on May 12 at 10:00
+      Room 2A; Scheduling: Your AI Pair Programmer on May 12 at 14:00 Room 2B;
+      Scheduling: Docs That Answer Back on May 13 at 11:00 Room 2B; Scheduling:
+      Agents in Production Q&A on May 13 at 14:00 Room 2B. Create any missing
+      fixture rooms if AIA-S1 stopped before room setup. Use the event's
+      displayed timezone and verify saved day/time/room after reload. Inspect
+      and resolve every blocking conflict, including placements of other
+      sessions, without deleting records or weakening validation. Verify speaker
+      readiness. If a required placement, readiness check or conflict resolution
+      actually fails, report publication blocked; independent sequencing does
+      not authorize bypassing product prerequisites. Publish only after the
+      ordinary confirmation shows a valid draft. This setup is not evidence that
+      conflict detection or assisted scheduling passed. Public widgets should
+      use these observed Scheduling: titles as explicit fixture substitutions,
+      retaining the original grading requirements.
+
+
+      ORIGINAL SCENARIO SCRIPT:
+
       5. Find the publish action for the agenda -- possible labels include
       Publish,
          Publish agenda, Go live, Make public, or Share schedule. Screenshot the
@@ -228,15 +365,11 @@ scenarios:
       blocked for unavailable access/evidence. Do not turn provider or
       evidence-tool failures into product verdicts.
     successSignals:
-      - Presence (or explicitly recorded absence) of an auto-schedule/AI-assist
-        control
-      - If triggered, unscheduled sessions become placed (any new conflict flags
-        recorded)
       - A publish/go-live action reports success
       - A public agenda surface shows the scheduled sessions as a handoff
         (rendering itself graded in area 06)
     dependsOn:
-      - AIA-S1
+      - AIA-SETUP
     outputs:
       programmeUrl:
         type: url
@@ -357,7 +490,7 @@ rubric:
     tags:
       - handoff
     scenarios:
-      - AIA-S2
+      - AIA-PUBLISH
     grader:
       type: llm
     passCriteria: A publish/go-live action exists and reports success (confirmation

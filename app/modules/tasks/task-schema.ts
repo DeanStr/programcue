@@ -89,6 +89,7 @@ export const taskFileScopeSchema = z.enum([
   "session_deliverable",
 ]);
 export const taskFileKindSchema = z.enum([
+  "headshot",
   "slides",
   "video",
   "supporting_document",
@@ -210,13 +211,25 @@ export const taskTemplateInputSchema = z
     if (
       input.configuration.fileScope === "participant_document" &&
       input.configuration.fileKind &&
-      input.configuration.fileKind !== "supporting_document"
+      !["supporting_document", "headshot"].includes(
+        input.configuration.fileKind,
+      )
     ) {
       context.addIssue({
         code: "custom",
         path: ["configuration", "fileKind"],
         message:
-          "Participant documents must use the supporting-document policy.",
+          "Participant files must use the supporting-document or headshot policy.",
+      });
+    }
+    if (
+      input.configuration.fileKind === "headshot" &&
+      input.configuration.fileScope !== "participant_document"
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["configuration", "fileScope"],
+        message: "Headshot requests must use participant file scope.",
       });
     }
     if (

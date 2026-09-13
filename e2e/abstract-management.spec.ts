@@ -371,7 +371,7 @@ test.describe
       ).toBeVisible();
       await expect(
         page.locator('textarea[name="manualRecipients"]'),
-      ).toHaveValue(SAM_EMAIL);
+      ).toHaveValue(`"Sam Whitfield" <${SAM_EMAIL}>`);
 
       await waitForInterface(page, "/admin/review");
       await openEvaluationView(page, "Results");

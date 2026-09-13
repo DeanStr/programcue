@@ -14,7 +14,11 @@ export const REVOKED_COMPLETION_REASON =
   "Multipart completion was revoked because its target or file policy is no longer eligible.";
 
 export type TaskFileScope = "participant_document" | "session_deliverable";
-export type TaskFileKind = "slides" | "video" | "supporting_document";
+export type TaskFileKind =
+  | "headshot"
+  | "slides"
+  | "video"
+  | "supporting_document";
 export type TaskEvidenceFilePolicy = {
   fileScope: TaskFileScope;
   fileKind?: TaskFileKind;

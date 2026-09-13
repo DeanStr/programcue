@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { CommunicationDraftService } from "~/modules/communications/communication-draft-service.server";
 import { CommunicationTemplateService } from "~/modules/communications/communication-template-service.server";
+import { namedRecipient } from "~/modules/communications/manual-recipients";
 import {
   SpeakerAdminStateError,
   SpeakerService,
@@ -258,7 +259,7 @@ export class CrmOutreachService {
         templateVersionId: saved.versionId,
         audienceType: "manual",
         manualRecipients: contacts.results
-          .map((contact) => `${contact.name} <${contact.email}>`)
+          .map((contact) => namedRecipient(contact.name, contact.email))
           .join("\n"),
         kind: "optional",
         scheduledAt: null,

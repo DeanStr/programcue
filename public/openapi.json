@@ -6698,7 +6698,7 @@
             "type": "object",
             "additionalProperties": false,
             "default": {},
-            "description": "Assigned task configuration. link_visit tasks require destinationUrl; file_upload tasks require fileScope matching their target and an accepted fileKind; other task types reject those fields. The server snapshots this value on creation.",
+            "description": "Assigned task configuration. link_visit tasks require destinationUrl; file_upload tasks require fileScope matching their target and an accepted fileKind. Headshot requests require participant_document and speaker scope; other task types reject those fields. The server snapshots this value on creation.",
             "properties": {
               "destinationUrl": {
                 "type": "string",
@@ -6716,6 +6716,7 @@
               "fileKind": {
                 "type": "string",
                 "enum": [
+                  "headshot",
                   "slides",
                   "video",
                   "supporting_document"
@@ -6865,6 +6866,7 @@
           "fileKind": {
             "type": "string",
             "enum": [
+              "headshot",
               "slides",
               "video",
               "supporting_document"
@@ -8533,6 +8535,7 @@
               "fileKind": {
                 "type": "string",
                 "enum": [
+                  "headshot",
                   "slides",
                   "video",
                   "supporting_document"

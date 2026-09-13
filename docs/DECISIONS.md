@@ -2372,3 +2372,26 @@ opaque iframe pixels outside the current viewport from full-page captures;
 scrolling into view and back is not reliable. AEK rejects a full-page request
 when the included preview portion is outside the viewport, saves no misleading
 image and allows an explicit viewport retry. Keep the product sandbox intact.
+
+
+### Named reminders, headshot deliverables and independent evaluation setup
+
+Reviewer reminder drafts retain each reviewer's display name beside their email.
+The shared manual-recipient format quotes names so punctuation cannot split a
+recipient; CRM outreach uses the same formatter. Preview and provider payloads
+therefore merge `recipient.firstName` from the name.
+
+Headshot requests are speaker-owned participant file tasks with the existing
+headshot image policy. They use private task evidence, quarantine, scan dispatch,
+version history and clean-file approval. A print-quality task upload does not
+replace the separately managed public profile portrait. Session deliverables
+cannot request this participant-only purpose.
+
+Evaluation presentation setup and headshot collection have independent outcomes.
+Scheduling uses dedicated direct sessions through the ordinary organizer UI,
+confirmed participation and published event profiles, preserving earlier proposal
+decisions and reviews. These direct records do not claim review or acceptance
+coverage. Publication independently prepares and validates actual placements, so
+failed conflict or assist exercises do not skip otherwise reachable widgets.
+Readiness and publication failures still block their consumers. The 98 upstream
+criteria and weights remain unchanged; the revised setup requires fresh evidence.

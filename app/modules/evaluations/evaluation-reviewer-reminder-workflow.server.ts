@@ -1,4 +1,5 @@
 import { CommunicationService } from "~/modules/communications/communication-service.server";
+import { namedRecipient } from "~/modules/communications/manual-recipients";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { EvaluationStateError } from "./evaluation-errors";
 import { reviewerReminderSchema } from "./evaluation-plan-workflow-support.server";
@@ -41,7 +42,7 @@ export class EvaluationReviewerReminderWorkflow extends EvaluationServiceFoundat
       .map(() => "?")
       .join(", ");
     const reviewers = await this.env.DB.prepare(
-      `SELECT person.id AS personId, person.email
+      `SELECT person.id AS personId, person.email, person.display_name AS name
          FROM evaluation_round_reviewers pool
          JOIN evaluation_rounds round
            ON round.id = pool.round_id AND round.event_id = pool.event_id
@@ -93,7 +94,7 @@ export class EvaluationReviewerReminderWorkflow extends EvaluationServiceFoundat
         parsed.roundId,
         ...parsed.reviewerPersonIds,
       )
-      .all<{ personId: string; email: string }>();
+      .all<{ personId: string; email: string; name: string }>();
     if (reviewers.results.length !== parsed.reviewerPersonIds.length) {
       throw new EvaluationStateError(
         "Every selected reviewer must be an accepted member of this round's pool with unfinished work in the currently open round.",
@@ -104,7 +105,7 @@ export class EvaluationReviewerReminderWorkflow extends EvaluationServiceFoundat
       templateVersionId: parsed.templateVersionId,
       audienceType: "manual",
       manualRecipients: reviewers.results
-        .map((reviewer) => reviewer.email)
+        .map((reviewer) => namedRecipient(reviewer.name, reviewer.email))
         .join("\n"),
       kind: "transactional",
       scheduledAt: null,

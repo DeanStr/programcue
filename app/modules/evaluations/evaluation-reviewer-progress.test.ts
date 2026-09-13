@@ -2,9 +2,12 @@ import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
+import { communicationEnvironment } from "~/modules/communications/communication-provider-delivery.test-support";
 import { CommunicationService } from "~/modules/communications/communication-service.server";
+import { ResendEmailProvider } from "~/modules/communications/resend.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoProgramme } from "~/platform/demo/seed.server";
+import { processCommunicationSend } from "../../../workers/communications-queue";
 import { ensureDemoEvaluationData } from "./demo.server";
 import {
   EvaluationService,
@@ -78,7 +81,7 @@ async function publishedTemplate(
     category,
     subject: "Your review assignments are waiting",
     content: {
-      body: "Please return to Program Cue and complete your assigned reviews.",
+      body: "Hi {{recipient.firstName}}, please complete your assigned reviews.",
       physicalAddress: "255 Front Street West, Toronto, ON",
     },
   });
@@ -341,7 +344,7 @@ describe("round reviewer progress and reminder preparation", () => {
     expect(draft).toMatchObject({
       templateVersionId,
       audienceType: "manual",
-      manualRecipients: "sbek-reviewer@example.com",
+      manualRecipients: '"Sam Whitfield" <sbek-reviewer@example.com>',
       kind: "transactional",
       scheduledAt: null,
     });
@@ -363,9 +366,53 @@ describe("round reviewer progress and reminder preparation", () => {
     });
     expect(JSON.parse(persisted!.audienceJson)).toMatchObject({
       audienceType: "manual",
-      manualRecipients: "sbek-reviewer@example.com",
+      manualRecipients: '"Sam Whitfield" <sbek-reviewer@example.com>',
     });
   });
+
+  it.each(["Sam Whitfield", 'Sam "SJ" Whitfield, Jr.; <Chair>'])(
+    "preserves %s in the saved reminder preview and provider message",
+    async (name) => {
+      const { testEnv, sent } = await communicationEnvironment();
+      await addSamToRoundPool();
+      await addSamAssignment("assigned");
+      await env.DB.prepare("UPDATE people SET display_name = ? WHERE id = ?")
+        .bind(name, samPersonId)
+        .run();
+      const templateVersionId = await publishedTemplate();
+      const draft = await new EvaluationService(
+        testEnv,
+      ).prepareReviewerReminder(admin, {
+        roundId,
+        reviewerPersonIds: [samPersonId],
+        templateVersionId,
+      });
+      const service = new CommunicationService(testEnv);
+      const saved = await service.previewDraft(admin, draft.id);
+      expect(saved.preview.recipients.selected).toBe(1);
+      expect(saved.preview.recipients.deliverable).toEqual([
+        expect.objectContaining({ name, address: "sbek-reviewer@example.com" }),
+      ]);
+      expect(saved.preview.rendered.text).toContain("Hi Sam,");
+      await service.confirmDraft(admin, {
+        draftId: draft.id,
+        revision: draft.revision,
+        ...saved.preview.confirmation,
+      });
+      const requests: Array<{ to: string[]; text: string }> = [];
+      const provider = new ResendEmailProvider(
+        "test-key",
+        async (_url, init) => {
+          requests.push(JSON.parse(String(init?.body)));
+          return Response.json({ id: "reminder-personalization" });
+        },
+      );
+      await processCommunicationSend(sent[0], testEnv, { email: provider });
+      expect(requests).toHaveLength(1);
+      expect(requests[0].text).toContain("Hi Sam,");
+      expect(requests[0].to).toEqual(["sbek-reviewer@example.com"]);
+    },
+  );
 
   it("fails before resolving recipients or creating a draft when Airtable authority is stale", async () => {
     await addSamToRoundPool();

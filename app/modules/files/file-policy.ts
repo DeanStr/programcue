@@ -93,7 +93,7 @@ function maximumBytesForFileDeclaration(
   contentType: string,
   policy: EventFilePolicy,
   taskFileScope?: "participant_document" | "session_deliverable",
-  taskFileKind?: "slides" | "video" | "supporting_document",
+  taskFileKind?: "headshot" | "slides" | "video" | "supporting_document",
 ) {
   if (kind === "task_evidence" && taskFileKind) {
     return maximumBytesForAssetKind(taskFileKind, policy);
@@ -263,7 +263,7 @@ function validateDeclaredFile(
   file: FileDeclaration,
   eventPolicy: EventFilePolicy,
   taskFileScope?: "participant_document" | "session_deliverable",
-  taskFileKind?: "slides" | "video" | "supporting_document",
+  taskFileKind?: "headshot" | "slides" | "video" | "supporting_document",
 ) {
   const validationKind =
     kind === "task_evidence" && taskFileKind ? taskFileKind : kind;
@@ -298,7 +298,7 @@ export function validateDirectFileDeclaration(
   eventPolicy: EventFilePolicy,
   options: {
     taskFileScope?: "participant_document" | "session_deliverable";
-    taskFileKind?: "slides" | "video" | "supporting_document";
+    taskFileKind?: "headshot" | "slides" | "video" | "supporting_document";
   } = {},
 ) {
   validateDeclaredFile(

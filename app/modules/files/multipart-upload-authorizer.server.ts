@@ -161,6 +161,13 @@ export class MultipartUploadAuthorizer {
       );
     }
     if (
+      configuration.fileKind === "headshot" &&
+      (configuration.fileScope !== "participant_document" ||
+        task.targetType !== "speaker")
+    ) {
+      throw new FileAccessError("Headshot requests must belong to a speaker.");
+    }
+    if (
       (configuration.fileScope === "participant_document" &&
         task.targetType === "speaker") ||
       (configuration.fileScope === "session_deliverable" &&

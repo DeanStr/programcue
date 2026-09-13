@@ -429,7 +429,7 @@ export function AdminTaskPlanPanel({
                   >
                     <option value="">Choose a file purpose</option>
                     <option value="participant_document">
-                      Reusable participant document
+                      Reusable participant file
                     </option>
                     <option value="session_deliverable">
                       Session deliverable
@@ -437,7 +437,8 @@ export function AdminTaskPlanPanel({
                   </select>
                   <span className="help">
                     Slides, posters, handouts and session videos are session
-                    deliverables. Reusable documents belong to the participant.
+                    deliverables. Headshots and reusable documents belong to the
+                    participant.
                   </span>
                 </label>
                 {fileScope ? (
@@ -461,7 +462,11 @@ export function AdminTaskPlanPanel({
                           <option value="slides">Slides · PDF/PPT/PPTX</option>
                           <option value="video">Video · MP4/WebM</option>
                         </>
-                      ) : null}
+                      ) : (
+                        <option value="headshot">
+                          Headshot · JPG/PNG/WebP
+                        </option>
+                      )}
                       <option value="supporting_document">
                         Supporting document · PDF/Word/Excel/ZIP
                       </option>

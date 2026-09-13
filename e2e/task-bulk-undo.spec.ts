@@ -449,3 +449,63 @@ test("deliverable comments preserve author and event-local timestamps across rol
     /America\/Toronto/,
   );
 });
+
+test("organizers request private headshots and speakers see image limits", async ({
+  page,
+}) => {
+  await selectAdministrator(page);
+  await waitForInterface(page, "/admin/tasks");
+  await page.getByRole("button", { name: /Templates/ }).click();
+  const creation = page.getByRole("region", { name: "Create task template" });
+  await creation
+    .getByLabel("Name")
+    .fill("Upload Final Headshot (print quality)");
+  await creation
+    .getByLabel("Description")
+    .fill("Upload your final print-quality portrait.");
+  await creation.locator('select[name="taskType"]').selectOption("file_upload");
+  await creation
+    .locator('select[name="fileScope"]')
+    .selectOption("participant_document");
+  await creation.locator('select[name="fileKind"]').selectOption("headshot");
+  await creation.getByRole("button", { name: "Create template" }).click();
+  await expect(page.locator(".pc-status-notice[role='status']")).toContainText(
+    "Task template created",
+  );
+  await page.getByRole("button", { name: "Plans & onboarding" }).click();
+  const assignment = page
+    .locator("section.tasks-plan-block")
+    .filter({ has: page.getByRole("heading", { name: "Assign a plan" }) });
+  await assignment
+    .locator('select[name="templateId"]')
+    .selectOption({ label: "Upload Final Headshot (print quality)" });
+  await assignment
+    .locator('select[name="targetId"]')
+    .selectOption({ label: "Priya Shah · priya.speaker@example.com" });
+  await assignment
+    .getByRole("button", { name: "Assign with prerequisites" })
+    .click();
+  await expect(page.locator(".pc-status-notice[role='status']")).toContainText(
+    "Task plan assigned",
+  );
+  await selectSpeaker(page);
+  await waitForInterface(page, "/participant/tasks");
+  const task = page
+    .locator("article.speaker-task")
+    .filter({ hasText: "Upload Final Headshot (print quality)" });
+  await expect(task.getByLabel("File purpose")).toContainText(
+    "Headshot · JPG, PNG or WebP · 10 MB maximum",
+  );
+  await expect(task.getByLabel("Choose file")).toHaveAttribute(
+    "accept",
+    ".jpg,.jpeg,.png,.webp",
+  );
+  await task.getByLabel("Choose file").setInputFiles({
+    name: "large.png",
+    mimeType: "image/png",
+    buffer: Buffer.alloc(10 * 1024 * 1024 + 1),
+  });
+  await task.getByRole("button", { name: "Upload file" }).click();
+  await expect(task).toContainText("The file exceeds this event's 10 MB limit");
+  await expect(task).not.toContainText("Uploaded file versions");
+});

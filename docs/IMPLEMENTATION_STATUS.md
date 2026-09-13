@@ -1,6 +1,6 @@
 # Verified implementation status
 
-Evidence recorded through **10 September 2026**.
+Evidence recorded through **13 September 2026**.
 This is the current capability,
 requirements and acceptance index; consolidation does not constitute a new
 verification or deployment. The [product specification](../sessionboard-replacement-full-scope-implementation-specification-with-competition-ux.md)
@@ -19,18 +19,16 @@ Git history retains earlier committed work logs.
   Fresh deployed `/evaluate` run `2026-09-09T16-27-25` verified headshot upload,
   clean scan/release within 65 seconds, rendered portrait and organiser download.
   Three real sessions were scheduled with persisted placements and conflict checks.
-- That 9 September run completed 11 scenarios, blocked ten and stopped on a
-  provider error in the final CRM scenario. AEK misclassified `/admin/sessions/new` as a login wall;
-  checkpoint-image selection and iframe access also limited evidence. The partial
-  report is not an acceptance result; aborted CRM artifacts remain unindexed.
 - External endpoint path/query confirmation and AI review-aid evidence labels
-  retain local regression evidence; the fresh run did not exercise those paths.
-- Fresh run `2026-09-10T09-16-55` completed four scenarios, then failed at
-  ABS-S2 finalisation at its 1,200-second deadline. Raw browser evidence shows
-  correct round progression, Marcus's claimed biography and readable merged-email
-  text; its full-page preview screenshot is blank. Judging, AI generation, new
-  session creation and CRM were not reached. This is not an acceptance result.
-- The fixture was reset at **10:19:11 UTC** on 10 September. All four saved persona
+  retain local regression evidence; the latest run did not exercise those paths.
+- Fresh run `2026-09-13T08-07-46` finalized all 22 scenario outcomes and judging:
+  13 completed, eight blocked, one feature unavailable. Coverage was **51.155%**;
+  the 60% gate exited 2 and the overall score remains withheld. All 1,230 artifacts
+  verified. The pinned AEK `05823a0` run had no provider timeout, captured rendered
+  email previews and delivered checkpoint images to judging. Direct session
+  creation, claimed biography, 2:1 scoring, AI assessment, speaker upload/download
+  and CRM workflows progressed; content and scheduling blockers remain below.
+- The fixture was reset at **11:03:42 UTC** on 13 September. All four saved persona
   sessions were invalidated, clean applicant/reviewer baselines and no selected
   persona verified, and application health matched `5a758933`.
 
@@ -124,9 +122,9 @@ change. The latest complete gate supersedes older test-count histories.
 
 | Scope | Recorded result | Limit |
 | --- | --- | --- |
-| Timeout and preview-capture corrections, 10 September | Production scenarios now allow 1,800 seconds including provider finalisation. Updated AEK preserves graceful-exit timeout diagnostics and rejects full-page captures that would omit offscreen approved previews; an explicit viewport retry remains available. 542 AEK tests, targeted TypeScript checks and the installed-package local preview/publication smoke passed. The actual personalised email screenshot was visually inspected with its sandbox intact. | Local source/package evidence only; no fresh deployed evaluation. The upload smoke was skipped because its scanner prerequisites were absent. Receipts: `.artifacts/timeout-preview-fixes/`; AEK worktree `agent-eval-kit-timeout-preview-fix`. |
+| Timeout and preview-capture corrections, 10–13 September | Production scenarios allow 1,800 seconds including provider finalisation. AEK `05823a0` preserves timeout diagnostics and rejects full-page captures that omit offscreen approved previews. 542 AEK tests, targeted types and installed-package local preview smoke passed. The 13 September deployed run finalized ABS-S2 in 922 seconds, captured rendered viewport previews and completed judging; 68 judge screenshot retrievals succeeded. | No timeout occurred, so timeout-error handling retains local regression evidence. The local upload smoke lacked scanner prerequisites; deployed headshot release/render/download subsequently passed. Receipts: `.artifacts/timeout-preview-fixes/`, `.artifacts/evaluation-20260913/`. |
 | Evaluator access corrections | The installed AEK package includes checkpoint-aware image delivery, corrected login-route detection and opt-in read-only preview evidence. The real local merged-email workflow was readable through AEK with its sandbox intact; 30 evaluator tests and three configurations passed. The coordinator consumes AEK plan version 2. | A deployed anonymous probe no longer excluded challenge frames but obtained no token; genuine verification remains manual. AI disclosure authorization is now explicit in the scenario context; no new live AI generation is claimed. Receipts: `.artifacts/evaluator-access-fixes/`. |
-| CRM returning-speaker visibility | The directory always shows the returning-speaker count, including zero, with its active-event/session definition. Three real Chromium CRM workflows, generated TypeScript checks and focused Biome checks passed. | Deployed in `5a758933`; served CRM bundle matches the tested build. No new authenticated production CRM workflow was performed. Receipts: `.artifacts/crm-returning-count/` and `.artifacts/release-5a758933/`. |
+| CRM returning-speaker visibility | The directory always shows the returning-speaker count, including zero, with its active-event/session definition. Three Chromium CRM workflows, generated types and focused Biome passed. The 13 September deployed run visibly showed five contacts, three events, zero returning speakers and the definition; top-company filtering, saved segments/notes, duplicate handling and pipeline history worked. | A new cross-event transfer was not demonstrated because the tested contact already belonged to DevFlow. Source/region/focus analytics were not observed. Receipts: `.artifacts/crm-returning-count/`, `.artifacts/release-5a758933/`, `.artifacts/evaluation-20260913/`. |
 | `5a758933`, 9 September | `npm run deploy` passed the full `npm run check` gate in 616.1 s: 661 unit, 1,950 Worker, one Agent and 15 scanner tests; types, quality, build, configuration, schema/recovery/OpenAPI and dependency policy; 223 main browser, 12 evaluation and 16 website checks. Production preflight/schema/health passed; all 58 migrations were already applied. Deployed CRM bundle and `/evaluate` access-page checks passed. | Two opt-in performance checks skipped; 7 low/3 moderate dependency advisories remain. Browser workflows used local fixtures; production checks did not mutate the evaluation fixture. Receipts: `.artifacts/release-5a758933/`. |
 | `7b27ce4d`, 9 September | Release gate passed after recheck: 661 unit, 1,950 Worker, one Agent, 15 scanner; types, quality, build, configuration, schema/recovery/OpenAPI and dependency policy; all main browser cases passed across the initial run and isolated retry, followed by 12 evaluation and 16 website checks. Two Astra/high source reviews found no actionable issues. | Initial `npm run check` exited 1 on an unchanged pointer-resize test; isolated retry passed on the same build. Two opt-in measurements skipped; 7 low/3 moderate advisories remain. Receipts: `.artifacts/scanner-release-7b27ce4d/`. |
 | `6e01f396`, 9 September | Serial `npm run deploy` passed the full `npm run check` gate in 582.0 s: 661 unit, 1,950 Worker, one Agent and 14 scanner tests; configuration, types, quality, build, schema/recovery/OpenAPI and dependency policy; 223 main browser, 12 evaluation and 16 website checks. Production preflight/schema/health passed; 58 migrations already applied, none pending. Deployed `/evaluate` access-page Chromium smoke passed. Receipts: `.artifacts/release-6e01f396/`. | Two opt-in performance measurements skipped; 7 low and 3 moderate dependency advisories remain. Browser suites use local fixtures; the deployed smoke verified access-page availability, not fresh workflow or provider acceptance. |
@@ -154,6 +152,7 @@ Requested CLI model/effort receipts do not confirm a resolved provider snapshot.
 
 | Run | Outcome | Evidence and boundary |
 | --- | --- | --- |
+| Deployed upstream `2026-09-13T08-07-46` | 13 completed, eight blocked, one `feature_not_found`; 17 manual checks pending. Coverage **51.155%**, score withheld, 60% gate exit 2. All **1,230 artifacts verified**. | App `5a758933`, scanner `7b27ce4d`, evaluator `e46a6a1c`, pinned AEK `05823a0`, requested Astra agent/judge, 1,800 s scenario limit. Abstract management 98% / 89.286% coverage; CFP 91.176% / 89.474%; speakers 85.455% / 83.333%; CRM 89.655% / 76.316%. Content coverage 19.355%; agenda/widgets 0%. AI advisory 3.5/5 and separate human assessment 4.0/5 persisted without changing canonical 3.33/5. One CI placement persisted; conflict testing/publication blocked. Reset and all four old-session invalidations verified at 11:03 UTC. Receipts: `.artifacts/evaluation-20260913/`. |
 | Deployed upstream `2026-09-10T09-16-55` | Four scenarios completed; ABS-S2 browser called completed but provider finalisation failed at the configured 20-minute limit. No judge or score; `aek verify` rejects the aborted scenario’s unindexed artifacts. | Program Cue `5a758933`, installed AEK master `7a97ab5`, Astra agent/judge requested. Saved submissions/edits, claimed biography and reviewer isolation passed; raw ABS-S2 evidence shows correct 2-assigned/0-submitted progression and readable personalised preview text. Preview screenshot remains blank; AI, session creation, CRM and checkpoint-to-judge delivery untested. Fixture reset and all four old-session invalidations verified at 10:19 UTC. Receipts: `.artifacts/evaluation-20260910/`. |
 | Local regression `2026-09-07T02-12-32` | Nine criteria, 100% score and coverage with requested Astra/medium agent and judge; 265 artifacts verified. | Mailpit capture, real ClamAV clean/EICAR scans, versioned downloads/ZIP, anonymous denial and publication. Active baseline `2026-09-07T02-29-38-534Z-67a9d91b487d-ee63187c`; self-comparison has zero drift. Not the 98-criterion upstream suite or hosted-provider acceptance. |
 | Local upstream `2026-09-07T11-12-08` | Score withheld at 4.737% coverage; CFP-S1 completed, CFP-S2 blocked at applicant verification, 18 dependent scenarios blocked, 17 manual checks pending. | CLI exit 0 was completion without a coverage gate. Provisional 61.111% is not an acceptance score. Earlier `10-54-20` failed judge OAuth refresh and exhausted its setup call budget. |
@@ -353,6 +352,7 @@ Verified artifact roots:
 - Local upstream: `86268503e077e1d7560fcf7d40b2cbb5babb7724e64995fe2b5276aef780d427`.
 - Earlier 9 September template-blocked run: `576e5858571dfc1b3c46e46d492b2e43ea9a87c79c5f561fddca4585c0434ff6`.
 - Completed deployed run `2026-09-09T08-36-28`: `054d6d8c100807c501edd5e0a9da8ae7dd59f677b691c84cfe2a594f0f454e3f`.
+- Completed deployed run `2026-09-13T08-07-46`: `1a39bef4982009b6c9e857c6da3c3e1002582423043fdbc55402c75db673e6d6`.
 
 ## Deployment evidence
 
@@ -424,12 +424,21 @@ acknowledgement latency remain outstanding.
 
 ## Remaining acceptance work
 
-1. **Deployed evaluation:** resolve AEK's false login-wall detection for direct
-   session creation and checkpoint-image delivery; establish supported iframe
-   interaction and approval scope, then rerun remaining content/publication,
-   widgets and CRM checks and reset afterward. Scanner headshot release and
-   independent scheduling now have bounded deployed evidence. Receipts:
-   `.artifacts/scanner-release-7b27ce4d/`.
+1. **Deployed evaluation:** the 13 September run cleared AEK session-route and
+   checkpoint-image access blockers. Follow-up implementation preserves reviewer
+   names in reminders and adds private headshot file-request tasks. Focused tests
+   verify personalized provider payloads, image policy, ownership, quarantine,
+   clean-scan approval and replacement versions. Two Chromium workflows and all
+   31 local evaluation-configuration tests passed; all three AEK profiles validate.
+   Evaluation setup now separates
+   headshots from presentation uploads and uses dedicated ready direct sessions
+   plus independent publication setup, preserving earlier decisions and reviews.
+   These changes have not been verified in a fresh deployed evaluation: the user
+   paused `/evaluate` reruns. The prior run verified only CI placement; conflict
+   testing, publication/widgets and the new task workflow still need live evidence.
+   Anonymous Cloudflare verification remains manual. CRM new-event transfer/import
+   and independent inbox delivery still lack evidence. Prior run receipts:
+   `.artifacts/evaluation-20260913/`.
 2. **Provider paths:** exercise Airtable authority/recovery, Accelevents live
    reconciliation, external AI/tool-loop/assessment and fresh provider-error
    callbacks. Verify newer schedule-change emails, reminder cron and controlled

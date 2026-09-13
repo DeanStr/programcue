@@ -24,11 +24,14 @@ const dependencies = {
   "SPK-S2": ["SPK-S1"],
   "SPK-S3": ["SPK-S2"],
   "CNT-S1": ["CFP-S4"],
+  "CNT-S1-HEADSHOT": ["CNT-S1"],
   "CNT-S2": ["CNT-S1"],
   "CNT-S3": ["CNT-S2"],
-  "AIA-S1": ["CFP-S4"],
-  "AIA-S2": ["AIA-S1"],
-  "EMB-S1": ["AIA-S2"],
+  "AIA-SETUP": ["CFP-S4"],
+  "AIA-S1": ["AIA-SETUP"],
+  "AIA-S2": ["AIA-SETUP"],
+  "AIA-PUBLISH": ["AIA-SETUP"],
+  "EMB-S1": ["AIA-PUBLISH"],
   "EMB-S2": ["EMB-S1"],
   "EMB-S3": ["EMB-S2"],
   "CRM-S1": ["CFP-S1"],
@@ -48,7 +51,7 @@ const handoffs = {
     name: "sessionUrl",
     instruction: "Publish the accepted CI session's ordinary admin detail URL as sessionUrl.",
   },
-  "AIA-S2": {
+  "AIA-PUBLISH": {
     name: "programmeUrl",
     instruction: "Publish the observed public programme URL as programmeUrl.",
   },
@@ -60,8 +63,8 @@ const bindings = {
   "ABS-S1": "CFP-S1",
   "SPK-S1": "CFP-S4",
   "CNT-S1": "CFP-S4",
-  "AIA-S1": "CFP-S4",
-  "EMB-S1": "AIA-S2",
+  "AIA-SETUP": "CFP-S4",
+  "EMB-S1": "AIA-PUBLISH",
 };
 const checkpoints = {
   "CFP-S2": {
@@ -119,9 +122,19 @@ const notices = {
   "CNT-S3":
     "CNT-12 cannot borrow later area evidence automatically. Exercise an actual public approval gate now; if no qualifying public surface is available, abstain on that requirement. A visible queue or ZIP-ready message is not byte-content verification.",
   "CNT-S1":
-    "Content setup depends on the accepted CI handoff, not completion of speaker profile uploads or bulk communications. Verify the bound session and perform original step 4's explicit setup of Marcus's separate session, then create this area's own tasks. Do not assume earlier speaker tasks or headshots succeeded.",
+    "Content setup depends on the accepted CI handoff, not speaker profile uploads or bulk communications. Verify the bound session and perform original step 4's explicit setup of Marcus's separate session. This scenario owns original steps 1-6 and creates only the presentation request. Verify the saved presentation tasks for both sessions after reload. Headshot creation and the combined dashboard are owned by CNT-S1-HEADSHOT; their failure must not make presentation setup unsuccessful.",
+  "CNT-S1-HEADSHOT":
+    "This scenario owns original CNT-S1 steps 7-8. Create the independent print-quality headshot request as a reusable participant file with accepted type Headshot, due 2027-04-14, assigned separately to each speaker. It must not depend on the presentation task, and presentations must not depend on headshots. Inspect the combined dashboard. Record a missing headshot capability here; do not claim profile-headshot upload satisfies a file-request task.",
+  "CNT-S2":
+    "Presentation setup is the only prerequisite. Inspect and record whether the independent headshot task exists, but continue presentation upload, comments, replacement versions and access checks if headshot setup failed. Preserve the missing headshot evidence; do not claim the requested two-task baseline or headshot status passed when absent. A quarantined upload is not a completed clean scan.",
+  "AIA-SETUP":
+    "Prepare dedicated scheduling records through normal product UI in the canonical event. First verify the bound accepted CI handoff. Preserve all original proposals, reviews and decisions: AI Pair remains rejected and Docs remains undecided. This intentionally replaces upstream AIA-S1 steps 5-6's instruction to reverse decisions. Use Create unscheduled session (/admin/sessions/new) for four new direct sessions: Scheduling: Taming 40-Minute CI (Talk, Platform & Infra, Priya); Scheduling: Your AI Pair Programmer (Talk, AI Engineering, Priya); Scheduling: Docs That Answer Back (Talk, Developer Experience, Marcus); Scheduling: Agents in Production Q&A (Lightning Talk, AI Engineering, Marcus). Reuse the fixture identities through Find existing speaker and explicitly confirm the displayed identity matches. These are direct sessions, not reviewed or accepted proposals; never claim review/acceptance evidence for them. Record the observed record URLs and title mapping for later scenarios. If these dedicated records unexpectedly exist at setup start, stop and report the stale setup rather than creating duplicates. Switch to each speaker persona, confirm participation through their ordinary session workflow, and publish their event speaker profile with required fields. Do not fabricate confirmation, skip required fields or change privacy settings on behalf of another persona. Return to organizer and inspect the schedule readiness list after reload: all four dedicated sessions must be eligible, have the intended linked speakers, and be unplaced. Preserve any actual readiness blocker and report setup blocked. No file scans or other area's deliverables are prerequisites. Do not publish the agenda here.",
   "AIA-S1":
-    "Scheduling depends on the completed decision handoff, not content uploads, approvals or ZIP export. Verify the bound CI session, then perform original steps 4-6 to establish rooms, schedulable sessions and shared-speaker assignments. Record any remaining acceptance prerequisites as specific blockers; do not invent accepted sessions or successful file scans.",
+    "Use the four dedicated Scheduling: records created by AIA-SETUP, explicitly recording the title mapping to the original fixture sessions. Do not select the earlier CI session or the rejected/pending proposals. Setup replaces original steps 5-6; this scenario owns original steps 1-4 and 7-11. Create rooms and exercise the actual placements and conflicts with the two shared-Priya sessions. Record failed or absent conflict behavior honestly; independent assisted placement and publication do not prove this scenario succeeded.",
+  "AIA-S2":
+    "This scenario owns original AIA-S2 steps 1-4 only and depends on ready records, not successful conflict checks. Use the dedicated Scheduling: sessions. Inspect current placements and any actual conflicts left by AIA-S1; resolve them through ordinary placement controls before auto-placement if required. Keep Scheduling: Agents in Production Q&A unplaced for the assisted action (explicitly unplace it if earlier work placed it). It already exists from setup; do not create or reuse a content-area session. Record before/after evidence and report a failed assist honestly. Publication runs independently in AIA-PUBLISH.",
+  "AIA-PUBLISH":
+    "This scenario owns original AIA-S2 steps 5-6. It does not depend on conflict-test or auto-placement success. Inspect the live draft first, then prepare a real conflict-free publication baseline through normal placement controls: Scheduling: Taming 40-Minute CI on May 12 at 10:00 Room 2A; Scheduling: Your AI Pair Programmer on May 12 at 14:00 Room 2B; Scheduling: Docs That Answer Back on May 13 at 11:00 Room 2B; Scheduling: Agents in Production Q&A on May 13 at 14:00 Room 2B. Create any missing fixture rooms if AIA-S1 stopped before room setup. Use the event's displayed timezone and verify saved day/time/room after reload. Inspect and resolve every blocking conflict, including placements of other sessions, without deleting records or weakening validation. Verify speaker readiness. If a required placement, readiness check or conflict resolution actually fails, report publication blocked; independent sequencing does not authorize bypassing product prerequisites. Publish only after the ordinary confirmation shows a valid draft. This setup is not evidence that conflict detection or assisted scheduling passed. Public widgets should use these observed Scheduling: titles as explicit fixture substitutions, retaining the original grading requirements.",
   "CRM-S1":
     "CRM needs the fixture organization and canonical event, not completed speaker uploads or bulk communications. Inspect existing contacts before original step 3 and perform its import or manual-contact setup only where needed. Do not assume the earlier roster import succeeded or use CRM evidence to claim blocked speaker checks passed.",
   "EMB-S3":
@@ -131,6 +144,59 @@ fs.mkdirSync(path.join(root, "specs/upstream"), { recursive: true });
 for (const name of fs.readdirSync(path.join(root, "upstream/specs")).sort()) {
   const original = YAML.parse(fs.readFileSync(path.join(root, "upstream/specs", name), "utf8"));
   const executionScenarios = original.scenarios.flatMap((scenario) => {
+    if (["CNT-S1", "AIA-S1", "AIA-S2"].includes(scenario.id)) {
+      const steps = scenario.steps.split(/(?=^\d+\. )/m);
+      const expected = { "CNT-S1": 8, "AIA-S1": 11, "AIA-S2": 6 }[scenario.id];
+      if (
+        steps.length !== expected ||
+        steps.some((step, index) => !step.startsWith(`${index + 1}. `)) ||
+        steps.join("") !== scenario.steps
+      )
+        throw new Error(`${scenario.id} must contain the pinned ${expected} numbered steps`);
+      if (scenario.id === "CNT-S1")
+        return [
+          {
+            ...scenario,
+            steps: steps.slice(0, 6).join(""),
+            success_signals: [scenario.success_signals[0], scenario.success_signals[2]],
+          },
+          {
+            ...scenario,
+            id: "CNT-S1-HEADSHOT",
+            name: "Organizer requests independent print headshots",
+            steps: steps.slice(6).join(""),
+            success_signals: [scenario.success_signals[1]],
+          },
+        ];
+      if (scenario.id === "AIA-S1")
+        return [
+          {
+            id: "AIA-SETUP",
+            name: "Prepare dedicated ready scheduling sessions",
+            persona: "organizer",
+            steps:
+              "Complete the dedicated direct-session setup described above and verify persisted readiness.",
+            success_signals: [
+              "Four dedicated unplaced sessions are eligible, with confirmed participants and published speaker profiles",
+            ],
+          },
+          { ...scenario, steps: [...steps.slice(0, 4), ...steps.slice(6)].join("") },
+        ];
+      return [
+        {
+          ...scenario,
+          steps: steps.slice(0, 4).join(""),
+          success_signals: scenario.success_signals.slice(0, 2),
+        },
+        {
+          ...scenario,
+          id: "AIA-PUBLISH",
+          name: "Publish a valid agenda for public widgets",
+          steps: steps.slice(4).join(""),
+          success_signals: scenario.success_signals.slice(2),
+        },
+      ];
+    }
     if (scenario.id === "ABS-S2" || scenario.id === "ABS-S3") {
       const steps = scenario.steps.split(/(?=^\d+\. )/m);
       const expected = scenario.id === "ABS-S2" ? 10 : 13;
@@ -215,7 +281,7 @@ for (const name of fs.readdirSync(path.join(root, "upstream/specs")).sort()) {
         "speaker",
         "reviewer",
         "anonymous",
-        ...(scenario.id === "ABS-S1" ? ["co_speaker"] : []),
+        ...(["ABS-S1", "AIA-SETUP"].includes(scenario.id) ? ["co_speaker"] : []),
       ],
       instructions,
       successSignals: scenario.success_signals ?? [],
@@ -238,7 +304,9 @@ for (const name of fs.readdirSync(path.join(root, "upstream/specs")).sort()) {
       ? ["CFP-S1", "CFP-S1-PUBLIC", "CFP-S2"]
       : r.id === "ABS-14"
         ? ["ABS-S2-AI"]
-        : (r.scenarios ?? []),
+        : r.id === "AIA-07"
+          ? ["AIA-PUBLISH"]
+          : (r.scenarios ?? []).flatMap((id) => (id === "CNT-S1" ? [id, "CNT-S1-HEADSHOT"] : [id])),
     grader:
       r.testability === "auto"
         ? { type: "llm" }

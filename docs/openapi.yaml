@@ -3068,7 +3068,8 @@ components:
           description: >-
             Assigned task configuration. link_visit tasks require destinationUrl;
             file_upload tasks require fileScope matching their target and an accepted
-            fileKind; other task types reject those fields. The server snapshots this
+            fileKind. Headshot requests require participant_document and speaker scope;
+            other task types reject those fields. The server snapshots this
             value on creation.
           properties:
             destinationUrl:
@@ -3081,7 +3082,7 @@ components:
               enum: [participant_document, session_deliverable]
             fileKind:
               type: string
-              enum: [slides, video, supporting_document]
+              enum: [headshot, slides, video, supporting_document]
         impact: { $ref: "#/components/schemas/TaskImpact" }
         dueAt:
           {
@@ -3162,7 +3163,7 @@ components:
           enum: [participant_document, session_deliverable]
         fileKind:
           type: string
-          enum: [slides, video, supporting_document]
+          enum: [headshot, slides, video, supporting_document]
         resourcePageId:
           type: string
           minLength: 1
@@ -4229,6 +4230,7 @@ components:
             fileKind:
               type: string
               enum:
+                - headshot
                 - slides
                 - video
                 - supporting_document

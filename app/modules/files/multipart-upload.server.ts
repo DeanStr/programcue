@@ -1218,6 +1218,18 @@ export class MultipartUploadService {
                         WHERE task.id = asset.target_id
                           AND task.event_id = asset.event_id
                           AND json_valid(task.configuration_json)
+                          AND json_extract(task.configuration_json, '$.fileKind') = 'headshot'
+                          AND json_extract(task.configuration_json, '$.fileScope') = 'participant_document'
+                          AND task.target_type = 'speaker'
+                     ) THEN json_extract(
+                       policy_event.file_policy_json,
+                       '$.headshotMaximumBytes'
+                     )
+                     WHEN EXISTS (
+                       SELECT 1 FROM task_instances task
+                        WHERE task.id = asset.target_id
+                          AND task.event_id = asset.event_id
+                          AND json_valid(task.configuration_json)
                           AND json_extract(
                             task.configuration_json,
                             '$.fileKind'

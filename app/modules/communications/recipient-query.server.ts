@@ -5,6 +5,7 @@ import type {
   CommunicationCategory,
 } from "./communication-schema";
 import { emailDeliveryIssue } from "./email-deliverability";
+import { parseManualRecipients } from "./manual-recipients";
 
 type RecipientRow = {
   personId: string | null;
@@ -26,24 +27,6 @@ export type RecipientPreview = {
   invalid: Array<{ address: string; name: string; reason: string }>;
   suppressed: CommunicationRecipient[];
 };
-
-function parseManualRecipients(input: string): RecipientRow[] {
-  return input
-    .split(/[\n,;]+/)
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .map((part) => {
-      const named = part.match(/^(.*?)\s*<([^>]+)>$/);
-      return named
-        ? {
-            personId: null,
-            name: named[1].trim() || null,
-            address: named[2].trim(),
-            sourceId: null,
-          }
-        : { personId: null, name: null, address: part, sourceId: null };
-    });
-}
 
 export class RecipientLimitError extends Error {
   constructor(readonly limit: number) {
@@ -75,7 +58,11 @@ export class RecipientQuery {
   ): Promise<RecipientPreview> {
     const rows =
       audienceType === "manual"
-        ? parseManualRecipients(manualRecipients)
+        ? parseManualRecipients(manualRecipients).map((recipient) => ({
+            ...recipient,
+            personId: null,
+            sourceId: null,
+          }))
         : await this.queryAudience(viewer, audienceType);
 
     const byAddress = new Map<string, RecipientRow>();

@@ -37,7 +37,7 @@ test("the promoted regression baseline loads with the installed evaluator", () =
 test("all upstream criteria retain their identity, requirements, weights and explicit grading policy", () => {
   const imported = loadSpecs(path.join(root, "specs/upstream"));
   assert.equal(imported.length, 7);
-  assert.equal(imported.flatMap((s) => s.scenarios).length, 22);
+  assert.equal(imported.flatMap((s) => s.scenarios).length, 25);
   assert.equal(imported.flatMap((s) => s.rubric).length, 98);
   for (const name of fs.readdirSync(path.join(root, "upstream/specs"))) {
     const original = YAML.parse(fs.readFileSync(path.join(root, "upstream/specs", name), "utf8"));
@@ -56,7 +56,11 @@ test("all upstream criteria retain their identity, requirements, weights and exp
           ? ["CFP-S1", "CFP-S1-PUBLIC", "CFP-S2"]
           : r.id === "ABS-14"
             ? ["ABS-S2-AI"]
-            : (r.scenarios ?? []),
+            : r.id === "AIA-07"
+              ? ["AIA-PUBLISH"]
+              : (r.scenarios ?? []).flatMap((id) =>
+                  id === "CNT-S1" ? [id, "CNT-S1-HEADSHOT"] : [id],
+                ),
       );
       assert.deepEqual(item.tags, [r.type]);
       assert.deepEqual(
@@ -348,7 +352,7 @@ test("AEK preserves review prerequisites while upload blockers leave content set
       if (id === 'ABS-S2' && !prior.includes('CFP-S3')) throw new Error('Round progression preceded source review');
       if (id === 'CFP-S4' && !prior.includes('ABS-S3')) throw new Error('Abstract scoring did not precede decisions');
       prior.push(id); fs.writeFileSync('order.json', JSON.stringify(prior));
-      const blocked = id === 'CFP-S1-PUBLIC' || id === 'ABS-S2-AI' || (id === 'ABS-S2' && process.env.SEQUENCE_BLOCK === 'reviews') || (['SPK-S2', 'CNT-S2'].includes(id) && process.env.SEQUENCE_BLOCK === 'uploads');
+      const blocked = id === 'CFP-S1-PUBLIC' || id === 'ABS-S2-AI' || (id === 'ABS-S2' && process.env.SEQUENCE_BLOCK === 'reviews') || (['SPK-S2', 'CNT-S2'].includes(id) && process.env.SEQUENCE_BLOCK === 'uploads') || (['CNT-S1-HEADSHOT', 'AIA-S1', 'AIA-S2'].includes(id) && process.env.SEQUENCE_BLOCK === 'independent') || (id === 'AIA-SETUP' && process.env.SEQUENCE_BLOCK === 'readiness');
       const outputs = Object.fromEntries(Object.keys(declarations[id].outputs ?? {}).map(name => [name, {value: 'https://example.com/' + name, evidenceRefs: ['step:1']}]));
       console.log(JSON.stringify({version: 1, outcome: blocked ? 'blocked' : 'completed',
         summary: 'Synthetic ordering evidence; not product acceptance', observations: [], ...(blocked ? {} : {outputs})}));
@@ -391,7 +395,7 @@ test("AEK preserves review prerequisites while upload blockers leave content set
         }),
       );
     }
-    for (const mode of ["none", "reviews", "uploads"]) {
+    for (const mode of ["none", "reviews", "uploads", "independent", "readiness"]) {
       const blocked = mode === "reviews";
       const runs = `${mode}-runs`;
       fs.rmSync(path.join(directory, "order.json"), { force: true });
@@ -427,9 +431,19 @@ test("AEK preserves review prerequisites while upload blockers leave content set
       assert.equal(evidence("CFP-S4").outcome, blocked ? "blocked" : "completed");
       assert.equal(evidence("SPK-S1").outcome, blocked ? "blocked" : "completed");
       assert.equal(evidence("CNT-S1").outcome, blocked ? "blocked" : "completed");
-      assert.equal(evidence("AIA-S1").outcome, blocked ? "blocked" : "completed");
-      assert.equal(evidence("AIA-S2").outcome, blocked ? "blocked" : "completed");
-      assert.equal(evidence("EMB-S1").outcome, blocked ? "blocked" : "completed");
+      const schedulingBlocked = blocked || mode === "readiness";
+      for (const id of ["AIA-S1", "AIA-S2"])
+        assert.equal(
+          evidence(id).outcome,
+          schedulingBlocked || mode === "independent" ? "blocked" : "completed",
+        );
+      assert.equal(evidence("AIA-PUBLISH").outcome, schedulingBlocked ? "blocked" : "completed");
+      assert.equal(evidence("EMB-S1").outcome, schedulingBlocked ? "blocked" : "completed");
+      if (mode === "independent") {
+        assert.equal(evidence("CNT-S1-HEADSHOT").outcome, "blocked");
+        assert.equal(evidence("CNT-S2").outcome, "completed");
+        assert.equal(evidence("CNT-S3").outcome, "completed");
+      }
       assert.equal(evidence("CRM-S1").outcome, "completed");
       assert.equal(evidence("CRM-S2").outcome, "completed");
       if (mode === "uploads") {
@@ -441,7 +455,7 @@ test("AEK preserves review prerequisites while upload blockers leave content set
         assert.ok(!order.includes("CNT-S3"));
       }
       if (!blocked) {
-        for (const id of ["CNT-S1", "AIA-S1"])
+        for (const id of ["CNT-S1", "AIA-SETUP"])
           assert.equal(evidence(id).inputs.sessionUrl.value, "https://example.com/sessionUrl");
         assert.equal(evidence("ABS-S2-AI").outcome, "blocked");
         assert.ok(order.indexOf("ABS-S3") < order.indexOf("ABS-S2-AI"));
@@ -465,4 +479,33 @@ test("acceptance setup includes published templates and an authenticated co-spea
   assert.deepEqual(coSpeaker.inputs.portalUrl, { from: "CFP-S1", output: "portalUrl" });
   assert.match(coSpeaker.instructions, /Claim speaker profile/);
   assert.match(coSpeaker.instructions, /fixture login alone does not claim the invitation/);
+});
+
+test("content and publication splits retain all original steps and success signals", () => {
+  for (const [file, id, newId, boundary] of [
+    ["04-content-management.yaml", "CNT-S1", "CNT-S1-HEADSHOT", 6],
+    ["05-ai-agenda.yaml", "AIA-S2", "AIA-PUBLISH", 4],
+  ]) {
+    const source = loadConfig(path.join(root, "upstream/specs", file)).scenarios.find(
+      (s) => s.id === id,
+    );
+    const scenarios = loadConfig(path.join(root, "specs/upstream", file)).scenarios;
+    const first = scenarios.find((s) => s.id === id);
+    const second = scenarios.find((s) => s.id === newId);
+    for (const [index, step] of source.steps.split(/(?=^\d+\. )/m).entries()) {
+      assert.ok((index < boundary ? first : second).instructions.includes(step.trimEnd()));
+      assert.ok(!(index < boundary ? second : first).instructions.includes(step.trimEnd()));
+    }
+    assert.deepEqual(
+      [...first.successSignals, ...second.successSignals].sort(),
+      [...source.success_signals].sort(),
+    );
+  }
+  const scenarios = loadSpecs(path.join(root, "specs/upstream")).flatMap((s) => s.scenarios);
+  const setup = scenarios.find((s) => s.id === "AIA-SETUP");
+  assert.ok(setup.allowedPersonas.includes("co_speaker"));
+  assert.match(setup.instructions, /AI Pair remains rejected and Docs remains undecided/);
+  assert.match(setup.instructions, /not reviewed or accepted proposals/);
+  assert.match(setup.instructions, /confirm participation/);
+  assert.match(setup.instructions, /publish their event speaker profile/);
 });

@@ -1008,3 +1008,27 @@ describe("schedule publication API actor", () => {
     ).toEqual({ count: 1 });
   });
 });
+
+it("validates headshot API task ownership and file purpose", () => {
+  const input = {
+    title: "Final headshot",
+    targetType: "speaker",
+    targetId: "speaker-id",
+    taskType: "file_upload",
+    impact: "medium",
+    configuration: { fileScope: "participant_document", fileKind: "headshot" },
+  };
+  expect(apiTaskCreateSchema.parse(input).configuration.fileKind).toBe(
+    "headshot",
+  );
+  expect(() =>
+    apiTaskCreateSchema.parse({ ...input, targetType: "session" }),
+  ).toThrow(/speaker scope/);
+  expect(() =>
+    apiTaskCreateSchema.parse({
+      ...input,
+      targetType: "session",
+      configuration: { fileScope: "session_deliverable", fileKind: "headshot" },
+    }),
+  ).toThrow(/participant file scope/);
+});

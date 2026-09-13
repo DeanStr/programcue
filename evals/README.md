@@ -10,7 +10,7 @@ Two suites have separate configs and baseline directories. Runs share `.agent-ev
 
 | Suite | Config | Contract |
 | --- | --- | --- |
-| Upstream SBEK, local | `evalkit.local.yaml` | 7 areas, 22 executable scenarios from 20 upstream scripts, 98 criteria; optional CRM included |
+| Upstream SBEK, local | `evalkit.local.yaml` | 7 areas, 25 executable scenarios from 20 upstream scripts, 98 criteria; optional CRM included |
 | Upstream SBEK, production | `evalkit.production.yaml` | Same criteria, production aliases and `/evaluate` authentication |
 | Programcue regression, local | `evalkit.regression.yaml` | 9 additional criteria covering draft/publication isolation, actual versioned ZIP bytes, real local scan receipts, and Mailpit capture |
 
@@ -72,7 +72,7 @@ scenario depends on it. A blocked AI check retains its own unavailable evidence
 without blocking decisions or speaker/content/scheduling. Generated abstract
 management uses the `00-` filename so AEK collects this branch before CFP-S4
 releases decisions and makes the proposals unavailable for review. The importer
-preserves the original step text and all 98 criteria; tests verify collection
+preserves all 98 criteria; tests verify collection
 order and dependency behavior with the installed public AEK CLI.
 
 Content setup and scheduling each consume CFP-S4's accepted-session handoff;
@@ -81,6 +81,21 @@ CRM depends on CFP-S1's event setup and establishes any missing contacts through
 its original script. Speaker progress still requires the portal-edit scenario,
 and content review still requires the upload scenario. A blocked upload therefore
 retains unavailable coverage without preventing independent setup or scheduling.
+
+Presentation setup (`CNT-S1`) and independent headshot requests
+(`CNT-S1-HEADSHOT`) have separate outcomes. Presentation uploads depend only on
+the former; missing headshot evidence remains visible to the original criteria.
+`AIA-SETUP` uses normal direct-session creation for four explicitly named
+Scheduling: records, confirms participation as each speaker and publishes their
+event profiles. This replaces the upstream instruction to reverse earlier
+proposal decisions: direct sessions carry no claimed review/acceptance evidence.
+Original AI Pair and Docs decisions and reviews remain intact. Conflict checks and
+auto-placement each depend on readiness. `AIA-PUBLISH` independently prepares a
+real conflict-free placement baseline and observes normal publication validation;
+widgets bind its public URL. Publication cannot pass merely because conflict or
+assist checks were skipped. Setup and actual publication failures still block
+consumers. Local orchestration tests cover each branch; deployed acceptance of
+this sequencing awaits an explicitly requested fresh run.
 
 Checkpoints are published once, after all their observations are captured. Wait
 for settled results, verify persistence where requested, and cite the actual

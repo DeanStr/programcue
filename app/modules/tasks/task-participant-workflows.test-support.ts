@@ -83,6 +83,7 @@ export async function createSessionCoSpeaker(testEnv: CloudflareEnvironment) {
 export async function createFileTask(
   testEnv: CloudflareEnvironment,
   name: string,
+  fileKind: "supporting_document" | "headshot" = "supporting_document",
 ) {
   const tasks = new TaskService(testEnv);
   const templateId = await tasks.createTemplate(admin, {
@@ -99,7 +100,7 @@ export async function createFileTask(
     dependencyIds: [],
     configuration: {
       fileScope: "participant_document",
-      fileKind: "supporting_document",
+      fileKind,
     },
   });
   return (await tasks.assignTemplate(admin, templateId, speaker.personId))

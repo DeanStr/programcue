@@ -31,6 +31,13 @@ export function taskEvidenceUploadKind(
   policy: SpeakerPortal["event"]["filePolicy"],
 ) {
   switch (fileKind) {
+    case "headshot":
+      return {
+        value: "task_evidence" as const,
+        label: `Headshot · JPG, PNG or WebP · ${maximumMegabytes(policy.headshotMaximumBytes)} MB maximum`,
+        accept: ".jpg,.jpeg,.png,.webp",
+        maximumBytes: policy.headshotMaximumBytes,
+      };
     case "slides":
       return {
         value: "task_evidence" as const,

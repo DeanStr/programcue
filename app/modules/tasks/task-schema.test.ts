@@ -170,7 +170,43 @@ describe("task template form values", () => {
           fileKind: "slides",
         },
       }),
-    ).toThrow(/supporting-document policy/);
+    ).toThrow(/supporting-document or headshot policy/);
+  });
+
+  it("accepts headshot requests only for participant files owned by speakers", () => {
+    const input = {
+      dueOffsetDays: null,
+      fixedDueDate: null,
+      name: "Print headshot",
+      description: "Upload a print-quality portrait.",
+      targetType: "speaker",
+      taskType: "file_upload",
+      impact: "medium",
+      evidenceMode: "file",
+      dueAnchor: "none",
+      autoAssignOnAcceptance: false,
+      dependencyIds: [],
+      configuration: {
+        fileScope: "participant_document",
+        fileKind: "headshot",
+      },
+    };
+    expect(taskTemplateInputSchema.parse(input).configuration.fileKind).toBe(
+      "headshot",
+    );
+    expect(() =>
+      taskTemplateInputSchema.parse({ ...input, targetType: "session" }),
+    ).toThrow(/speaker scope/);
+    expect(() =>
+      taskTemplateInputSchema.parse({
+        ...input,
+        targetType: "session",
+        configuration: {
+          fileScope: "session_deliverable",
+          fileKind: "headshot",
+        },
+      }),
+    ).toThrow(/participant file scope/);
   });
 
   it("keeps internal resource bindings outside organizer configuration", () => {

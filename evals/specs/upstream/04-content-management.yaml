@@ -50,11 +50,14 @@ scenarios:
       cannot hide a missing capability.
 
 
-      Content setup depends on the accepted CI handoff, not completion of
-      speaker profile uploads or bulk communications. Verify the bound session
-      and perform original step 4's explicit setup of Marcus's separate session,
-      then create this area's own tasks. Do not assume earlier speaker tasks or
-      headshots succeeded.
+      Content setup depends on the accepted CI handoff, not speaker profile
+      uploads or bulk communications. Verify the bound session and perform
+      original step 4's explicit setup of Marcus's separate session. This
+      scenario owns original steps 1-6 and creates only the presentation
+      request. Verify the saved presentation tasks for both sessions after
+      reload. Headshot creation and the combined dashboard are owned by
+      CNT-S1-HEADSHOT; their failure must not make presentation setup
+      unsuccessful.
 
 
       Use the bound sessionUrl from CFP-S4; verify the record before continuing.
@@ -92,6 +95,64 @@ scenarios:
          date 2027-05-01 (the fixture slides deadline), assigned to all
          speakers (or auto-assigned per session). Screenshot the filled task
          form before saving.
+
+
+      Missing optional features are findings: record them and continue the
+      reachable script. Use feature_not_found for an absent core capability and
+      blocked for unavailable access/evidence. Do not turn provider or
+      evidence-tool failures into product verdicts.
+    successSignals:
+      - Filled task-creation form screenshot showing name, instructions, and due
+        date
+      - File-uploads-enabled setting visible (if the clone has such a toggle)
+    dependsOn:
+      - CFP-S4
+    inputs:
+      sessionUrl:
+        from: CFP-S4
+        output: sessionUrl
+  - id: CNT-S1-HEADSHOT
+    name: Organizer requests independent print headshots
+    kind: browser
+    persona: organizer
+    requiresAuth: true
+    allowedPersonas:
+      - organizer
+      - speaker
+      - reviewer
+      - anonymous
+    instructions: >-
+      PROGRAMCUE EXECUTION ADAPTATION: Use the configured fixture identities and
+      current saved persona. Replace every sign-out/sign-in role transition
+      below with switch_persona. For public checks switch to anonymous. Never
+      authenticate another identity in the current context. Do not repeat signup
+      when already authenticated; explicitly distinguish pre-provisioned access
+      from signup evidence.
+
+
+      Run the chained suite in the new DevFlow Conf 2027 event created by
+      CFP-S1, not the populated Future of Events 2027 showcase. After each
+      switch_persona, explicitly select DevFlow Conf 2027 through the event
+      picker when that role has event access; applicant pages use the observed
+      bound CFP URL. Accept the invitation to this event before opening its
+      reviewer workspace. Never substitute the showcase's form, schedule,
+      reviews or published programme. Fixture emails override literal example
+      addresses below. Record actual dates, track/format names and any
+      substituted fixture values. Follow the original criterion: substitutions
+      cannot hide a missing capability.
+
+
+      This scenario owns original CNT-S1 steps 7-8. Create the independent
+      print-quality headshot request as a reusable participant file with
+      accepted type Headshot, due 2027-04-14, assigned separately to each
+      speaker. It must not depend on the presentation task, and presentations
+      must not depend on headshots. Inspect the combined dashboard. Record a
+      missing headshot capability here; do not claim profile-headshot upload
+      satisfies a file-request task.
+
+
+      ORIGINAL SCENARIO SCRIPT:
+
       7. Create a second task "Upload Final Headshot (print quality)" with due
          date 2027-04-14, assigned to all speakers. (The distinct name is
          deliberate: it must not be confused with any headshot handling from
@@ -108,17 +169,10 @@ scenarios:
       blocked for unavailable access/evidence. Do not turn provider or
       evidence-tool failures into product verdicts.
     successSignals:
-      - Filled task-creation form screenshot showing name, instructions, and due
-        date
       - Tracking dashboard showing 2 speakers x 2 tasks, all incomplete, with
         due dates
-      - File-uploads-enabled setting visible (if the clone has such a toggle)
     dependsOn:
-      - CFP-S4
-    inputs:
-      sessionUrl:
-        from: CFP-S4
-        output: sessionUrl
+      - CNT-S1
   - id: CNT-S2
     name: Speaker uploads and versions a deliverable
     kind: browser
@@ -148,6 +202,14 @@ scenarios:
       addresses below. Record actual dates, track/format names and any
       substituted fixture values. Follow the original criterion: substitutions
       cannot hide a missing capability.
+
+
+      Presentation setup is the only prerequisite. Inspect and record whether
+      the independent headshot task exists, but continue presentation upload,
+      comments, replacement versions and access checks if headshot setup failed.
+      Preserve the missing headshot evidence; do not claim the requested
+      two-task baseline or headshot status passed when absent. A quarantined
+      upload is not a completed clean scan.
 
 
       ORIGINAL SCENARIO SCRIPT:
@@ -349,6 +411,7 @@ rubric:
       - crud
     scenarios:
       - CNT-S1
+      - CNT-S1-HEADSHOT
     grader:
       type: llm
     passCriteria: Both fixture tasks ("Upload Session Presentation" due 2027-05-01,
@@ -448,6 +511,7 @@ rubric:
       - roundtrip
     scenarios:
       - CNT-S1
+      - CNT-S1-HEADSHOT
       - CNT-S3
     grader:
       type: llm

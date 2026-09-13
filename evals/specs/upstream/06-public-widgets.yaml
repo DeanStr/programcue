@@ -59,7 +59,7 @@ scenarios:
       cannot hide a missing capability.
 
 
-      Use the bound programmeUrl from AIA-S2; verify the record before
+      Use the bound programmeUrl from AIA-PUBLISH; verify the record before
       continuing.
 
 
@@ -175,10 +175,10 @@ scenarios:
       - An explicit per-surface record of anonymous vs attendee-login vs
         admin-only access
     dependsOn:
-      - AIA-S2
+      - AIA-PUBLISH
     inputs:
       programmeUrl:
-        from: AIA-S2
+        from: AIA-PUBLISH
         output: programmeUrl
   - id: EMB-S2
     name: Schedule Itinerary browsing and personal-schedule building
