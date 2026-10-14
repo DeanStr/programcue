@@ -65,9 +65,9 @@ in [DECISIONS.md](DECISIONS.md).
 Evidence: focused component/service tests, `e2e/schedule-calendar.spec.ts`,
 `e2e/task-bulk-undo.spec.ts`, and refreshed laptop schedule/task plus desktop/mobile
 Command Centre and mobile task snapshots. This does not establish deployment or
-external-provider acceptance. The complete release browser/cross-browser gate and
-a full film render were not requested or run; the film's pinned snapshot hashes
-are synchronized with the reviewed captures. Review corrections add in-dialog
+external-provider acceptance. Browser evidence remains scoped; a full film render
+was not requested or run. The film's pinned snapshot hashes are synchronized with
+the reviewed captures. Review corrections add in-dialog
 break failure/progress/committed-warning coverage, fitted Day/Week calendars,
 a bounded 1024px room grid, active custom-filter indicators and accurate empty
 queue guidance. Command Centre readiness/action annotation frames were rendered
@@ -83,6 +83,16 @@ clipping in longer tablet Track views, which now expose a labelled keyboard
 scrolling region. Eleven selected schedule checks, including 375×667 and 412×915
 regressions and a tablet track with seven additional real session placements,
 plus the laptop visual check passed. The laptop snapshot required no change.
+
+Before local merge, `npm run check` passed its core gates with
+`VITEST_MAX_WORKERS=4`: 666 unit tests, 1,967 Worker tests and one agent test,
+plus build, types and repository contracts. The initial uncapped run hit the
+existing headshot test's five-second timeout. The full retry stopped at the
+dependency audit (28 vulnerabilities: seven low, six moderate, 14 high and one
+critical). This branch changes neither dependency manifest. The complete browser,
+evaluation and public-website gates did not run because the audit failed; the
+earlier focused browser checks passed. This does not establish a passing release
+gate.
 
 ## Latest recorded deployments
 
