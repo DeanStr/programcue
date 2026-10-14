@@ -553,7 +553,16 @@ type AdminCreationFormProps = {
       routingTeams: Array<{ id: string; name: string }>;
       idempotencyKey: string;
     }
-  | { kind: "session"; idempotencyKey: string }
+  | {
+      kind: "session";
+      idempotencyKey: string;
+      initialSpeaker?: SubmissionAdminSpeakerInput | null;
+      speakerNeedingPortalAccess?: {
+        id: string;
+        name: string;
+        email: string;
+      } | null;
+    }
 );
 
 export function AdminCreationForm(props: AdminCreationFormProps) {
@@ -561,7 +570,13 @@ export function AdminCreationForm(props: AdminCreationFormProps) {
   const navigation = useNavigation();
   const [directSpeakers, setDirectSpeakers] = useState<
     SubmissionAdminSpeakerInput[]
-  >([{ name: "", email: "", biography: "" }]);
+  >([
+    (props.kind === "session" && props.initialSpeaker) || {
+      name: "",
+      email: "",
+      biography: "",
+    },
+  ]);
   const [applicationSpeakers, setApplicationSpeakers] = useState<
     SubmissionAdminSpeakerInput[]
   >([{ name: "", email: "", biography: "" }]);
@@ -700,6 +715,33 @@ export function AdminCreationForm(props: AdminCreationFormProps) {
 
       {kind === "session" ? (
         <section className="card pad">
+          {props.kind === "session" &&
+          props.speakerNeedingPortalAccess &&
+          directSpeakers.some(
+            (speaker) =>
+              speaker.email.trim().toLowerCase() ===
+              props.speakerNeedingPortalAccess?.email.toLowerCase(),
+          ) ? (
+            <div className="validation-item warn mb" role="status">
+              <div>
+                <strong>
+                  {props.speakerNeedingPortalAccess.name} needs portal access
+                  first
+                </strong>
+                <p>
+                  This speaker must accept portal access before you can add a
+                  session with their existing identity. Participation is
+                  confirmed separately before publication.
+                </p>
+                <ButtonLink
+                  size="small"
+                  to={`/admin/speakers?person=${encodeURIComponent(props.speakerNeedingPortalAccess.id)}#admin-speaker-${encodeURIComponent(props.speakerNeedingPortalAccess.id)}`}
+                >
+                  Invite to speaker portal
+                </ButtonLink>
+              </div>
+            </div>
+          ) : null}
           <Form
             method="post"
             className="stack mt"
@@ -814,7 +856,7 @@ export function AdminCreationForm(props: AdminCreationFormProps) {
             >
               {navigation.formData?.get("_intent") === "create_direct_session"
                 ? "Creating…"
-                : "Create unscheduled session"}
+                : "Add session"}
             </Button>
           </Form>
         </section>

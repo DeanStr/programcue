@@ -2,9 +2,14 @@ import { data } from "react-router";
 import { ZodError } from "zod";
 
 import { fieldLabel } from "~/lib/record-labels";
+import { requireValue } from "~/lib/required-value";
 import { PersonDuplicateService } from "~/modules/people/person-duplicate-service.server";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
-import { SpeakerInvitationDeliveryError } from "~/modules/speakers/speaker-invitation.server";
+import {
+  SpeakerInvitationDeliveryError,
+  unavailableDirectSessionSpeakerEmails,
+} from "~/modules/speakers/speaker-invitation.server";
+import type { SpeakerWorkflowStatus } from "~/modules/speakers/speaker-roster-import.server";
 import {
   SpeakerRosterImportError,
   SpeakerRosterImportService,
@@ -36,6 +41,12 @@ export type ActionResult = {
     truncated: boolean;
   };
   existingRosterPerson?: { id: string; name: string };
+  addedSpeaker?: {
+    id: string;
+    name: string;
+    needsPortalAccessForSession: boolean;
+    workflowStatus: SpeakerWorkflowStatus;
+  };
   importPreview?: Awaited<ReturnType<SpeakerRosterImportService["preview"]>> & {
     idempotencyKey: string;
   };
@@ -99,12 +110,30 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     filters,
     requestedPage,
   );
-  if (filters.personId && !workspace.speakers.length)
+  const focusedSpeaker = filters.personId
+    ? workspace.speakers.find((speaker) => speaker.id === filters.personId)
+    : null;
+  if (filters.personId && !focusedSpeaker)
     throw new Response("Speaker not found in this event", { status: 404 });
   return {
     ...workspace,
     filters,
     focusedPersonId: filters.personId || null,
+    focusedSpeaker: focusedSpeaker
+      ? {
+          id: focusedSpeaker.id,
+          name: focusedSpeaker.name,
+          workflowStatus: focusedSpeaker.workflowStatus,
+          needsPortalAccessForSession:
+            (
+              await unavailableDirectSessionSpeakerEmails({
+                env,
+                organisationId: viewer.organisationId,
+                emails: [focusedSpeaker.email],
+              })
+            ).length > 0,
+        }
+      : null,
     manualSpeakerIdempotencyKey: crypto.randomUUID(),
     workflowIdempotencyKeys: Object.fromEntries(
       workspace.speakers.map((speaker) => [speaker.id, crypto.randomUUID()]),
@@ -283,10 +312,6 @@ export async function action({ request, context }: Route.ActionArgs) {
       String(input.email ?? ""),
     );
     const personService = new PersonDuplicateService(env);
-    const exactPeople = await personService.searchOrganisationPeople(
-      viewer,
-      emailResolution.email,
-    );
     const duplicateCheck = await personService.findLikelyDuplicates(viewer, [
       { name: input.name, email: emailResolution.email },
     ]);
@@ -311,10 +336,15 @@ export async function action({ request, context }: Route.ActionArgs) {
       viewer,
       input,
     );
+    const rosterPerson = requireValue(
+      (await personService.searchOrganisationPeople(viewer, result.email)).find(
+        (person) =>
+          person.personId === result.personId &&
+          person.currentEventSpeakerStatus !== null,
+      ),
+      "The saved speaker record could not be read from this event roster.",
+    );
     if (!result.createdRosterAssociation) {
-      const existingRosterPerson = exactPeople.find(
-        (person) => person.personId === result.personId,
-      );
       return data<ActionResult>(
         {
           ok: false,
@@ -323,7 +353,7 @@ export async function action({ request, context }: Route.ActionArgs) {
             "This identity is already on this event roster. The entered profile values were not applied; edit the existing speaker record instead.",
           existingRosterPerson: {
             id: result.personId,
-            name: existingRosterPerson?.name ?? String(input.name),
+            name: rosterPerson.name,
           },
         },
         { status: 409 },
@@ -333,6 +363,22 @@ export async function action({ request, context }: Route.ActionArgs) {
     return data<ActionResult>({
       ok: true,
       intent: "add_manual_speaker",
+      addedSpeaker: {
+        id: result.personId,
+        name: rosterPerson.name,
+        workflowStatus: requireValue(
+          rosterPerson.currentEventSpeakerStatus,
+          "The saved speaker record has no event workflow state.",
+        ),
+        needsPortalAccessForSession:
+          (
+            await unavailableDirectSessionSpeakerEmails({
+              env,
+              organisationId: viewer.organisationId,
+              emails: [rosterPerson.email],
+            })
+          ).length > 0,
+      },
       message: `${
         result.createdIdentity
           ? "The speaker record was added to this event roster. No invitation email was sent."

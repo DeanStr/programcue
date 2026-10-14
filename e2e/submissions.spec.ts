@@ -892,12 +892,12 @@ test.describe
       const unique = Date.now();
       await page.goto("/admin/schedule");
       await page
-        .getByRole("link", { name: "Create direct session", exact: true })
+        .getByRole("link", { name: "Add session", exact: true })
         .click();
       await expect(page).toHaveURL(/\/admin\/sessions\/new$/u);
       const directSession = page.locator("form").filter({
         has: page.getByRole("button", {
-          name: "Create unscheduled session",
+          name: "Add session",
           exact: true,
         }),
       });
@@ -908,9 +908,7 @@ test.describe
       await directSession
         .getByLabel("Description")
         .fill("A confirmed sponsor programme contribution.");
-      await directSession
-        .getByRole("button", { name: "Create unscheduled session" })
-        .click();
+      await directSession.getByRole("button", { name: "Add session" }).click();
       await expect(
         directSession.getByRole("alert").filter({
           hasText: "Add at least one speaker with a name and valid email.",
@@ -930,9 +928,7 @@ test.describe
       await directSession
         .getByLabel("Email", { exact: true })
         .fill(`sponsor-${unique}@example.com`);
-      await directSession
-        .getByRole("button", { name: "Create unscheduled session" })
-        .click();
+      await directSession.getByRole("button", { name: "Add session" }).click();
       await expect(page).toHaveURL(
         /\/admin\/schedule\?session=[^&]+&created=1/u,
       );

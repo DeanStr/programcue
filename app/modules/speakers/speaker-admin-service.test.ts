@@ -1108,6 +1108,38 @@ describe("speaker profile service", () => {
     ).rejects.toMatchObject({ status: 400 });
   });
 
+  it("rejects a missing event workflow instead of assuming an active record", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoSpeakerData(testEnv);
+    const personId = crypto.randomUUID();
+    const membershipId = crypto.randomUUID();
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        "INSERT INTO people (id, email, display_name) VALUES (?, ?, 'Missing workflow speaker')",
+      ).bind(personId, `${personId}@example.com`),
+      testEnv.DB.prepare(
+        "INSERT INTO memberships (id, organisation_id, event_id, person_id, role, accepted_at) VALUES (?, ?, ?, ?, 'speaker', unixepoch())",
+      ).bind(membershipId, admin.organisationId, admin.eventId, personId),
+    ]);
+    try {
+      await testEnv.DB.prepare(
+        "DELETE FROM event_speaker_workflows WHERE event_id = ? AND person_id = ?",
+      )
+        .bind(admin.eventId, personId)
+        .run();
+      await expect(
+        new SpeakerService(testEnv).getAdminSpeakerDetail(admin, personId),
+      ).rejects.toThrow(`Speaker ${personId} has no event workflow state.`);
+    } finally {
+      await testEnv.DB.batch([
+        testEnv.DB.prepare("DELETE FROM memberships WHERE id = ?").bind(
+          membershipId,
+        ),
+        testEnv.DB.prepare("DELETE FROM people WHERE id = ?").bind(personId),
+      ]);
+    }
+  });
+
   it("uses the organisation-scoped Network label after event handoff", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await ensureDemoSpeakerData(testEnv);
@@ -1148,6 +1180,22 @@ describe("speaker profile service", () => {
       { personId },
       1,
     );
+    const longEmailSearch = await new SpeakerService(
+      testEnv,
+    ).listAdminSpeakerPage(admin, { query: email.toUpperCase() }, 1);
+    expect(longEmailSearch.speakers.map((speaker) => speaker.id)).toEqual([
+      personId,
+    ]);
+    const partialLabelSearch = await new SpeakerService(
+      testEnv,
+    ).listAdminSpeakerPage(admin, { query: "network display" }, 1);
+    expect(partialLabelSearch.speakers.map((speaker) => speaker.id)).toEqual([
+      personId,
+    ]);
+    const wildcardSearch = await new SpeakerService(
+      testEnv,
+    ).listAdminSpeakerPage(admin, { query: "Network%Display" }, 1);
+    expect(wildcardSearch.speakers).toEqual([]);
     expect(result.speakers).toEqual([
       expect.objectContaining({
         id: personId,

@@ -672,7 +672,7 @@ test.describe("mutable schedule authoring", () => {
       await waitForInterface(page, "/admin/sessions/new");
       const directSession = page.locator("form").filter({
         has: page.getByRole("button", {
-          name: "Create unscheduled session",
+          name: "Add session",
           exact: true,
         }),
       });
@@ -690,18 +690,14 @@ test.describe("mutable schedule authoring", () => {
       await expect(directSession.getByLabel("Speaker 1 name")).toHaveValue(
         "Priya Shah",
       );
-      await directSession
-        .getByRole("button", { name: "Create unscheduled session" })
-        .click();
+      await directSession.getByRole("button", { name: "Add session" }).click();
       const duplicateConfirmation = directSession.getByLabel(
         "I reviewed these identities and confirm the entered names and email addresses.",
       );
       await expect(duplicateConfirmation).toBeVisible();
       await duplicateConfirmation.check();
       await expect(duplicateConfirmation).toBeChecked();
-      await directSession
-        .getByRole("button", { name: "Create unscheduled session" })
-        .click();
+      await directSession.getByRole("button", { name: "Add session" }).click();
       await expect(page).toHaveURL(
         /\/admin\/schedule\?session=[^&]+&created=1/u,
       );
@@ -831,7 +827,7 @@ test.describe("mutable schedule authoring", () => {
     await waitForInterface(page, "/admin/sessions/new");
     const directSession = page.locator("form").filter({
       has: page.getByRole("button", {
-        name: "Create unscheduled session",
+        name: "Add session",
         exact: true,
       }),
     });
@@ -843,9 +839,7 @@ test.describe("mutable schedule authoring", () => {
     await directSession
       .getByLabel("Email", { exact: true })
       .fill(`auto-place-blocked-${unique}@example.com`);
-    await directSession
-      .getByRole("button", { name: "Create unscheduled session" })
-      .click();
+    await directSession.getByRole("button", { name: "Add session" }).click();
 
     await expect(page).toHaveURL(/\/admin\/schedule\?session=[^&]+&created=1/u);
     await createNextScheduleDraft(page);

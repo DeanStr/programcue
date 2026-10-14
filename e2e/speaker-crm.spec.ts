@@ -18,6 +18,268 @@ test.beforeEach(async ({ request }) => {
 
 test.setTimeout(180_000);
 
+test("inactive speaker records explain restoration before onboarding", async ({
+  page,
+}) => {
+  await page.context().addCookies([
+    {
+      name: "program_cue_event",
+      value: "evt-foe-2025",
+      domain: "127.0.0.1",
+      path: "/",
+      httpOnly: true,
+      sameSite: "Lax",
+    },
+  ]);
+  await page.goto("/admin/speakers?person=person-demo-speaker");
+  const nextSteps = page.getByRole("region", {
+    name: "Next steps for Priya Shah",
+  });
+  for (const status of ["declined", "withdrawn"]) {
+    const workflow = page.getByLabel("Workflow status for Priya Shah");
+    await workflow.selectOption(status);
+    await workflow
+      .locator("..")
+      .getByRole("button", { name: "Save", exact: true })
+      .click();
+    await expect(nextSteps).toContainText(
+      `Onboarding tasks are unavailable while this speaker is ${status}`,
+    );
+    await expect(
+      nextSteps.getByRole("link", { name: "Assign onboarding tasks" }),
+    ).toHaveCount(0);
+    await page
+      .getByRole("row")
+      .filter({
+        has: page.getByRole("link", { name: "Priya Shah", exact: true }),
+      })
+      .getByRole("link", { name: "Priya Shah", exact: true })
+      .click();
+    await expect(
+      page.getByRole("heading", { name: "Priya Shah", exact: true, level: 1 }),
+    ).toBeVisible();
+    await expect(nextSteps).toContainText(
+      `Onboarding tasks are unavailable while this speaker is ${status}`,
+    );
+    await expect(
+      nextSteps.getByRole("link", { name: "Assign onboarding tasks" }),
+    ).toHaveCount(0);
+    await nextSteps.getByRole("link", { name: "Review roster status" }).click();
+  }
+  const workflow = page.getByLabel("Workflow status for Priya Shah");
+  await workflow.selectOption("prospect");
+  await workflow
+    .locator("..")
+    .getByRole("button", { name: "Save", exact: true })
+    .click();
+  await nextSteps
+    .getByRole("link", { name: "Assign onboarding tasks" })
+    .click();
+  await expect(
+    page
+      .getByRole("combobox", { name: "Speaker", exact: true })
+      .locator("option:checked"),
+  ).toContainText("priya.speaker@example.com");
+});
+
+test("adding a speaker hands off to portal access, a session and onboarding", async ({
+  page,
+}) => {
+  page.setDefaultTimeout(15_000);
+  const email = `handoff-${crypto.randomUUID()}@example.com`;
+  const name = "Taylor Invited";
+  const biography = "Shares practical conference design ideas.";
+  await page.context().addCookies([
+    {
+      name: "program_cue_event",
+      value: "evt-foe-2025",
+      domain: "127.0.0.1",
+      path: "/",
+      httpOnly: true,
+      sameSite: "Lax",
+    },
+  ]);
+  await page.goto("/admin/speakers?query=Priya");
+  await page.locator("body[data-hydrated='true']").waitFor();
+  await page.getByRole("button", { name: "Add speaker", exact: true }).click();
+  const form = page.locator("#add-speaker-record form");
+  await form.locator('input[name="name"]').fill(name);
+  await form.locator('input[name="email"]').fill(email);
+  await form.locator('textarea[name="biography"]').fill(biography);
+  await form.getByRole("button", { name: "Add speaker record" }).click();
+  await expect(
+    page
+      .getByRole("status")
+      .filter({ hasText: "No invitation email was sent" }),
+  ).toBeVisible();
+  const nextSteps = page.getByRole("region", {
+    name: `Next steps for ${name}`,
+  });
+  await expect(nextSteps).toBeVisible();
+  await expect(nextSteps.getByRole("heading")).toBeFocused();
+  await expect(nextSteps).toContainText(
+    "wait for them to accept portal access before you can create their session",
+  );
+  await nextSteps.screenshot({
+    path: ".artifacts/speaker-creation-handoff.png",
+  });
+  await nextSteps
+    .getByRole("link", { name: "Invite to speaker portal" })
+    .click();
+  const row = page.getByRole("row").filter({
+    has: page.getByRole("link", { name, exact: true }),
+  });
+  await expect(row).toBeFocused();
+  await row.getByLabel(`Confirm email to ${email}`).check();
+  await row.getByRole("button", { name: /portal invitation/ }).click();
+  await expect(
+    page.getByRole("status").filter({
+      hasText: "Demonstration mode does not send its sign-in email",
+    }),
+  ).toBeVisible();
+  await page.reload();
+  await expect(nextSteps).toBeVisible();
+  await expect(
+    nextSteps.getByRole("link", { name: "Add a session for this speaker" }),
+  ).toBeVisible();
+  await expect(
+    nextSteps.getByRole("link", { name: "Assign onboarding tasks" }),
+  ).toBeVisible();
+  await row.getByRole("link", { name, exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name, level: 1, exact: true }),
+  ).toBeVisible();
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name, level: 1, exact: true }),
+  ).toBeVisible();
+  await expect(nextSteps).toContainText(
+    "accept portal access before you can create their session",
+  );
+  await nextSteps
+    .getByRole("link", { name: "Assign onboarding tasks" })
+    .click();
+  await expect(
+    page
+      .getByRole("combobox", { name: "Speaker", exact: true })
+      .locator("option:checked"),
+  ).toContainText(email);
+  await page.getByRole("button", { name: /Assigned work/ }).click();
+  await expect(page).toHaveURL(/\/admin\/tasks\?person=/u);
+  const assignedHandoffUrl = page.url();
+  await page.getByRole("link", { name: "Clear", exact: true }).click();
+  await expect(page).toHaveURL(/\/admin\/tasks$/u);
+  await page
+    .getByRole("button", { name: "Plans & onboarding", exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/admin\/tasks\?view=plans$/u);
+  await expect(
+    page
+      .getByRole("combobox", { name: "Speaker", exact: true })
+      .locator("option:checked"),
+  ).not.toContainText(email);
+  await page.goBack();
+  await expect(page).toHaveURL(/\/admin\/tasks$/u);
+  await page.goBack();
+  await expect(page).toHaveURL(assignedHandoffUrl);
+  await expect(
+    page
+      .locator(".tasks-plan-assignment select[name='targetId']")
+      .locator("option:checked"),
+  ).toContainText(email);
+  await page
+    .getByRole("button", { name: "Plans & onboarding", exact: true })
+    .click();
+  await expect(
+    page
+      .getByRole("combobox", { name: "Speaker", exact: true })
+      .locator("option:checked"),
+  ).toContainText(email);
+  await page.getByRole("button", { name: "Assign with prerequisites" }).click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "Task plan assigned" }),
+  ).toBeVisible();
+
+  await page.getByRole("link", { name: "Event speakers", exact: true }).click();
+  await page.getByRole("textbox", { name: "Search", exact: true }).fill(email);
+  await expect(page).toHaveURL(
+    new RegExp(`query=${encodeURIComponent(email)}`),
+  );
+  await row.getByRole("link", { name, exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name, level: 1, exact: true }),
+  ).toBeVisible();
+  await nextSteps
+    .getByRole("link", { name: "Add a session for this speaker" })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Add session", level: 1 }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      "For invited talks, keynotes and other sessions that don’t need CFP review.",
+    ),
+  ).toBeVisible();
+  await expect(page.getByLabel("Speaker 1 name")).toHaveValue(name);
+  await expect(page.getByLabel("Email", { exact: true })).toHaveValue(email);
+  await expect(page.getByRole("textbox", { name: /^Biography/ })).toHaveValue(
+    biography,
+  );
+  await expect(
+    page.getByRole("status").filter({ hasText: "needs portal access first" }),
+  ).toContainText("must accept portal access before you can add a session");
+  await page
+    .getByLabel("Email", { exact: true })
+    .fill("priya.speaker@example.com");
+  await expect(
+    page.getByRole("status").filter({ hasText: "needs portal access first" }),
+  ).toHaveCount(0);
+  await page.getByLabel("Email", { exact: true }).fill(email);
+  await expect(
+    page.getByRole("status").filter({ hasText: "needs portal access first" }),
+  ).toBeVisible();
+  await page.getByLabel("Session title").fill("Invited conference design talk");
+  await page
+    .getByRole("combobox", { name: "Track", exact: true })
+    .selectOption({ index: 1 });
+  await page.getByRole("button", { name: "Add session", exact: true }).click();
+  await page.getByLabel(/I reviewed these identities/u).check();
+  await page.getByRole("button", { name: "Add session", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText(
+    "wait for acceptance before attaching that existing identity",
+  );
+
+  const inviteLink = page.getByRole("link", {
+    name: "Invite to speaker portal",
+    exact: true,
+  });
+  await inviteLink.click();
+  await expect(nextSteps).toBeVisible();
+  await row.getByRole("link", { name, exact: true }).click();
+  await nextSteps
+    .getByRole("link", { name: "Add a session for this speaker" })
+    .click();
+  await page
+    .getByRole("button", { name: "Search or run a command", exact: true })
+    .click();
+  const commands = page.getByRole("dialog", {
+    name: "Search or run a command",
+  });
+  await commands.getByRole("option", { name: /Add session/ }).click();
+  await expect(page).toHaveURL(/\/admin\/sessions\/new$/u);
+  await expect(page.getByLabel("Speaker 1 name")).toHaveValue("");
+  await expect(page.getByLabel("Email", { exact: true })).toHaveValue("");
+  await page.goBack();
+  await expect(page.getByLabel("Speaker 1 name")).toHaveValue(name);
+  await expect(page.getByLabel("Email", { exact: true })).toHaveValue(email);
+  for (const path of [
+    "/admin/sessions/new?person=",
+    "/admin/tasks?person=%20",
+  ]) {
+    expect((await page.request.get(path)).status()).toBe(404);
+  }
+});
+
 test("organization CRM covers directory, relationship, pipeline, handoff and outreach workflows", async ({
   page,
 }) => {

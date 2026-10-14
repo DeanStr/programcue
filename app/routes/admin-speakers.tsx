@@ -12,6 +12,7 @@ import {
   useNavigation,
   useSubmit,
 } from "react-router";
+import { AdminSpeakerNextSteps } from "~/components/admin-speaker-next-steps";
 import {
   buildSpeakerRosterPulse,
   speakerInitials as initials,
@@ -48,6 +49,11 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
   const navigation = useNavigation();
   const submit = useSubmit();
   const searchTimer = useRef<number | null>(null);
+  const nextStepsRef = useRef<HTMLHeadingElement>(null);
+  const nextStepsSpeaker =
+    actionData?.ok && actionData.addedSpeaker
+      ? actionData.addedSpeaker
+      : loaderData.focusedSpeaker;
   const [manualName, setManualName] = useState("");
   const [manualEmail, setManualEmail] = useState("");
   const [manualBiography, setManualBiography] = useState("");
@@ -58,6 +64,8 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
     setManualEmail("");
     setManualBiography("");
     setManualLookupQuery("");
+    nextStepsRef.current?.focus({ preventScroll: true });
+    nextStepsRef.current?.scrollIntoView({ block: "nearest" });
   }, [actionData]);
   useEffect(() => {
     if (!loaderData.focusedPersonId) return;
@@ -174,6 +182,12 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
             ) : null}
           </span>
         </div>
+      ) : null}
+      {nextStepsSpeaker ? (
+        <AdminSpeakerNextSteps
+          speaker={nextStepsSpeaker}
+          headingRef={nextStepsRef}
+        />
       ) : null}
       <section className="crm-board" id="speaker-readiness">
         <div className="crm-board-head">

@@ -1,4 +1,6 @@
 import { data, Link, redirect, useActionData } from "react-router";
+import { unavailableDirectSessionSpeakerEmails } from "~/modules/speakers/speaker-invitation.server";
+import { SpeakerService } from "~/modules/speakers/speaker-service.server";
 import { SubmissionService } from "~/modules/submissions/submission-service.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
@@ -14,7 +16,7 @@ import type { SubmissionsAdminActionResult } from "./submissions-admin-types";
 type CreationOrigin = "schedule" | "programme";
 
 export const meta: Route.MetaFunction = () => [
-  { title: "Create direct session · Program Cue" },
+  { title: "Add session · Program Cue" },
 ];
 
 export function directSessionCreationOrigin(url: URL): CreationOrigin {
@@ -44,12 +46,36 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const origin = directSessionCreationOrigin(new URL(request.url));
   const { env, viewer } = await viewerFor(request, context);
   const service = new SubmissionService(env);
+  const personId = new URL(request.url).searchParams.get("person");
+  const speaker =
+    personId === null
+      ? null
+      : (await new SpeakerService(env).getAdminSpeakerDetail(viewer, personId))
+          .profile;
   const [routingTracks, sessionFormats] = await Promise.all([
     service.listRoutingTracks(viewer),
     service.getConfiguredSessionFormats(viewer),
   ]);
   return {
     origin,
+    speakerNeedingPortalAccess:
+      speaker &&
+      (
+        await unavailableDirectSessionSpeakerEmails({
+          env,
+          organisationId: viewer.organisationId,
+          emails: [speaker.email],
+        })
+      ).length
+        ? { id: speaker.id, name: speaker.name, email: speaker.email }
+        : null,
+    initialSpeaker: speaker
+      ? {
+          name: speaker.name,
+          email: speaker.email,
+          biography: speaker.biography ?? "",
+        }
+      : null,
     routingTracks,
     sessionFormats,
     idempotencyKey: crypto.randomUUID(),
@@ -148,16 +174,24 @@ export default function AdminCreateSession({
               ? "programme publishing"
               : "schedule"}
           </Link>
-          <h1>Create direct session</h1>
+          <h1>Add session</h1>
           <p>
-            Add an invited, sponsored or guaranteed session directly to the
-            unscheduled programme.
+            For invited talks, keynotes and other sessions that don’t need CFP
+            review.
+          </p>
+          <p className="help">
+            Sessions start in the unscheduled programme. Speaker invitations are
+            handled when you add the session; speakers must confirm
+            participation before it can be published.
           </p>
         </div>
       </div>
       <ActionNotice result={actionData} />
       <AdminCreationForm
+        key={loaderData.initialSpeaker?.email ?? "new-session"}
         kind="session"
+        initialSpeaker={loaderData.initialSpeaker}
+        speakerNeedingPortalAccess={loaderData.speakerNeedingPortalAccess}
         routingTracks={loaderData.routingTracks}
         sessionFormats={loaderData.sessionFormats}
         idempotencyKey={loaderData.idempotencyKey}

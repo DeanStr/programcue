@@ -241,9 +241,7 @@ export default function AdminSection({ loaderData }: Route.ComponentProps) {
             editing in the schedule planner.
           </p>
           <nav className="programme-header-links" aria-label="Related">
-            <Link to="/admin/sessions/new?from=programme">
-              Create direct session
-            </Link>
+            <Link to="/admin/sessions/new?from=programme">Add session</Link>
             <Link
               to={`/public/programme/${loaderData.publicSlug}`}
               target="_blank"

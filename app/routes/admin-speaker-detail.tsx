@@ -9,6 +9,7 @@ import {
 } from "~/modules/fields/event-field-service.server";
 import { ScheduleRevisionConflictError } from "~/modules/schedule/schedule-errors";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
+import { unavailableDirectSessionSpeakerEmails } from "~/modules/speakers/speaker-invitation.server";
 import {
   SpeakerAdminStateError,
   SpeakerProfileConflictError,
@@ -45,8 +46,17 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     "administrator",
   ]);
   const service = new SpeakerService(env);
+  const detail = await service.getAdminSpeakerDetail(viewer, params.personId);
   return {
-    detail: await service.getAdminSpeakerDetail(viewer, params.personId),
+    detail,
+    needsPortalAccessForSession:
+      (
+        await unavailableDirectSessionSpeakerEmails({
+          env,
+          organisationId: viewer.organisationId,
+          emails: [detail.profile.email],
+        })
+      ).length > 0,
     availability: await service.listAdminAvailability(viewer, params.personId),
     customFields: await new EventFieldService(env).values(
       viewer,

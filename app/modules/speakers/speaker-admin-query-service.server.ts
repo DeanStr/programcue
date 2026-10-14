@@ -18,6 +18,7 @@ import type {
   SessionRow,
 } from "./speaker-portal-service.server";
 import { readSpeakerProfileHistory } from "./speaker-profile-revision.server";
+import type { SpeakerWorkflowStatus } from "./speaker-roster-import.server";
 import { SpeakerAdminIntegrityError } from "./speaker-service-errors";
 
 const requiredEventFieldValuePresentSql = `(
@@ -60,7 +61,8 @@ export class SpeakerAdminQueryService {
              COALESCE(event_profile.last_operation_id, '') AS travelProfileOperationId,
              person.profile_status AS profileStatus,
              person.profile_revision AS revision,
-             person.updated_at AS updatedAt
+             person.updated_at AS updatedAt,
+             workflow.status AS workflowStatus
         FROM people person
         LEFT JOIN organisation_contacts contact
           ON contact.organisation_id = ? AND contact.person_id = person.id
@@ -71,6 +73,8 @@ export class SpeakerAdminQueryService {
           ON event_profile.event_id = ?
          AND event_profile.organisation_id = ?
          AND event_profile.person_id = person.id
+        LEFT JOIN event_speaker_workflows workflow
+          ON workflow.event_id = ? AND workflow.person_id = person.id
        WHERE person.id = ? AND ${adminSpeakerScopeSql()}
     `,
     )
@@ -78,6 +82,7 @@ export class SpeakerAdminQueryService {
         viewer.organisationId,
         viewer.eventId,
         viewer.organisationId,
+        viewer.eventId,
         personId,
         viewer.eventId,
         viewer.organisationId,
@@ -88,10 +93,17 @@ export class SpeakerAdminQueryService {
           hasOrganisationProfile: number;
           organisationProfileOperationId: string;
           travelProfileOperationId: string;
+          workflowStatus: SpeakerWorkflowStatus | null;
         }
       >();
     if (!profile)
       throw new Response("Speaker not found in this event.", { status: 404 });
+    const workflowStatus = profile.workflowStatus;
+    if (workflowStatus === null) {
+      throw new SpeakerAdminIntegrityError(
+        `Speaker ${personId} has no event workflow state.`,
+      );
+    }
     const [
       event,
       sessions,
@@ -257,7 +269,7 @@ export class SpeakerAdminQueryService {
     if (!event)
       throw new Response("This event could not be found.", { status: 404 });
     return {
-      profile,
+      profile: { ...profile, workflowStatus },
       profileHistory,
       profileShared,
       profileScoped: profileShared || Boolean(profile.hasOrganisationProfile),
@@ -362,7 +374,6 @@ export class SpeakerAdminQueryService {
       );
     }
     const pageSize = 50;
-    const query = `%${queryValue}%`;
     const speakers = await this.env.DB.prepare(
       `
       WITH event_speaker_ids(person_id) AS (
@@ -392,7 +403,9 @@ export class SpeakerAdminQueryService {
            AND contact_profile.person_id = p.id
          WHERE (? = '' OR p.profile_status = ?)
            AND (? = '' OR workflow.status = ?)
-           AND (? = '%%' OR COALESCE(contact_profile.display_name, p.display_name) LIKE ? OR p.email LIKE ?)
+           AND (? = ''
+             OR instr(lower(COALESCE(contact_profile.display_name, p.display_name)), lower(?)) > 0
+             OR instr(lower(p.email), lower(?)) > 0)
            AND (? = '' OR p.id = ?)
            AND (
              ? = ''
@@ -632,9 +645,9 @@ export class SpeakerAdminQueryService {
         profileStatus,
         workflowStatus,
         workflowStatus,
-        query,
-        query,
-        query,
+        queryValue,
+        queryValue,
+        queryValue,
         personId,
         personId,
         readiness,

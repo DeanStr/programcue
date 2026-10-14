@@ -2,6 +2,50 @@
 
 This file records durable decisions. It does not imply that every decided capability is implemented; verified delivery status lives in `IMPLEMENTATION_STATUS.md`.
 
+## Speaker creation handoff — 14 October 2026
+
+Adding a speaker creates an event roster record without sending email. The
+success panel links to the speaker’s roster invitation controls, Add session
+with their persisted profile prefilled, and Plans & onboarding with that speaker
+selected. Invitations retain explicit email confirmation; task assignment
+retains the existing prerequisites and idempotent command. Both prefilled
+destinations validate the speaker against the current event on the server.
+The same next-step controls are available on the focused roster record and
+speaker detail page, independently of the creation action response. The session
+link explains any portal-access acceptance prerequisite before the organiser
+opens the form. Its eligibility comes from the existing server-side direct-session
+identity rule, and clears when the participant accepts access. Browser handoff
+coverage follows these persistent controls after invitation, navigation and
+reload instead of retaining link URLs from the creation response.
+Roster search treats name/email text as literal case-insensitive substrings,
+including long valid email addresses. It does not interpret SQL wildcard
+patterns or rely on D1's bounded `LIKE` pattern support.
+The session form explains when a newly added prospect needs to accept portal
+access first, linking back to the invitation controls. Existing identity-access
+guards remain in force; portal acceptance and session participation are separate.
+The access notice follows the selected email, and a changed speaker handoff
+resets the creation form. Onboarding handoffs offer only speaker templates and
+explain how to create one if none are active, rather than defaulting to an
+unrelated session or event task. Assignment selection resets when the speaker
+context changes, including when navigating back to a handoff.
+Success and existing-record notices read the persisted name from the current
+event roster after the command. A missing record raises a specific integrity
+error; submitted names are not substitutes for missing stored data. If a
+selected task template becomes unavailable, assignment stops until the organiser
+chooses an available template; the picker does not silently select a replacement.
+An omitted speaker parameter opens ordinary creation or task management; a
+supplied blank or unknown speaker identifier is rejected instead of silently
+dropping the handoff context.
+Record controls use the persisted event workflow status. Declined and withdrawn
+speakers see a restoration prerequisite for invitations and onboarding instead
+of an onboarding link to an ineligible task destination. Missing workflow state
+is an integrity error rather than an inferred active status.
+
+The organiser-facing name for direct-session creation is **Add session**, with
+the explanation “For invited talks, keynotes and other sessions that don’t need
+CFP review.” This is a handoff to existing services, with no change to the
+requirement that speakers confirm participation before publication.
+
 ## Evaluation publication dependency — 8 September 2026
 
 The application-owned upstream importer separates CFP-S1's anonymous steps

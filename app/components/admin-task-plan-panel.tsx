@@ -33,7 +33,9 @@ export function AdminTaskPlanPanel({
   mode: "plan" | "create";
 }) {
   const assignableTemplates = data.templates.filter(
-    (template) => template.status === "active",
+    (template) =>
+      template.status === "active" &&
+      (!data.focusedSpeakerId || template.targetType === "speaker"),
   );
   const [selectedTemplateId, setSelectedTemplateId] = useState(
     assignableTemplates[0]?.id ?? "",
@@ -72,12 +74,12 @@ export function AdminTaskPlanPanel({
   const compatibleEvidenceModes =
     taskCompatibleEvidenceModes[taskType] ??
     taskCompatibleEvidenceModes.checklist;
-  const selectedTemplate =
-    assignableTemplates.find(
-      (template) => template.id === selectedTemplateId,
-    ) ?? assignableTemplates[0];
-  const assignmentTargets =
-    selectedTemplate?.targetType === "session"
+  const selectedTemplate = assignableTemplates.find(
+    (template) => template.id === selectedTemplateId,
+  );
+  const assignmentTargets = !selectedTemplate
+    ? []
+    : selectedTemplate.targetType === "session"
       ? data.sessions
       : selectedTemplate?.targetType === "event"
         ? [data.eventTarget]
@@ -202,6 +204,20 @@ export function AdminTaskPlanPanel({
             <h2>Assign a plan</h2>
             <GitBranch aria-hidden className="subtle" size={18} />
           </div>
+          {data.focusedSpeakerId && !assignableTemplates.length ? (
+            <p role="status" className="help">
+              No active speaker task templates are available. Create a speaker
+              template in the Templates tab before assigning onboarding tasks.
+            </p>
+          ) : null}
+          {selectedTemplateId &&
+          !selectedTemplate &&
+          assignableTemplates.length ? (
+            <p role="alert" className="help">
+              The selected task template is no longer available in this context.
+              Choose a task template before assigning work.
+            </p>
+          ) : null}
           <Form method="post" className="stack">
             <input type="hidden" name="intent" value="assign" />
             <input
@@ -218,6 +234,9 @@ export function AdminTaskPlanPanel({
                 value={selectedTemplate?.id ?? ""}
                 onChange={(event) => setSelectedTemplateId(event.target.value)}
               >
+                <option value="" disabled>
+                  Choose a task template
+                </option>
                 {assignableTemplates.map((template) => (
                   <option value={template.id} key={template.id}>
                     {template.name}
@@ -227,7 +246,17 @@ export function AdminTaskPlanPanel({
             </label>
             <label className="label">
               {selectedTargetLabel}
-              <select className="select" name="targetId" required>
+              <select
+                className="select"
+                name="targetId"
+                key={`${selectedTemplate?.targetType}:${data.focusedSpeakerId ?? ""}`}
+                defaultValue={
+                  selectedTemplate?.targetType === "speaker"
+                    ? (data.focusedSpeakerId ?? undefined)
+                    : undefined
+                }
+                required
+              >
                 {assignmentTargets.map((target) => (
                   <option value={target.id} key={target.id}>
                     {target.name}
@@ -241,9 +270,7 @@ export function AdminTaskPlanPanel({
             </label>
             <Button
               type="submit"
-              disabled={
-                !assignableTemplates.length || !assignmentTargets.length || busy
-              }
+              disabled={!selectedTemplate || !assignmentTargets.length || busy}
             >
               <Plus aria-hidden size={15} /> Assign with prerequisites
             </Button>

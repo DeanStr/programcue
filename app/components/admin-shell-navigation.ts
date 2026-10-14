@@ -393,7 +393,7 @@ export function adminPageBreadcrumbs(
           : pathname === "/admin/submissions/new"
             ? "Create application record"
             : pathname === "/admin/sessions/new"
-              ? "Create direct session"
+              ? "Add session"
               : pathname === "/admin/tasks/bulk"
                 ? "Bulk task update"
                 : pathname === "/admin/sessions/bulk"

@@ -209,10 +209,10 @@ export function AdminCommandDialog({
         ]
       : []),
     {
-      value: "create direct session proposal application",
+      value: "add create direct session invited talk keynote",
       icon: Files,
-      label: "Direct session",
-      description: "Enter a proposal on behalf of an invited speaker",
+      label: "Add session",
+      description: "For invited talks and keynotes that don’t need CFP review",
       meta: "Configure",
       run: () => selectCommand("/admin/sessions/new"),
     },

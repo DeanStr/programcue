@@ -102,6 +102,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const filters = parseTaskFilters(search);
   const view = parseTaskWorkspaceView(search);
   const workspace = await new TaskService(env).getAdminWorkspace(viewer);
+  const focusedSpeakerId = search.get("person")?.trim() ?? null;
+  if (
+    focusedSpeakerId !== null &&
+    !workspace.speakers.some((speaker) => speaker.id === focusedSpeakerId)
+  ) {
+    throw new Response("Speaker not found in this event", { status: 404 });
+  }
   const requestedTaskId = filters.task;
   if (
     requestedTaskId &&
@@ -184,6 +191,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     filters,
     filterSignature,
     focusedTaskId: requestedTaskId || null,
+    focusedSpeakerId,
     totalTaskCount: workspace.tasks.length,
     taskSummary,
     /* Due distances are rendered from the server clock so the first paint and

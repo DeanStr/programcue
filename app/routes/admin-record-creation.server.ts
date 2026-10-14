@@ -63,7 +63,7 @@ export async function duplicateCreationWarning(
     ok: false,
     message:
       intent === "create_direct_session"
-        ? "Review the likely existing people before creating this direct session."
+        ? "Review the likely existing people before adding this session."
         : "Review the likely existing people before creating this application record.",
     duplicateCheck: {
       intent,

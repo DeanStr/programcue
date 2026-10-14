@@ -3,6 +3,7 @@ import type { SpeakerService } from "~/modules/speakers/speaker-service.server";
 
 export type AdminSpeakerDetailLoaderData = {
   detail: Awaited<ReturnType<SpeakerService["getAdminSpeakerDetail"]>>;
+  needsPortalAccessForSession: boolean;
   availability: Awaited<ReturnType<SpeakerService["listAdminAvailability"]>>;
   customFields: EventFieldDefinitionValue[];
 };

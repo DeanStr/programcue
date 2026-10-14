@@ -108,7 +108,7 @@ test.describe
       await page.goto("/admin/sessions/new");
       const directSessionForm = page.locator("form").filter({
         has: page.getByRole("button", {
-          name: "Create unscheduled session",
+          name: "Add session",
           exact: true,
         }),
       });
@@ -120,7 +120,7 @@ test.describe
         .fill("priya.speaker@example.com");
       await directSessionForm
         .getByRole("button", {
-          name: "Create unscheduled session",
+          name: "Add session",
           exact: true,
         })
         .click();
@@ -136,7 +136,7 @@ test.describe
       await directSessionForm.getByLabel(/I reviewed these identities/).check();
       await directSessionForm
         .getByRole("button", {
-          name: "Create unscheduled session",
+          name: "Add session",
           exact: true,
         })
         .click();

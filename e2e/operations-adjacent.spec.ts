@@ -351,11 +351,9 @@ test("session tags and archive state use preview, confirmation and real undo", a
   const title = `Sponsor briefing bulk ${unique}`;
   try {
     await waitForInterface(page, "/admin/schedule");
-    await page
-      .getByRole("link", { name: "Create direct session", exact: true })
-      .click();
+    await page.getByRole("link", { name: "Add session", exact: true }).click();
     const directSessionForm = page.locator("form").filter({
-      has: page.getByRole("button", { name: "Create unscheduled session" }),
+      has: page.getByRole("button", { name: "Add session" }),
     });
     await directSessionForm.getByLabel("Session title").fill(title);
     await directSessionForm.getByLabel("Track").selectOption({ index: 1 });
@@ -369,7 +367,7 @@ test("session tags and archive state use preview, confirmation and real undo", a
       .getByLabel("Email")
       .fill(`sponsor-bulk-${unique}@example.com`);
     await directSessionForm
-      .getByRole("button", { name: "Create unscheduled session" })
+      .getByRole("button", { name: "Add session" })
       .click();
     const directSessionStatus = page
       .getByRole("main")

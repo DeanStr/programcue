@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useActionData, useNavigation } from "react-router";
 import { AdminSpeakerDetailHeader } from "~/components/admin-speaker-detail-header";
+import { AdminSpeakerNextSteps } from "~/components/admin-speaker-next-steps";
 import { SpeakerActionNotice } from "~/components/speaker-action-notice";
 import { ConfirmDialog, useConfirm } from "~/components/ui/confirm-dialog";
 import { useUnsavedChanges } from "~/components/ui/use-unsaved-changes";
@@ -71,6 +72,14 @@ export function AdminSpeakerDetailPage({
           fileCount={files.length}
         />
         <SpeakerActionNotice notice={actionData} />
+        <AdminSpeakerNextSteps
+          speaker={{
+            id: profile.id,
+            name: profile.name,
+            workflowStatus: profile.workflowStatus,
+            needsPortalAccessForSession: loaderData.needsPortalAccessForSession,
+          }}
+        />
         <div className="crm-record-grid">
           <AdminSpeakerProfilePanel
             detail={detail}

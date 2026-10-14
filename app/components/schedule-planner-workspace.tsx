@@ -164,7 +164,7 @@ export function SchedulePlannerWorkspace({
             </ButtonLink>
           ) : null}
           <ButtonLink variant="ghost" to="/admin/sessions/new">
-            Create direct session
+            Add session
           </ButtonLink>
           {showAutoPlaceButton ? (
             <Button

@@ -39,6 +39,7 @@ function taskData(overrides: Partial<AdminTasksData> = {}) {
     filters: { task: "", state: "", impact: "", target: "", type: "" },
     filterSignature: "all",
     focusedTaskId: null,
+    focusedSpeakerId: null,
     totalTaskCount: 0,
     taskSummary: {
       readiness: 100,
@@ -70,6 +71,29 @@ describe("administrator task discoverability", () => {
   it("suggests evidence accepted by each task type", () => {
     expect(suggestedTaskEvidenceMode("administrator_only")).toBe("none");
     expect(suggestedTaskEvidenceMode("file_upload")).toBe("file");
+  });
+
+  it("does not offer unrelated task templates for a speaker handoff", () => {
+    const data = taskData({ focusedSpeakerId: "speaker-1", view: "plans" });
+    data.templates = [
+      {
+        ...data.templates[0]!,
+        targetType: "session",
+        name: "Session-only template",
+      },
+    ];
+    const markup = renderWorkspace(data);
+    expect(markup).toContain("No active speaker task templates are available.");
+    expect(
+      markup.match(/<select[^>]*name="templateId"[^>]*>(.*?)<\/select>/s)?.[1],
+    ).toContain("Choose a task template");
+    expect(
+      markup.match(/<select[^>]*name="templateId"[^>]*>(.*?)<\/select>/s)?.[1],
+    ).not.toContain("Session-only template");
+    const assignment = markup.slice(markup.indexOf("tasks-plan-assignment"));
+    expect(assignment).toMatch(
+      /<button[^>]*disabled=""[^>]*>.*?Assign with prerequisites/s,
+    );
   });
 
   it("keeps event-level metrics truthful when no rows match a filter", () => {
