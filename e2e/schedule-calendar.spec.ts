@@ -17,9 +17,11 @@ async function expectStatus(page: Page, text: string | RegExp) {
 }
 
 async function createNextScheduleDraft(page: Page) {
-  await page.getByRole("button", { name: "Create next draft" }).click();
+  await page
+    .getByRole("button", { name: "Edit next version", exact: true })
+    .click();
   const confirmation = page.getByRole("dialog", {
-    name: "Create the next schedule draft?",
+    name: "Edit next version?",
   });
   await expect(confirmation).toContainText(
     "The published programme will not change",
@@ -52,6 +54,7 @@ test("schedule source search updates its URL without reloading the workspace", a
 }) => {
   await waitForInterface(page, "/admin/schedule?sourceQuery=AI");
   await createNextScheduleDraft(page);
+  await page.getByText("Place or move with form", { exact: true }).click();
   await expect(page.getByLabel("Find session")).toBeVisible();
   const routeReads: string[] = [];
   page.on("request", (request) => {
@@ -325,7 +328,9 @@ test("states why the published planner is read-only and clears it on the next dr
   await expect(notice).toContainText(
     "Schedule read-only · Version 1 is published",
   );
-  await expect(notice).toContainText("Create the next draft to edit");
+  await expect(notice).toContainText(
+    "Select Edit next version to make changes",
+  );
 
   const inspector = page.getByRole("complementary", {
     name: "Notes and session content",
@@ -881,4 +886,453 @@ test("schedule contains its room grid and explains mobile scrolling", async ({
       document.documentElement.clientWidth,
   );
   expect(documentOverflow).toBeLessThanOrEqual(1);
+});
+
+test("laptop placement selection keeps the calendar wide and details explicit", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await waitForInterface(page, "/admin/schedule?session=demo-session-1");
+  const inspector = page.getByTestId("schedule-inspector");
+  await expect(inspector).toBeHidden();
+  const canvas = page.locator(".schedule-canvas");
+  expect((await canvas.boundingBox())!.width).toBeGreaterThan(700);
+  await createNextScheduleDraft(page);
+  await page.getByText("Place or move with form", { exact: true }).click();
+  await page
+    .getByRole("combobox", { name: "Session", exact: true })
+    .selectOption({ index: 1 });
+  await expect(inspector).toBeHidden();
+  await page.locator(".schedule-inspector-toggle").click();
+  await expect(inspector).toBeVisible();
+  await expect(
+    page.getByRole("heading", {
+      name: "Notes and session content",
+      exact: true,
+    }),
+  ).toBeFocused();
+  await expect(
+    inspector.getByText("Draft AI copy", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Hide panel" }).click();
+  await expect(page.locator(".schedule-inspector-toggle")).toBeFocused();
+  await page.getByRole("button", { name: "Create break", exact: true }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Create break", exact: true }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(
+    page.getByRole("button", { name: "Create break", exact: true }),
+  ).toBeFocused();
+  const grid = page.locator(".schedule-room-scroll");
+  await grid.evaluate((element) => {
+    element.scrollTop = 400;
+    element.scrollLeft = 250;
+  });
+  const gridBox = (await grid.boundingBox())!;
+  const roomHeader = (await grid.locator(".header").nth(1).boundingBox())!;
+  const timeAxis = (await grid.locator(".time").nth(10).boundingBox())!;
+  expect(roomHeader.y).toBeGreaterThanOrEqual(gridBox.y);
+  expect(roomHeader.y).toBeLessThan(gridBox.y + 60);
+  expect(timeAxis.x).toBeGreaterThanOrEqual(gridBox.x);
+  expect(timeAxis.x).toBeLessThan(gridBox.x + 75);
+  await expect(page.locator(".schedule-day-tabs")).toBeInViewport();
+});
+
+for (const viewport of [
+  { width: 375, height: 667 },
+  { width: 412, height: 915 },
+]) {
+  test(`mobile schedule content remains reachable at ${viewport.width}×${viewport.height}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    await waitForInterface(page, "/admin/schedule");
+    const lastAgendaItem = page.locator(".schedule-agenda-item").last();
+    await lastAgendaItem.scrollIntoViewIfNeeded();
+    await expect(lastAgendaItem).toBeInViewport();
+    const roomGrid = page.getByRole("region", {
+      name: /room schedule\. Scroll horizontally/i,
+    });
+    expect(
+      await roomGrid.evaluate((element) => element.clientHeight),
+    ).toBeGreaterThan(300);
+    await roomGrid.scrollIntoViewIfNeeded();
+    await roomGrid.focus();
+    await page.keyboard.press("PageDown");
+    await expect
+      .poll(() => roomGrid.evaluate((element) => element.scrollTop))
+      .toBeGreaterThan(100);
+    const gridBox = (await roomGrid.boundingBox())!;
+    const headerBox = (await roomGrid
+      .locator(".header")
+      .first()
+      .boundingBox())!;
+    expect(headerBox.y).toBeGreaterThanOrEqual(gridBox.y);
+    expect(headerBox.y).toBeLessThan(gridBox.y + 60);
+
+    await page.getByRole("button", { name: "Track", exact: true }).click();
+    const lastTrackItem = page
+      .locator(".schedule-track-view .card")
+      .last()
+      .locator(":scope > :last-child");
+    await lastTrackItem.scrollIntoViewIfNeeded();
+    await expect(lastTrackItem).toBeInViewport();
+
+    for (const name of ["Day", "Week"]) {
+      await page.getByRole("button", { name, exact: true }).click();
+      const calendar = page.getByRole("region", {
+        name: `${name.toLowerCase()} schedule calendar`,
+      });
+      const frame = calendar.locator(".schedule-standard-scroll-frame");
+      await expect
+        .poll(() => frame.evaluate((element) => element.clientHeight))
+        .toBeGreaterThan(250);
+      await frame.scrollIntoViewIfNeeded();
+      await expect(frame).toBeInViewport();
+    }
+  });
+}
+
+test("longer tablet tracks expose every placement with keyboard scrolling", async ({
+  page,
+}) => {
+  test.slow();
+  const titles = Array.from(
+    { length: 7 },
+    (_, index) =>
+      `Tablet track session ${index + 1}: Practical ways to improve conference operations`,
+  );
+  for (const title of titles) {
+    await waitForInterface(page, "/admin/sessions/new");
+    const form = page.locator("form").filter({
+      has: page.getByRole("button", {
+        name: "Add session",
+        exact: true,
+      }),
+    });
+    await form.getByLabel("Session title").fill(title);
+    await form.getByLabel("Track").selectOption({ index: 1 });
+    await form.getByLabel("Duration (minutes)").fill("5");
+    await form.getByLabel("Find existing speaker 1").fill("Priya");
+    await form
+      .getByRole("button", { name: /Priya Shah.*Already on this event roster/ })
+      .click();
+    await form
+      .getByRole("button", { name: "Add session", exact: true })
+      .click();
+    await form
+      .getByLabel(
+        "I reviewed these identities and confirm the entered names and email addresses.",
+      )
+      .check();
+    await form
+      .getByRole("button", { name: "Add session", exact: true })
+      .click();
+    await expect(page).toHaveURL(/\/admin\/schedule\?session=[^&]+&created=1/u);
+  }
+  await createNextScheduleDraft(page);
+  await page.getByText("Place or move with form", { exact: true }).click();
+  const placement = page.locator("form").filter({
+    has: page.locator('input[name="intent"][value="place"]'),
+  });
+  const starts = await placement
+    .getByRole("combobox", { name: /^Start ·/ })
+    .locator("option")
+    .evaluateAll((options) =>
+      options.map((option) => (option as HTMLOptionElement).value),
+    );
+  for (const [index, title] of titles.entries()) {
+    const sessionId = await placement
+      .getByRole("combobox", { name: "Session", exact: true })
+      .locator("option")
+      .filter({ hasText: title })
+      .evaluate((option) => (option as HTMLOptionElement).value);
+    await placement
+      .getByRole("combobox", { name: "Session", exact: true })
+      .selectOption(sessionId);
+    await placement
+      .getByRole("combobox", { name: /^Start ·/ })
+      .selectOption(starts[starts.length - 8 + index]);
+    await placement
+      .getByRole("button", { name: "Place session", exact: true })
+      .click();
+    await expect(
+      placement.getByRole("button", {
+        name: "Move or resize session",
+        exact: true,
+      }),
+    ).toBeEnabled();
+  }
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await page.getByRole("button", { name: "Track", exact: true }).click();
+  const trackView = page.getByRole("region", {
+    name: "Track schedule",
+    exact: true,
+  });
+  await expect
+    .poll(() =>
+      trackView.evaluate(
+        (element) => element.scrollHeight - element.clientHeight,
+      ),
+    )
+    .toBeGreaterThan(100);
+  await trackView.scrollIntoViewIfNeeded();
+  await trackView.focus();
+  await page.keyboard.press("PageDown");
+  await expect
+    .poll(() => trackView.evaluate((element) => element.scrollTop))
+    .toBeGreaterThan(100);
+  const lastPlacement = trackView.getByText(titles[titles.length - 1], {
+    exact: false,
+  });
+  await lastPlacement.scrollIntoViewIfNeeded();
+  await expect(lastPlacement).toBeInViewport();
+});
+
+test("creates a break from the toolbar and leaves it available for placement", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await waitForInterface(page, "/admin/schedule");
+  await page.getByRole("button", { name: "Create break", exact: true }).click();
+  const dialog = page.getByRole("dialog", {
+    name: "Create break",
+    exact: true,
+  });
+  await dialog
+    .getByRole("textbox", { name: "Label", exact: true })
+    .fill("Planning coffee break");
+  await dialog
+    .getByRole("button", { name: "Create unscheduled break", exact: true })
+    .click();
+  await expect(dialog).toBeHidden();
+  await expectStatus(page, "Break created and ready to place.");
+  await expect(
+    page
+      .locator(".schedule-inbox-list")
+      .getByText("Planning coffee break", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByTestId("schedule-inspector")).toBeHidden();
+});
+
+test("break creation shows validation inside the dialog and prevents duplicate pending submissions", async ({
+  page,
+}) => {
+  await waitForInterface(page, "/admin/schedule");
+  await page.getByRole("button", { name: "Create break", exact: true }).click();
+  const dialog = page.getByRole("dialog", {
+    name: "Create break",
+    exact: true,
+  });
+  await dialog.getByRole("textbox", { name: "Label", exact: true }).fill("   ");
+  await dialog
+    .getByRole("button", { name: "Create unscheduled break", exact: true })
+    .click();
+  await expect(dialog.getByRole("alert")).toContainText(
+    "Break could not be created",
+  );
+  let releaseCreation = () => {};
+  const gate = new Promise<void>((resolve) => {
+    releaseCreation = resolve;
+  });
+  let creations = 0;
+  await page.route("**/admin/schedule.data*", async (route) => {
+    if (
+      route.request().method() === "POST" &&
+      route.request().postData()?.includes("intent=create-break")
+    ) {
+      creations++;
+      await gate;
+    }
+    await route.continue();
+  });
+  await dialog
+    .getByRole("textbox", { name: "Label", exact: true })
+    .fill("Validated coffee break");
+  await dialog
+    .getByRole("button", { name: "Create unscheduled break", exact: true })
+    .click();
+  try {
+    await expect(
+      dialog.getByRole("button", { name: "Creating break…", exact: true }),
+    ).toBeDisabled();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeVisible();
+    expect(creations).toBe(1);
+  } finally {
+    releaseCreation();
+  }
+  await expect(dialog).toBeHidden();
+  await expectStatus(page, "Break created and ready to place.");
+  await expect(
+    page.getByRole("button", { name: "Create break", exact: true }),
+  ).toBeFocused();
+  await page.getByRole("button", { name: "Create break", exact: true }).click();
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("alert")).toHaveCount(0);
+});
+
+test("a committed break warning offers close instead of another creation", async ({
+  page,
+}) => {
+  await waitForInterface(page, "/admin/schedule");
+  await page.route("**/admin/schedule.data*", async (route) => {
+    if (
+      route.request().method() !== "POST" ||
+      !route.request().postData()?.includes("intent=create-break")
+    ) {
+      await route.continue();
+      return;
+    }
+    const response = await route.fetch();
+    expect(response.ok()).toBeTruthy();
+    // The break is really stored. Only the follow-up warning is simulated,
+    // using React Router's ordinary single-fetch result envelope.
+    const body = `${JSON.stringify([
+      { _1: 2 },
+      "data",
+      { _3: 4, _5: 6, _7: 8 },
+      "ok",
+      false,
+      "committed",
+      true,
+      "error",
+      "Break created. Test-only follow-up warning.",
+    ])}\n`;
+    await route.fulfill({ response, status: 207, body });
+  });
+  await page.getByRole("button", { name: "Create break", exact: true }).click();
+  const dialog = page.getByRole("dialog", {
+    name: "Create break",
+    exact: true,
+  });
+  await dialog
+    .getByRole("textbox", { name: "Label", exact: true })
+    .fill("Committed coffee break");
+  await dialog
+    .getByRole("button", { name: "Create unscheduled break", exact: true })
+    .click();
+  await expect(dialog.getByRole("status")).toContainText(
+    "Test-only follow-up warning",
+  );
+  await expect(
+    dialog.getByRole("button", {
+      name: "Create unscheduled break",
+      exact: true,
+    }),
+  ).toHaveCount(0);
+  await dialog
+    .locator(".modal-foot")
+    .getByRole("button", { name: "Close", exact: true })
+    .click();
+  await expect(dialog).toBeHidden();
+  await expectStatus(page, "Test-only follow-up warning");
+  await expect(
+    page
+      .locator(".schedule-inbox-list")
+      .getByText("Committed coffee break", { exact: true }),
+  ).toHaveCount(1);
+});
+
+for (const ok of [true, false]) {
+  test(`an incomplete break response (ok=${ok}) shows an error and prevents retrying`, async ({
+    page,
+  }) => {
+    await waitForInterface(page, "/admin/schedule");
+    await page.route("**/admin/schedule.data*", async (route) => {
+      if (
+        route.request().method() !== "POST" ||
+        !route.request().postData()?.includes("intent=create-break")
+      ) {
+        await route.continue();
+        return;
+      }
+      // Inject a broken response contract without performing a mutation.
+      // A real ambiguous response may have committed, so retry must be blocked.
+      await route.fulfill({
+        status: 200,
+        contentType: "text/x-script",
+        body: `${JSON.stringify([{ _1: 2 }, "data", { _3: 4 }, "ok", ok])}\n`,
+      });
+    });
+    await page
+      .getByRole("button", { name: "Create break", exact: true })
+      .click();
+    const dialog = page.getByRole("dialog", {
+      name: "Create break",
+      exact: true,
+    });
+    await dialog
+      .getByRole("button", { name: "Create unscheduled break", exact: true })
+      .click();
+    await expect(
+      dialog.getByText("Check break creation", { exact: true }),
+    ).toBeVisible();
+    await expect(dialog).toContainText(
+      "Break creation returned an invalid response.",
+    );
+    await expect(
+      dialog.getByRole("button", {
+        name: "Create unscheduled break",
+        exact: true,
+      }),
+    ).toHaveCount(0);
+    await dialog
+      .locator(".modal-foot")
+      .getByRole("button", { name: "Close", exact: true })
+      .click();
+    await expect(dialog).toBeHidden();
+  });
+}
+
+test("alternate calendar views fit the laptop canvas and retain bounded scrolling on smaller screens", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await waitForInterface(page, "/admin/schedule");
+  for (const name of ["Day", "Week"]) {
+    await page
+      .getByRole("button", { name, exact: true, pressed: false })
+      .click();
+    const calendar = page.getByRole("region", {
+      name: `${name.toLowerCase()} schedule calendar`,
+    });
+    await expect(calendar).toBeVisible();
+    await expect
+      .poll(async () => {
+        const frame = calendar.locator(".schedule-standard-scroll-frame");
+        const canvasBox = await frame.boundingBox();
+        const clientHeight = await frame.evaluate(
+          (element) => element.clientHeight,
+        );
+        const calendarBox = await calendar.getByRole("grid").boundingBox();
+        return calendarBox && canvasBox
+          ? calendarBox.y + calendarBox.height - canvasBox.y - clientHeight
+          : Number.POSITIVE_INFINITY;
+      })
+      .toBeLessThanOrEqual(1);
+  }
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await page
+    .getByRole("button", { name: "Room", exact: true, pressed: false })
+    .click();
+  await expect(page.locator(".schedule-day-tabs")).toBeInViewport();
+  const stageBox = (await page.locator(".schedule-stage").boundingBox())!;
+  const sourceBox = (await page.locator(".schedule-source").boundingBox())!;
+  expect(sourceBox.y).toBeGreaterThanOrEqual(stageBox.y + stageBox.height);
+  const scroll = page.locator(".schedule-room-scroll");
+  await expect
+    .poll(async () =>
+      scroll.evaluate((element) => element.scrollHeight - element.clientHeight),
+    )
+    .toBeGreaterThan(100);
+  await scroll.scrollIntoViewIfNeeded();
+  await scroll.evaluate((element) => {
+    element.scrollTop += 400;
+  });
+  const scrollBox = (await scroll.boundingBox())!;
+  const headerBox = (await scroll.locator(".header").first().boundingBox())!;
+  expect(headerBox.y).toBeGreaterThanOrEqual(scrollBox.y);
+  expect(headerBox.y).toBeLessThan(scrollBox.y + 60);
 });

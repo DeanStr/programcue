@@ -30,9 +30,11 @@ async function expectStatus(page: Page, text: string) {
 }
 
 async function createNextScheduleDraft(page: Page) {
-  await page.getByRole("button", { name: "Create next draft" }).click();
+  await page
+    .getByRole("button", { name: "Edit next version", exact: true })
+    .click();
   const confirmation = page.getByRole("dialog", {
-    name: "Create the next schedule draft?",
+    name: "Edit next version?",
   });
   await expect(confirmation).toContainText(
     "The published programme will not change",
@@ -41,6 +43,11 @@ async function createNextScheduleDraft(page: Page) {
 }
 
 async function selectScheduleSessionByTitle(placement: Locator, title: string) {
+  if (!(await placement.getByLabel("Session").isVisible()))
+    await placement
+      .page()
+      .getByText("Place or move with form", { exact: true })
+      .click();
   const sessionSelect = placement.getByLabel("Session");
   const matchingOption = sessionSelect
     .locator("option")

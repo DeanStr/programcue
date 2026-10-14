@@ -54,8 +54,8 @@ export function ScheduleDraftDialog({
   }, [close, fetcher.data, fetcher.state]);
   return (
     <Dialog
-      title="Create the next schedule draft?"
-      description="Prepare a new draft from the current published schedule."
+      title="Edit next version?"
+      description="Your published schedule stays unchanged."
       onClose={close}
       dismissible={!creating}
       footer={

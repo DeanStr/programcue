@@ -32,7 +32,7 @@ export type ScheduleEditLock = {
   reason: ScheduleEditLockReason | null;
 };
 
-const NEXT_DRAFT_REMEDY = "Create the next draft to edit";
+const NEXT_VERSION_REMEDY = "Select Edit next version to make changes";
 
 const FROZEN_SURFACES =
   "The board, schedule notes and session content are frozen";
@@ -72,7 +72,7 @@ export function scheduleEditLock(
         reason: {
           title: `${label} is published`,
           detail: `${FROZEN_SURFACES}.`,
-          remedy: NEXT_DRAFT_REMEDY,
+          remedy: NEXT_VERSION_REMEDY,
           tone: "info",
         },
       };
@@ -82,7 +82,7 @@ export function scheduleEditLock(
         reason: {
           title: `${label} is archived`,
           detail: `${FROZEN_SURFACES} on an archived version.`,
-          remedy: NEXT_DRAFT_REMEDY,
+          remedy: NEXT_VERSION_REMEDY,
           tone: "info",
         },
       };
@@ -92,7 +92,7 @@ export function scheduleEditLock(
         reason: {
           title: `${label} failed to publish`,
           detail: `${FROZEN_SURFACES} after a failed publication.`,
-          remedy: NEXT_DRAFT_REMEDY,
+          remedy: NEXT_VERSION_REMEDY,
           tone: "warning",
         },
       };

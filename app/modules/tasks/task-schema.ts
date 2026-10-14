@@ -2,6 +2,18 @@ import { z } from "zod";
 
 import { isCredentialFreeHttpsUrl } from "~/modules/events/https-url";
 
+export function taskHasParticipantOwner(task: {
+  ownerPersonId: string | null;
+  targetType: string;
+  taskType: string;
+}) {
+  return (
+    task.ownerPersonId !== null &&
+    (task.targetType === "speaker" || task.targetType === "session") &&
+    task.taskType !== "administrator_only"
+  );
+}
+
 export const taskCompatibleEvidenceModes = {
   checklist: ["checkbox", "admin_approval"],
   acknowledgement: ["checkbox", "admin_approval"],

@@ -7,6 +7,7 @@ import {
   normalizeTaskTemplateDraft,
   type TaskTemplateDraftValues,
   taskFormFieldsJsonSchema,
+  taskHasParticipantOwner,
 } from "~/modules/tasks/task-schema";
 import {
   TaskService,
@@ -22,6 +23,7 @@ export const meta = () => [{ title: "Tasks & Readiness · Program Cue" }];
 const taskFiltersSchema = z
   .object({
     task: z.string().max(200),
+    owner: z.enum(["", "participant"]),
     state: z.enum([
       "",
       "open",
@@ -63,6 +65,7 @@ function exactSearchValue(search: URLSearchParams, key: string) {
 export function parseTaskFilters(search: URLSearchParams) {
   const parsed = taskFiltersSchema.safeParse({
     task: exactSearchValue(search, "task"),
+    owner: exactSearchValue(search, "owner"),
     state: exactSearchValue(search, "state"),
     impact: exactSearchValue(search, "impact"),
     target: exactSearchValue(search, "target"),
@@ -100,6 +103,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const { env, viewer } = await administrator(request, context);
   const search = new URL(request.url).searchParams;
   const filters = parseTaskFilters(search);
+  if (!search.has("state") && !filters.task) filters.state = "open";
   const view = parseTaskWorkspaceView(search);
   const workspace = await new TaskService(env).getAdminWorkspace(viewer);
   const focusedSpeakerId = search.get("person")?.trim() ?? null;
@@ -155,6 +159,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
           : task.impact === filters.impact);
       return (
         (!filters.task || task.id === filters.task) &&
+        (!filters.owner || taskHasParticipantOwner(task)) &&
         stateMatches &&
         impactMatches &&
         (!filters.target || task.targetType === filters.target) &&

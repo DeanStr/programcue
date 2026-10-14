@@ -1,4 +1,5 @@
 import { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
+import { taskHasParticipantOwner } from "~/modules/tasks/task-schema";
 import { taskReadinessRelevantSql } from "~/modules/tasks/task-service-foundation.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import {
@@ -24,6 +25,7 @@ type TaskRow = {
   status: string;
   readinessState: string;
   targetType: string;
+  ownerPersonId: string | null;
   taskType: string;
   dueAt: number | null;
   readinessRelevant: number;
@@ -72,6 +74,12 @@ export type CommandCentreSnapshot = {
   workflows: ReadinessWorkflow[];
   blockers: ReadinessBlocker[];
   topAction: ReadinessBlocker | null;
+  workCounts: {
+    proposalsAwaitingDecisions: number;
+    speakersOutstanding: number;
+    sessionsNeedingSlot: number;
+    itemsAwaitingReview: number;
+  };
   deliveryHealth: Array<{
     channel: DeliveryChannel;
     acceptedOrDelivered: number;
@@ -115,7 +123,7 @@ async function loadCommandCentreRecords(
     env.DB.prepare(
       `
         SELECT id, impact, readiness_percent AS readinessPercent, status,
-               readiness_state AS readinessState, target_type AS targetType,
+               readiness_state AS readinessState, target_type AS targetType, owner_person_id AS ownerPersonId,
                task_type AS taskType, due_at AS dueAt,
                CASE WHEN ${taskReadinessRelevantSql("task_instances")}
                     THEN 1 ELSE 0 END AS readinessRelevant
@@ -311,6 +319,27 @@ async function loadCommandCentreRecords(
         completed: number;
         total: number;
       }>(),
+    env.DB.prepare(`
+      SELECT
+        (SELECT COUNT(*) FROM submissions WHERE event_id = ? AND status = 'decision_ready') AS proposalsAwaitingDecisions,
+        (SELECT COUNT(*) FROM sessions session
+          WHERE session.event_id = ? AND session.status IN ('unscheduled','scheduled','published')
+            AND NOT EXISTS (
+              SELECT 1 FROM schedule_entries entry
+               WHERE entry.event_id = session.event_id AND entry.session_id = session.id
+                 AND entry.schedule_version_id = (
+                   SELECT id FROM schedule_versions
+                    WHERE event_id = session.event_id AND status IN ('draft','published')
+                    ORDER BY CASE status WHEN 'draft' THEN 0 ELSE 1 END, version_number DESC
+                    LIMIT 1
+                 )
+            )) AS sessionsNeedingSlot
+    `)
+      .bind(viewer.eventId, viewer.eventId)
+      .first<{
+        proposalsAwaitingDecisions: number;
+        sessionsNeedingSlot: number;
+      }>(),
     env.DB.prepare(
       `
         SELECT channel, COUNT(*) AS total,
@@ -418,8 +447,19 @@ export class ReadinessService {
       upcoming,
       operationSummary,
       operations,
+      workCounts,
       deliveryChannels,
     ] = await loadCommandCentreRecords(this.env, viewer, now);
+
+    if (!workCounts)
+      throw new Error("Command Centre work-count query returned no result.");
+    for (const key of [
+      "proposalsAwaitingDecisions",
+      "sessionsNeedingSlot",
+    ] as const) {
+      if (!Number.isSafeInteger(workCounts[key]) || workCounts[key] < 0)
+        throw new Error(`Command Centre work count ${key} is invalid.`);
+    }
 
     const tasks = taskResult.results.filter(
       (task) => task.readinessRelevant === 1,
@@ -737,6 +777,21 @@ export class ReadinessService {
       workflows,
       blockers,
       topAction: selectTopReadinessAction(blockers),
+      workCounts: {
+        proposalsAwaitingDecisions: workCounts.proposalsAwaitingDecisions,
+        sessionsNeedingSlot: workCounts.sessionsNeedingSlot,
+        speakersOutstanding: new Set(
+          taskResult.results
+            .filter(
+              (task) =>
+                taskHasParticipantOwner(task) && incomplete.has(task.status),
+            )
+            .map((task) => task.ownerPersonId),
+        ).size,
+        itemsAwaitingReview: taskResult.results.filter(
+          (task) => task.status === "submitted",
+        ).length,
+      },
       deliveryHealth: deliveryChannels.results.map((row) => ({
         ...row,
         percentage: percent(row.acceptedOrDelivered, row.total),

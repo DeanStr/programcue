@@ -61,6 +61,11 @@ describe("onboarding task service", () => {
       const second = tasks.find((task) => task.templateId === dependent)!;
       expect(first.status).toBe("not_started");
       expect(second.status).toBe("blocked");
+      expect(
+        (await service.getAdminWorkspace(admin)).tasks.find(
+          (task) => task.id === second.id,
+        )?.blockingDependencies,
+      ).toEqual([{ id: first.id, title: "Confirm test profile" }]);
 
       await service.completeParticipant(speaker, {
         taskId: first.id,
@@ -71,6 +76,11 @@ describe("onboarding task service", () => {
       expect(tasks.find((task) => task.id === second.id)?.status).toBe(
         "not_started",
       );
+      expect(
+        (await service.getAdminWorkspace(admin)).tasks.find(
+          (task) => task.id === second.id,
+        )?.blockingDependencies,
+      ).toEqual([]);
       const unlocked = tasks.find((task) => task.id === second.id)!;
       await service.completeParticipant(speaker, {
         taskId: unlocked.id,

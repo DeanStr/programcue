@@ -179,7 +179,7 @@ async function waitForSurfaceReady(page: Page, name: string) {
     ).toBeVisible();
   } else if (name === "tasks-readiness") {
     await expect(
-      page.getByRole("heading", { name: "Filter assigned work" }),
+      page.getByRole("link", { name: "Outstanding", exact: true }),
     ).toBeVisible();
     await expect(
       page.getByRole("navigation", { name: "Task workspace views" }),
@@ -234,7 +234,17 @@ async function captureLaptopViewport(page: Page, name: string) {
     },
   );
   await expect(page.locator("main#main")).toBeInViewport();
-  await expect(page).toHaveScreenshot(`${name}.png`);
+  const dateCopy =
+    name === "tasks-readiness"
+      ? await page.addStyleTag({
+          content: ".task-due-distance { visibility: hidden !important; }",
+        })
+      : null;
+  try {
+    await expect(page).toHaveScreenshot(`${name}.png`);
+  } finally {
+    await dateCopy?.evaluate((style) => style.parentNode?.removeChild(style));
+  }
   await expectDocumentContained(page, `${name} at the laptop viewport`);
 }
 
@@ -450,7 +460,7 @@ test.describe
     test("Schedule planner keeps the focused planning canvas visible", async ({
       page,
     }) => {
-      await openHydrated(page, "/admin/schedule?session=demo-session-1");
+      await openHydrated(page, "/admin/schedule");
       await expect(
         page.getByRole("heading", { name: "Schedule planner", level: 1 }),
       ).toBeInViewport();

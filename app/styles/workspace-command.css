@@ -190,8 +190,7 @@
   background: var(--surface-sunken);
 }
 
-/* --- Readiness ----------------------------------------------------------
-   The number is the page. Queue supports it. */
+/* Detailed readiness follows the concrete work overview. */
 .command-hero {
   align-items: start;
   display: grid;
@@ -238,7 +237,7 @@
 }
 .command-score-reading strong {
   color: var(--score-tone);
-  font-size: var(--display-1);
+  font-size: var(--text-3xl);
   font-weight: var(--weight-extrabold);
   letter-spacing: -0.045em;
   line-height: 0.82;
@@ -831,4 +830,54 @@ ol.timeline > li > small {
   display: block;
   min-width: 0;
   overflow-wrap: break-word;
+}
+
+.command-work-overview {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.8fr) minmax(0, 1.2fr);
+  align-items: start;
+  gap: var(--space-5);
+}
+.command-work-counts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+.command-work-count {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  color: inherit;
+  background: var(--surface-sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  text-decoration: none;
+}
+.command-work-count:hover {
+  background: var(--brand-50);
+}
+.command-work-count strong {
+  font-size: var(--text-2xl);
+}
+.command-work-count span {
+  font-size: var(--text-xs);
+}
+@media (max-width: 1000px) {
+  .command-work-overview {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 760px) {
+  .command-work-counts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.command-hero.is-clear {
+  grid-template-columns: minmax(0, 1fr);
+}
+.command-hero.is-clear .command-score {
+  max-width: 640px;
 }

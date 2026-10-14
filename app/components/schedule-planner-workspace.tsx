@@ -6,6 +6,8 @@ import { ScheduleContentWorkflows } from "~/components/schedule-content-workflow
 import { Button, ButtonLink, IconButton } from "~/components/ui/button";
 import { statusPresentation } from "~/components/ui/domain-status-badge";
 import { StatusNotice } from "~/components/ui/status-notice";
+import { SessionCopyAction } from "~/modules/ai/contextual-ai-actions";
+import { ScheduleBreakDialog } from "./schedule-break-dialog";
 import { ScheduleCanvasPanel } from "./schedule-planner-canvas-panel";
 import {
   AutoPlacementPreviewDialog,
@@ -35,15 +37,18 @@ export function SchedulePlannerWorkspace({
   workspace: SchedulePlannerWorkspaceData;
 }) {
   const [draftOpen, setDraftOpen] = useState(false);
-  const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [breakOpen, setBreakOpen] = useState(false);
+  const [breakNotice, setBreakNotice] = useState<{
+    message: string;
+    warning: boolean;
+  } | null>(null);
   const inspectorToggleRef = useRef<HTMLButtonElement>(null);
   const inspectorTitleRef = useRef<HTMLHeadingElement>(null);
   const inspectorFocusAfterToggle = useRef(false);
   useEffect(() => {
-    if (loadedWorkspace.createdSessionId || loadedWorkspace.focusedSessionId) {
-      setInspectorOpen(true);
-    }
-  }, [loadedWorkspace.createdSessionId, loadedWorkspace.focusedSessionId]);
+    setInspectorOpen(window.matchMedia("(min-width: 1440px)").matches);
+  }, []);
   useEffect(() => {
     if (!inspectorFocusAfterToggle.current) return;
     inspectorFocusAfterToggle.current = false;
@@ -166,6 +171,16 @@ export function SchedulePlannerWorkspace({
           <ButtonLink variant="ghost" to="/admin/sessions/new">
             Add session
           </ButtonLink>
+          <Button
+            variant="ghost"
+            type="button"
+            onClick={() => {
+              setBreakNotice(null);
+              setBreakOpen(true);
+            }}
+          >
+            Create break
+          </Button>
           {showAutoPlaceButton ? (
             <Button
               variant="ghost"
@@ -212,7 +227,7 @@ export function SchedulePlannerWorkspace({
               disabled={navigation.state !== "idle"}
               onClick={() => setDraftOpen(true)}
             >
-              Create next draft
+              Edit next version
             </Button>
           ) : (
             <Form method="post">
@@ -236,6 +251,18 @@ export function SchedulePlannerWorkspace({
           title={`Schedule read-only · ${editLock.reason.title}`}
         >
           {editLock.reason.detail} {editLock.reason.remedy}.
+        </StatusNotice>
+      ) : null}
+      {breakNotice ? (
+        <StatusNotice
+          tone={breakNotice.warning ? "warning" : "success"}
+          title={
+            breakNotice.warning
+              ? "Break created; follow-up needed"
+              : "Break created"
+          }
+        >
+          {breakNotice.message}
         </StatusNotice>
       ) : null}
       {workspace.createdSessionId ? (
@@ -488,7 +515,7 @@ export function SchedulePlannerWorkspace({
             fetcher={fetcher}
             placementAvailable={placementAvailable}
             quickSessionId={quickSessionId}
-            selectQuickSession={inspectSession}
+            selectQuickSession={selectQuickSession}
             allPlacementSlots={allPlacementSlots}
             quickStartsAt={quickStartsAt}
             setQuickStartsAt={setQuickStartsAt}
@@ -590,6 +617,19 @@ export function SchedulePlannerWorkspace({
               </IconButton>
             </div>
             <div className="schedule-inspector-body">
+              {quickSession ? (
+                <details className="pc-disclosure">
+                  <summary>
+                    <strong>Draft AI copy</strong>
+                    <span className="help">Public description only</span>
+                  </summary>
+                  <SessionCopyAction
+                    sessionId={quickSession.id}
+                    key={`ai-copy-${quickSession.id}`}
+                  />
+                </details>
+              ) : null}
+
               <ScheduleContentWorkflows
                 workspace={workspace}
                 session={quickSession ?? null}
@@ -627,6 +667,16 @@ export function SchedulePlannerWorkspace({
           ) : null}
         </DragOverlay>
       </DndContext>
+      {breakOpen ? (
+        <ScheduleBreakDialog
+          resources={resourceInventory}
+          onClose={() => setBreakOpen(false)}
+          onCreated={(notice) => {
+            setBreakNotice(notice);
+            setBreakOpen(false);
+          }}
+        />
+      ) : null}
       <ScheduleScenariosPanel
         workspace={workspace}
         autoPlacementFetcher={autoPlacementFetcher}

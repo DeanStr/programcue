@@ -200,7 +200,7 @@ export function ScheduleStandardCalendar({
             eventResizableFromStart={false}
             allDaySlot={false}
             nowIndicator
-            height={view === "list" ? "auto" : 720}
+            height={view === "list" ? "auto" : "100%"}
             slotDuration="00:15:00"
             snapDuration="00:05:00"
             scrollTime="07:00:00"

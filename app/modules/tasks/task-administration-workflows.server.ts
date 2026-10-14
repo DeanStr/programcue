@@ -258,7 +258,14 @@ export class TaskAdministrationWorkflows extends TaskServiceFoundation {
                ti.completed_by_person_id AS completedByPersonId,
                ti.last_operation_id AS lastOperationId,
                ti.evidence_mode AS evidenceMode,
-               ti.configuration_json AS configurationJson
+               ti.configuration_json AS configurationJson,
+               (SELECT json_group_array(json_object('id', prerequisite.id, 'title', prerequisite.title))
+                  FROM task_instance_dependencies dependency
+                  JOIN task_instances prerequisite
+                    ON prerequisite.id = dependency.depends_on_task_id
+                   AND prerequisite.event_id = ti.event_id
+                 WHERE dependency.task_id = ti.id
+                   AND prerequisite.status NOT IN ('completed','waived')) AS blockingDependenciesJson
                , CASE WHEN ${participantActionableTaskSql("ti")}
                       THEN 1 ELSE 0 END AS participantActionable,
                  CASE WHEN ${taskReadinessRelevantSql("ti")}
@@ -273,7 +280,7 @@ export class TaskAdministrationWorkflows extends TaskServiceFoundation {
       `,
       )
         .bind(viewer.eventId)
-        .all<TaskRow>(),
+        .all<TaskRow & { blockingDependenciesJson: string }>(),
       this.env.DB.prepare(
         `
         SELECT DISTINCT p.id, p.display_name AS name, p.email
@@ -366,7 +373,7 @@ export class TaskAdministrationWorkflows extends TaskServiceFoundation {
           .filter((row) => row.templateId === template.id)
           .map((row) => row.dependsOnTemplateId),
       })),
-      tasks: tasks.results.map((task) => {
+      tasks: tasks.results.map(({ blockingDependenciesJson, ...task }) => {
         const isSessionDetailsReview = isSessionDetailsReviewConfiguration(
           task.configurationJson,
         );
@@ -384,6 +391,9 @@ export class TaskAdministrationWorkflows extends TaskServiceFoundation {
         }
         return {
           ...task,
+          blockingDependencies: z
+            .array(z.object({ id: z.string(), title: z.string() }))
+            .parse(JSON.parse(blockingDependenciesJson)),
           isSessionDetailsReview,
           participantActionable: task.participantActionable === 1,
           readinessRelevant: task.readinessRelevant === 1,

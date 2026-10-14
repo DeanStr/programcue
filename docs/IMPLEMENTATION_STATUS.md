@@ -1,6 +1,6 @@
 # Verified implementation status
 
-Evidence recorded through **13 September 2026**.
+Evidence recorded through **14 October 2026** (latest deployment evidence remains 13 September).
 This is the current capability,
 requirements and acceptance index; consolidation does not constitute a new
 verification or deployment. The [product specification](../sessionboard-replacement-full-scope-implementation-specification-with-competition-ux.md)
@@ -43,6 +43,46 @@ Status terms:
 - **Demonstration only:** explicitly gated fixtures or simulations.
 - **Not implemented / external acceptance outstanding:** absent behavior or an
   existing path that still lacks the relevant external verification.
+
+## Local workflow presentation — 14 October 2026
+
+**Production slice; local evidence only.** The connected schedule planner starts
+with its inspector collapsed below 1440px, keeps placement selection separate
+from opening details, moves break creation to a toolbar dialog and AI copy to
+session details, and retains day/room/time context in the scrolling calendar.
+Tasks defaults to Outstanding with Overdue, Needs review and All quick choices;
+additional filters, revision details and readiness explanations use disclosures.
+Blocked tasks name and link their unfinished prerequisites. Session creation uses
+**Add session**, and published schedules offer **Edit next version** with an
+explicit unchanged-publication explanation.
+
+Command Centre leads with the ranked action and linked counts for decision-ready
+proposals, distinct participant owners with incomplete speaker or session requirements,
+sessions without an active-version placement, and submitted tasks. Readiness
+calculation remains below those queues. The exact count definitions are recorded
+in [DECISIONS.md](DECISIONS.md).
+
+Evidence: focused component/service tests, `e2e/schedule-calendar.spec.ts`,
+`e2e/task-bulk-undo.spec.ts`, and refreshed laptop schedule/task plus desktop/mobile
+Command Centre and mobile task snapshots. This does not establish deployment or
+external-provider acceptance. The complete release browser/cross-browser gate and
+a full film render were not requested or run; the film's pinned snapshot hashes
+are synchronized with the reviewed captures. Review corrections add in-dialog
+break failure/progress/committed-warning coverage, fitted Day/Week calendars,
+a bounded 1024px room grid, active custom-filter indicators and accurate empty
+queue guidance. Command Centre readiness/action annotation frames were rendered
+and visually checked against the refreshed screenshot; this is preview evidence,
+not a newly released film.
+The fallback review also verifies that missing or malformed dashboard counts fail
+explicitly and incomplete break responses show an error with submission stopped:
+19 readiness service checks and five break-creation Chromium workflows passed.
+The requested CLI review found and reproduced a collapsed mobile room grid at
+375×667. Mobile agenda and Track content now grow with the page, while room and
+Day/Week calendars scroll within their own bounds. A subsequent review found
+clipping in longer tablet Track views, which now expose a labelled keyboard
+scrolling region. Eleven selected schedule checks, including 375×667 and 412×915
+regressions and a tablet track with seven additional real session placements,
+plus the laptop visual check passed. The laptop snapshot required no change.
 
 ## Latest recorded deployments
 

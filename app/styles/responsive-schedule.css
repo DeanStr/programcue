@@ -99,6 +99,7 @@
   }
   .schedule-workspace,
   .schedule-workspace.is-inspecting {
+    height: auto;
     flex: 1 1 auto;
   }
 }
@@ -112,10 +113,20 @@
     grid-template-columns: 1fr;
     min-height: 0;
   }
+  .schedule-source {
+    order: 2;
+    max-height: 280px;
+  }
+  .schedule-stage {
+    order: 1;
+    height: max(28rem, calc(100dvh - 300px));
+  }
   .schedule-inspector {
+    order: 3;
     min-height: 22rem;
   }
   .schedule-inspector-toggle {
+    order: 3;
     flex-direction: row;
     align-items: baseline;
     justify-content: flex-start;
@@ -151,7 +162,19 @@
     order: 2;
   }
   .schedule-stage {
+    height: auto;
     order: 1;
+  }
+  .schedule-stage .schedule-canvas {
+    height: auto;
+  }
+  .schedule-room-frame {
+    flex: none;
+    height: 360px;
+  }
+  .schedule-standard-calendar {
+    flex: none;
+    height: max(28rem, calc(100dvh - 300px));
   }
   .schedule-inspector {
     order: 3;

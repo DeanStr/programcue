@@ -1,6 +1,6 @@
 import { ListChecks } from "lucide-react";
 import { useEffect } from "react";
-import { Form } from "react-router";
+import { Form, Link } from "react-router";
 import { Button, ButtonAnchor } from "~/components/ui/button";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EventDateTime } from "~/components/ui/event-date-time";
@@ -71,9 +71,6 @@ export function AdminAssignedTasksPanel({
     <section className="card pad tasks-assigned">
       <div className="card-title">
         <h2>Assigned work</h2>
-        <span className="help right">
-          Dependencies refresh before every read
-        </span>
       </div>
       <section
         className="table-wrap pc-responsive-table-wrap"
@@ -101,11 +98,12 @@ export function AdminAssignedTasksPanel({
                   <div className="pc-record-stack">
                     <strong>{task.title}</strong>
                     <small className="subtle">
-                      {task.targetLabel ?? task.ownerName ?? task.targetId}
-                      {" · "}
-                      {task.taskType.replaceAll("_", " ")}
-                      {" · "}
-                      Revision {task.revision}
+                      {task.ownerName ?? task.targetLabel ?? task.targetId}
+                      {task.ownerName &&
+                      task.targetLabel &&
+                      task.ownerName !== task.targetLabel
+                        ? ` · ${task.targetLabel}`
+                        : ""}
                     </small>
                   </div>
                 </td>
@@ -148,6 +146,18 @@ export function AdminAssignedTasksPanel({
                 <td data-label="Status">
                   <div className="pc-record-stack">
                     <DomainStatusBadge domain="task" status={task.status} />
+                    {task.status === "blocked"
+                      ? task.blockingDependencies.map((dependency) => (
+                          <small className="subtle" key={dependency.id}>
+                            Waiting for:{" "}
+                            <Link
+                              to={`/admin/tasks?task=${encodeURIComponent(dependency.id)}`}
+                            >
+                              {dependency.title}
+                            </Link>
+                          </small>
+                        ))
+                      : null}
                     {task.taskType !== "administrator_only" &&
                     !task.participantActionable ? (
                       <small className="status warning">
@@ -390,6 +400,14 @@ export function AdminAssignedTasksPanel({
                       </Form>
                     </details>
                   ) : null}
+                  <details>
+                    <summary className="task-ghost">Task details</summary>
+                    <p className="help">{task.description}</p>
+                    <p className="help">
+                      {task.taskType.replaceAll("_", " ")} · Revision{" "}
+                      {task.revision}
+                    </p>
+                  </details>
                   <details>
                     <summary className="task-ghost">Add comment</summary>
                     <Form method="post" className="stack mt">

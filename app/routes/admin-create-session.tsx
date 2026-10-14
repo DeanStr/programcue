@@ -175,15 +175,6 @@ export default function AdminCreateSession({
               : "schedule"}
           </Link>
           <h1>Add session</h1>
-          <p>
-            For invited talks, keynotes and other sessions that don’t need CFP
-            review.
-          </p>
-          <p className="help">
-            Sessions start in the unscheduled programme. Speaker invitations are
-            handled when you add the session; speakers must confirm
-            participation before it can be published.
-          </p>
         </div>
       </div>
       <ActionNotice result={actionData} />

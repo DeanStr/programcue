@@ -41,9 +41,11 @@ test("creates a one-time confidential review URL and invalidates it on revoke an
     ),
   ).toBeVisible();
   await expect(createReviewLink).toHaveAttribute("aria-describedby");
-  await page.getByRole("button", { name: "Create next draft" }).click();
+  await page
+    .getByRole("button", { name: "Edit next version", exact: true })
+    .click();
   const nextDraft = page.getByRole("dialog", {
-    name: "Create the next schedule draft?",
+    name: "Edit next version?",
   });
   await nextDraft.getByRole("button", { name: "Confirm new draft" }).click();
   await expect(
@@ -186,9 +188,11 @@ test("review link history does not collapse the planner canvas", async ({
 }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
   await waitForInterface(page, "/admin/schedule");
-  await page.getByRole("button", { name: "Create next draft" }).click();
   await page
-    .getByRole("dialog", { name: "Create the next schedule draft?" })
+    .getByRole("button", { name: "Edit next version", exact: true })
+    .click();
+  await page
+    .getByRole("dialog", { name: "Edit next version?" })
     .getByRole("button", { name: "Confirm new draft" })
     .click();
   await expect(

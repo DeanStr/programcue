@@ -129,6 +129,7 @@ describe("administrator task filters", () => {
     );
     expect(completed.filters).toEqual({
       task: "",
+      owner: "",
       state: "completed",
       target: "speaker",
       type: "short_form",
@@ -145,6 +146,18 @@ describe("administrator task filters", () => {
       ),
     ).toBe(true);
 
+    const participantOwned = await load("?owner=participant&state=open");
+    expect(participantOwned.tasks.map((task) => task.id)).toEqual(
+      expect.arrayContaining(["task-demo-handbook", "task-demo-slides"]),
+    );
+    expect(
+      participantOwned.tasks.every(
+        (task) =>
+          task.ownerPersonId !== null &&
+          task.taskType !== "administrator_only" &&
+          task.targetType !== "event",
+      ),
+    ).toBe(true);
     const incomplete = await load("?state=open");
     expect(incomplete.tasks.length).toBeGreaterThan(0);
     expect(
@@ -297,6 +310,8 @@ describe("administrator task filters", () => {
     "?state=incomplete",
     "?state=unknown",
     "?target=person",
+    "?owner=unknown",
+    "?owner=participant&owner=participant",
     "?type=upload",
     "?impact=urgent",
     "?state=open&state=completed",

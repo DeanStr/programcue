@@ -24,7 +24,7 @@
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/command-centre-desktop-chromium-linux.png",
-      "sha256": "cff700539faf0616548cb94eee03924615175b5e348fcee7c382fbfd662e7172"
+      "sha256": "830bc16640029bfb5628dd9520f00d802cfee111a58581db722e4d652d6ef2bc"
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/communications-desktop-chromium-linux.png",
@@ -88,7 +88,7 @@
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/schedule-planner-laptop-chromium-linux.png",
-      "sha256": "9c0f0e9548a3a57cb6a0fca763c267aba550d4de39f7283a9384fbc416c988f3"
+      "sha256": "dac5754ef40559822f63638ee4fba54c5460cc8f841150dc5b9bb2db175c4002"
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/speaker-dashboard-desktop-chromium-linux.png",
@@ -104,7 +104,7 @@
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/tasks-readiness-laptop-chromium-linux.png",
-      "sha256": "fa2f106285914d4b4b398a9981419fa830efc7d78d3fdbb61f324aa49bb78da3"
+      "sha256": "b5b437d8bd78b456bb5ce4b5233773be577fd7f0e948c250744081069223b2bb"
     }
   ],
   "anchors": [

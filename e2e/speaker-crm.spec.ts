@@ -167,6 +167,7 @@ test("adding a speaker hands off to portal access, a session and onboarding", as
   await page.getByRole("button", { name: /Assigned work/ }).click();
   await expect(page).toHaveURL(/\/admin\/tasks\?person=/u);
   const assignedHandoffUrl = page.url();
+  await page.locator(".tasks-filters summary").click();
   await page.getByRole("link", { name: "Clear", exact: true }).click();
   await expect(page).toHaveURL(/\/admin\/tasks$/u);
   await page

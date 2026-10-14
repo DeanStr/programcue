@@ -341,7 +341,12 @@ export function ScheduleCanvasPanel({
           onSelectSession={selectQuickSession}
         />
       ) : view === "track" ? (
-        <div className="grid grid-2 schedule-track-view">
+        <section
+          className="grid grid-2 schedule-track-view"
+          aria-label="Track schedule"
+          // biome-ignore lint/a11y/noNoninteractiveTabindex: Scrollable track records need keyboard focus so arrow and page keys can expose overflow content.
+          tabIndex={0}
+        >
           {trackGroups.map((track) => (
             <section className="card pad" key={track.id}>
               <h3>{track.name}</h3>
@@ -361,7 +366,7 @@ export function ScheduleCanvasPanel({
                 ))}
             </section>
           ))}
-        </div>
+        </section>
       ) : (
         <>
           <div className="schedule-canvas-meta">

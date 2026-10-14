@@ -1,9 +1,4 @@
-import {
-  AlertTriangle,
-  CheckCircle2,
-  ListChecks,
-  ListFilter,
-} from "lucide-react";
+import { AlertTriangle, CheckCircle2, ListFilter } from "lucide-react";
 import { Form, Link, useLocation, useNavigate } from "react-router";
 
 import { AdminAssignedTasksPanel } from "~/components/admin-assigned-tasks-panel";
@@ -18,7 +13,7 @@ import { ReadinessWeightingCard } from "~/components/ui/readiness-weighting";
 import type { TaskTemplateDraftValues } from "~/modules/tasks/task-schema";
 import type { AdminTasksData, TaskWorkspaceView } from "~/routes/admin-tasks";
 
-const TASK_FILTER_KEYS = ["task", "state", "impact", "target", "type"];
+const TASK_FILTER_KEYS = ["task", "state", "impact", "target", "type", "owner"];
 
 const TASK_WORKSPACE_PANELS = [
   { id: "assigned", label: "Assigned work" },
@@ -74,7 +69,7 @@ export function AdminTasksWorkspace({
   function showWorkspaceView(view: TaskWorkspaceView) {
     const search = new URLSearchParams(location.search);
     for (const key of TASK_FILTER_KEYS) {
-      if (!search.get(key)) search.delete(key);
+      if (key !== "state" && !search.get(key)) search.delete(key);
     }
     if (view === "assigned") search.delete("view");
     else search.set("view", view);
@@ -93,9 +88,6 @@ export function AdminTasksWorkspace({
       <div className="page-head pc-page-header">
         <div>
           <h1>Tasks &amp; readiness</h1>
-          <p>
-            Manage assigned work, onboarding plans and reusable task templates.
-          </p>
         </div>
         <div className="page-actions">
           <ButtonLink variant="primary" to="/admin/tasks/bulk">
@@ -125,135 +117,162 @@ export function AdminTasksWorkspace({
         aria-label="Assigned work"
         hidden={data.view !== "assigned"}
       >
-        <section
-          className="card tasks-filters mb"
-          aria-labelledby="task-filters-heading"
-        >
-          <div className="card-title">
-            <h3 id="task-filters-heading">Filter assigned work</h3>
-            <span className="help right">
-              <ListFilter aria-hidden size={14} /> Shareable URL filters
-            </span>
-          </div>
-          <Form method="get" className="grid grid-5" key={data.filterSignature}>
-            <input type="hidden" name="view" value="assigned" />
-            <label className="label">
-              Status
-              <select
-                className="select"
-                name="state"
-                defaultValue={data.filters.state}
+        <div className="tasks-quick-choices">
+          {[
+            { label: "Outstanding", state: "open" },
+            { label: "Overdue", state: "overdue" },
+            { label: "Needs review", state: "submitted" },
+            { label: "All", state: "" },
+          ].map((choice) => {
+            const search = new URLSearchParams(location.search);
+            search.set("state", choice.state);
+            search.delete("task");
+            search.delete("view");
+            return (
+              <Link
+                key={choice.label}
+                className={`tab${data.filters.state === choice.state ? " active" : ""}`}
+                aria-current={
+                  data.filters.state === choice.state ? "page" : undefined
+                }
+                preventScrollReset
+                to={`/admin/tasks?${search.toString()}`}
               >
-                <option value="">All statuses</option>
-                <option value="open">Incomplete</option>
-                <option value="not_started">Not started</option>
-                <option value="in_progress">In progress</option>
-                <option value="blocked">Blocked</option>
-                <option value="submitted">Awaiting review</option>
-                <option value="completed">Completed</option>
-                <option value="waived">Waived</option>
-                <option value="overdue">Overdue</option>
-                <option value="due_soon">Due in 7 days</option>
-              </select>
-            </label>
-            <label className="label">
-              Scope
-              <select
-                className="select"
-                name="target"
-                defaultValue={data.filters.target}
-              >
-                <option value="">All scopes</option>
-                <option value="speaker">Speaker</option>
-                <option value="session">Session</option>
-                <option value="event">Event</option>
-              </select>
-            </label>
-            <label className="label">
-              Task type
-              <select
-                className="select"
-                name="type"
-                defaultValue={data.filters.type}
-              >
-                <option value="">All task types</option>
-                <option value="checklist">Checklist</option>
-                <option value="acknowledgement">Acknowledgement</option>
-                <option value="short_form">Short form</option>
-                <option value="file_upload">File upload</option>
-                <option value="link_visit">Link visit</option>
-                <option value="administrator_only">Administrator only</option>
-              </select>
-            </label>
-            <label className="label">
-              Impact
-              <select
-                className="select"
-                name="impact"
-                defaultValue={data.filters.impact}
-              >
-                <option value="">All impacts</option>
-                <option value="critical">Critical</option>
-                <option value="non_critical">Non-critical</option>
-                <option value="high">High</option>
-                <option value="medium">Medium</option>
-                <option value="low">Low</option>
-              </select>
-            </label>
-            <div className="page-actions" style={{ alignItems: "end" }}>
-              <Button type="submit">Apply filters</Button>
-              <ButtonLink to="/admin/tasks">Clear</ButtonLink>
-            </div>
-          </Form>
-        </section>
-        {Object.values(data.filters).some(Boolean) ? (
-          <div className="pc-status-notice is-info mb" role="status">
-            <ListChecks aria-hidden size={18} />
-            <div className="pc-status-notice-copy">
-              <strong>Filtered task records</strong>
-              <div>
-                Showing {data.tasks.length} of {data.totalTaskCount} tasks.{" "}
-                <Link to="/admin/tasks">Clear filters</Link>
+                {choice.label}
+              </Link>
+            );
+          })}
+          <details className="tasks-filters">
+            <summary>
+              <ListFilter aria-hidden size={14} /> Filters
+              {[
+                data.filters.owner,
+                data.filters.target,
+                data.filters.type,
+                data.filters.impact,
+                data.filters.task,
+                !["", "open", "overdue", "submitted"].includes(
+                  data.filters.state,
+                ),
+              ].filter(Boolean).length > 0
+                ? " · Active"
+                : ""}
+            </summary>
+            <Form
+              method="get"
+              className="grid grid-5"
+              key={data.filterSignature}
+            >
+              <input type="hidden" name="view" value="assigned" />
+              {data.filters.task ? (
+                <input type="hidden" name="task" value={data.filters.task} />
+              ) : null}
+              <label className="label">
+                Status
+                <select
+                  className="select"
+                  name="state"
+                  defaultValue={data.filters.state}
+                >
+                  <option value="">All statuses</option>
+                  <option value="open">Incomplete</option>
+                  <option value="not_started">Not started</option>
+                  <option value="in_progress">In progress</option>
+                  <option value="blocked">Blocked</option>
+                  <option value="submitted">Awaiting review</option>
+                  <option value="completed">Completed</option>
+                  <option value="waived">Waived</option>
+                  <option value="overdue">Overdue</option>
+                  <option value="due_soon">Due in 7 days</option>
+                </select>
+              </label>
+              <label className="label">
+                Scope
+                <select
+                  className="select"
+                  name="target"
+                  defaultValue={data.filters.target}
+                >
+                  <option value="">All scopes</option>
+                  <option value="speaker">Speaker</option>
+                  <option value="session">Session</option>
+                  <option value="event">Event</option>
+                </select>
+              </label>
+              <label className="label">
+                Task type
+                <select
+                  className="select"
+                  name="type"
+                  defaultValue={data.filters.type}
+                >
+                  <option value="">All task types</option>
+                  <option value="checklist">Checklist</option>
+                  <option value="acknowledgement">Acknowledgement</option>
+                  <option value="short_form">Short form</option>
+                  <option value="file_upload">File upload</option>
+                  <option value="link_visit">Link visit</option>
+                  <option value="administrator_only">Administrator only</option>
+                </select>
+              </label>
+              <label className="label">
+                Impact
+                <select
+                  className="select"
+                  name="impact"
+                  defaultValue={data.filters.impact}
+                >
+                  <option value="">All impacts</option>
+                  <option value="critical">Critical</option>
+                  <option value="non_critical">Non-critical</option>
+                  <option value="high">High</option>
+                  <option value="medium">Medium</option>
+                  <option value="low">Low</option>
+                </select>
+              </label>
+              <label className="label">
+                Owner
+                <select
+                  className="select"
+                  name="owner"
+                  defaultValue={data.filters.owner}
+                >
+                  <option value="">All owners</option>
+                  <option value="participant">Participants</option>
+                </select>
+              </label>
+              <div className="page-actions" style={{ alignItems: "end" }}>
+                <Button type="submit">Apply filters</Button>
+                <ButtonLink to="/admin/tasks">Clear</ButtonLink>
               </div>
-            </div>
-          </div>
-        ) : null}
-        <div className="card tasks-summary mb">
-          <section className="metric">
-            <div className="label">Readiness</div>
-            <div className="value">{data.taskSummary.readiness}%</div>
-            <a className="metric-note" href="#readiness-weighting">
-              Impact-weighted
-            </a>
-          </section>
-          <section className="metric">
-            <div className="label">Outstanding</div>
-            <div className="value">{data.taskSummary.outstanding}</div>
-          </section>
-          {data.taskSummary.evidenceReview > 0 ? (
-            <section className="metric">
-              <div className="label">Evidence review</div>
-              <div className="value">{data.taskSummary.evidenceReview}</div>
-            </section>
-          ) : null}
-          {data.taskSummary.blocked > 0 ? (
-            <section className="metric">
-              <div className="label">Blocked</div>
-              <div className="value">{data.taskSummary.blocked}</div>
-            </section>
-          ) : null}
-          {data.taskSummary.overdue > 0 ? (
-            <section className="metric">
-              <div className="label">Overdue</div>
-              <div className="value">{data.taskSummary.overdue}</div>
-            </section>
-          ) : null}
+            </Form>
+          </details>
         </div>
-        <details className="tasks-readiness-more mb" id="readiness-weighting">
+        <p className="tasks-summary">
+          <a href="#readiness-weighting">
+            <strong>{data.taskSummary.readiness}%</strong> ready
+          </a>
+          <span>
+            <strong>{data.taskSummary.outstanding}</strong> outstanding
+          </span>
+          <span>
+            <strong>{data.taskSummary.evidenceReview}</strong> need review
+          </span>
+          <span>
+            <strong>{data.taskSummary.blocked}</strong> blocked
+          </span>
+          <span>
+            <strong>{data.taskSummary.overdue}</strong> overdue
+          </span>
+          <span className="tasks-result-count">
+            Showing {data.tasks.length} of {data.totalTaskCount} tasks
+          </span>
+        </p>
+        <AdminAssignedTasksPanel data={data} busy={busy} />
+        <details className="tasks-readiness-more mt" id="readiness-weighting">
           <summary>How task readiness is calculated</summary>
           <ReadinessWeightingCard />
         </details>
-        <AdminAssignedTasksPanel data={data} busy={busy} />
       </section>
 
       <section

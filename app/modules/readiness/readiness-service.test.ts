@@ -108,6 +108,130 @@ describe("D1-backed command centre", () => {
     );
   });
 
+  it("counts actionable records, distinct speakers and placements in the active version", async () => {
+    const service = new ReadinessService(
+      env as unknown as CloudflareEnvironment,
+    );
+    const before = await service.getCommandCentre(viewer);
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO people (id, email, display_name) VALUES ('work-count-speaker', 'work-count-speaker@example.test', 'Count Speaker')",
+      ),
+      env.DB.prepare(`INSERT INTO task_instances (
+        id, event_id, target_type, target_id, owner_person_id, title, task_type, impact,
+        status, readiness_state, readiness_percent, created_at, updated_at
+      ) VALUES
+        ('work-count-1', ?, 'speaker', 'work-count-speaker', 'work-count-speaker', 'Slides', 'file_upload', 'high', 'not_started', 'on_track', 0, unixepoch(), unixepoch()),
+        ('work-count-2', ?, 'session', 'work-count-session', 'work-count-speaker', 'Biography', 'short_form', 'low', 'submitted', 'on_track', 75, unixepoch(), unixepoch())`).bind(
+        viewer.eventId,
+        viewer.eventId,
+      ),
+      env.DB.prepare(`INSERT INTO submissions (
+        id, event_id, public_reference, title, status, answers_json, submitted_snapshot_json, submitted_at, revision, created_at, updated_at
+      ) VALUES ('work-count-proposal', ?, 'PC-WORK-COUNT', 'Ready for decision', 'decision_ready', '{}', '{}', unixepoch(), 1, unixepoch(), unixepoch())`).bind(
+        viewer.eventId,
+      ),
+      // A source status alone is insufficient: the planner needs a real placement.
+      env.DB.prepare(`INSERT INTO sessions (
+        id, event_id, title, slug, format, duration_minutes, status, visibility, revision, created_at, updated_at
+      ) VALUES ('work-count-session', ?, 'Needs a slot', 'work-count-session', 'presentation', 30, 'scheduled', 'private', 1, unixepoch(), unixepoch())`).bind(
+        viewer.eventId,
+      ),
+    ]);
+    const after = await service.getCommandCentre(viewer);
+    expect(after.workCounts).toEqual({
+      proposalsAwaitingDecisions:
+        before.workCounts.proposalsAwaitingDecisions + 1,
+      speakersOutstanding: before.workCounts.speakersOutstanding + 1,
+      sessionsNeedingSlot: before.workCounts.sessionsNeedingSlot + 1,
+      itemsAwaitingReview: before.workCounts.itemsAwaitingReview + 1,
+    });
+    await env.DB.prepare(
+      "UPDATE task_instances SET status = 'completed' WHERE id IN ('work-count-1','work-count-2') AND event_id = ?",
+    )
+      .bind(viewer.eventId)
+      .run();
+    const completed = await service.getCommandCentre(viewer);
+    expect(completed.workCounts.speakersOutstanding).toBe(
+      before.workCounts.speakersOutstanding,
+    );
+    expect(completed.workCounts.itemsAwaitingReview).toBe(
+      before.workCounts.itemsAwaitingReview,
+    );
+    await env.DB.batch([
+      env.DB.prepare(
+        "DELETE FROM task_instances WHERE id IN ('work-count-1','work-count-2') AND event_id = ?",
+      ).bind(viewer.eventId),
+      env.DB.prepare(
+        "DELETE FROM submissions WHERE id = 'work-count-proposal' AND event_id = ?",
+      ).bind(viewer.eventId),
+      env.DB.prepare(
+        "DELETE FROM sessions WHERE id = 'work-count-session' AND event_id = ?",
+      ).bind(viewer.eventId),
+      env.DB.prepare("DELETE FROM people WHERE id = 'work-count-speaker'"),
+    ]);
+  });
+
+  it.each([
+    { result: null, error: "work-count query returned no result" },
+    { result: {}, error: "work count proposalsAwaitingDecisions is invalid" },
+    {
+      result: { proposalsAwaitingDecisions: null, sessionsNeedingSlot: 0 },
+      error: "work count proposalsAwaitingDecisions is invalid",
+    },
+    {
+      result: { proposalsAwaitingDecisions: "0", sessionsNeedingSlot: 0 },
+      error: "work count proposalsAwaitingDecisions is invalid",
+    },
+    {
+      result: { proposalsAwaitingDecisions: 0, sessionsNeedingSlot: -1 },
+      error: "work count sessionsNeedingSlot is invalid",
+    },
+    {
+      result: { proposalsAwaitingDecisions: 0, sessionsNeedingSlot: 0.5 },
+      error: "work count sessionsNeedingSlot is invalid",
+    },
+  ])(
+    "rejects an invalid work-count result: $result",
+    async ({ result, error }) => {
+      const testEnv = env as unknown as CloudflareEnvironment;
+      const database = new Proxy(testEnv.DB, {
+        get(target, property) {
+          if (property === "prepare")
+            return (sql: string) => {
+              const statement = target.prepare(sql);
+              if (!sql.includes("AS proposalsAwaitingDecisions"))
+                return statement;
+              const failedStatement: D1PreparedStatement = new Proxy(
+                statement,
+                {
+                  get(target, property) {
+                    if (property === "bind") return () => failedStatement;
+                    if (property === "first") return async () => result;
+                    const value = Reflect.get(target, property);
+                    return typeof value === "function"
+                      ? value.bind(target)
+                      : value;
+                  },
+                },
+              );
+              return failedStatement;
+            };
+          const value = Reflect.get(target, property);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+      const service = new ReadinessService(
+        new Proxy(testEnv, {
+          get(target, property) {
+            return property === "DB" ? database : Reflect.get(target, property);
+          },
+        }),
+      );
+      await expect(service.getCommandCentre(viewer)).rejects.toThrow(error);
+    },
+  );
+
   it("fails closed before calculating readiness from an unreadable Airtable projection", async () => {
     const unavailable = new Error("Airtable projection is unavailable.");
     const assertReadable = vi.fn(async () => {

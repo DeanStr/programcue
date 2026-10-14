@@ -20,9 +20,13 @@ describe("schedule edit lock", () => {
 
     expect(published.editable).toBe(false);
     expect(published.reason?.title).toBe("Version 3 is published");
-    expect(published.reason?.remedy).toBe("Create the next draft to edit");
+    expect(published.reason?.remedy).toBe(
+      "Select Edit next version to make changes",
+    );
     expect(archived.reason?.title).toBe("Version 2 is archived");
-    expect(archived.reason?.remedy).toBe("Create the next draft to edit");
+    expect(archived.reason?.remedy).toBe(
+      "Select Edit next version to make changes",
+    );
     expect(failed.reason?.title).toBe("Version 5 failed to publish");
     expect(failed.reason?.tone).toBe("warning");
   });

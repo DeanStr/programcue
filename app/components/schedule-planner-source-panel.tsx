@@ -5,7 +5,6 @@ import { useSearchParams } from "react-router";
 import { Button, ButtonLink } from "~/components/ui/button";
 import { EmptyState } from "~/components/ui/states";
 import { requireValue } from "~/lib/required-value";
-import { SessionCopyAction } from "~/modules/ai/contextual-ai-actions";
 import type { ScheduleEditLock } from "~/modules/schedule/schedule-edit-lock";
 import type { ScheduleSession } from "~/modules/schedule/schedule-service.server";
 import type {
@@ -40,6 +39,7 @@ function DraggableSession({
   focused,
   placementAvailable,
   readOnlyMessage,
+  onSelect,
 }: {
   session: ScheduleSession;
   formatLabel: string;
@@ -47,6 +47,7 @@ function DraggableSession({
   focused: boolean;
   placementAvailable: boolean;
   readOnlyMessage: string | null;
+  onSelect(sessionId: string): void;
 }) {
   const disabled = scheduled || !placementAvailable;
   const { attributes, listeners, setNodeRef, transform, isDragging } =
@@ -68,6 +69,9 @@ function DraggableSession({
       }
       style={{ transform: CSS.Translate.toString(transform) }}
       disabled={disabled}
+      onClick={() => {
+        if (!isDragging) onSelect(session.id);
+      }}
       {...listeners}
       {...attributes}
     >
@@ -129,7 +133,7 @@ export function ScheduleSourcePanel({
   unassign(entry: ScheduleEntry): void;
   submitQuickPlacement(): void;
 }) {
-  const [placementFormOpen, setPlacementFormOpen] = useState(true);
+  const [placementFormOpen, setPlacementFormOpen] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const [sessionQuery, setSessionQuery] = useState(
     searchParams.get("sourceQuery") ?? "",
@@ -365,18 +369,6 @@ export function ScheduleSourcePanel({
             </fetcher.Form>
           </details>
         ) : null}
-        {quickSession ? (
-          <details className="pc-disclosure">
-            <summary>
-              <strong>Draft AI copy</strong>
-              <span className="help">Public description only</span>
-            </summary>
-            <SessionCopyAction
-              sessionId={quickSession.id}
-              key={`ai-copy-${quickSession.id}`}
-            />
-          </details>
-        ) : null}
         {placementAvailable && quickSession ? (
           <details
             className="pc-disclosure"
@@ -455,57 +447,6 @@ export function ScheduleSourcePanel({
             </fetcher.Form>
           </details>
         ) : null}
-        <details className="pc-disclosure">
-          <summary>
-            <strong>Create break</strong>
-          </summary>
-          <fetcher.Form method="post" className="stack mt">
-            <input type="hidden" name="intent" value="create-break" />
-            <label className="label">
-              Label
-              <input
-                className="field"
-                name="title"
-                defaultValue="Refreshment break"
-                maxLength={160}
-                required
-              />
-            </label>
-            <label className="label">
-              Duration (minutes)
-              <input
-                className="field"
-                name="durationMinutes"
-                type="number"
-                min={5}
-                max={480}
-                defaultValue={30}
-                required
-              />
-            </label>
-            {resourceInventory.length ? (
-              <fieldset className="stack pc-plain-fieldset">
-                <legend className="label">Exclusive resources</legend>
-                {resourceInventory.map((resource) => (
-                  <label className="toggle" key={resource}>
-                    <input
-                      type="checkbox"
-                      name="requiredResource"
-                      value={resource}
-                    />{" "}
-                    {resource}
-                  </label>
-                ))}
-              </fieldset>
-            ) : (
-              <p className="help">
-                No room resources are configured; this break will not reserve
-                one.
-              </p>
-            )}
-            <Button type="submit">Create unscheduled break</Button>
-          </fetcher.Form>
-        </details>
       </div>
       <div className="schedule-inbox-list">
         {unscheduledSessions.map((session) => (
@@ -517,9 +458,10 @@ export function ScheduleSourcePanel({
               session.format,
             )}
             scheduled={false}
-            focused={workspace.focusedSessionId === session.id}
+            focused={quickSessionId === session.id}
             placementAvailable={placementAvailable}
             readOnlyMessage={editLock.reason?.remedy ?? null}
+            onSelect={selectQuickSession}
           />
         ))}
         {placedSessions.length ? (
@@ -536,9 +478,10 @@ export function ScheduleSourcePanel({
               session.format,
             )}
             scheduled
-            focused={workspace.focusedSessionId === session.id}
+            focused={quickSessionId === session.id}
             placementAvailable={placementAvailable}
             readOnlyMessage={editLock.reason?.remedy ?? null}
+            onSelect={selectQuickSession}
           />
         ))}
         {matchingVisibleSessions.length === 0 ? (

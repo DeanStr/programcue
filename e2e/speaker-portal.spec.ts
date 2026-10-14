@@ -351,9 +351,11 @@ test.describe("optional session-details review", () => {
     ]);
     await page.goto("/admin/schedule?session=session-demo-speaker");
     await page.locator("body[data-hydrated='true']").waitFor();
-    await page.getByRole("button", { name: "Create next draft" }).click();
+    await page
+      .getByRole("button", { name: "Edit next version", exact: true })
+      .click();
     const confirmation = page.getByRole("dialog", {
-      name: "Create the next schedule draft?",
+      name: "Edit next version?",
     });
     await confirmation
       .getByRole("button", { name: "Confirm new draft" })

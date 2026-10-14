@@ -56,7 +56,7 @@ test("task dashboard filters visible work and keeps template creation open", asy
 }) => {
   await selectAdministrator(page);
   await waitForInterface(page, "/admin/tasks");
-  const filters = page.getByRole("region", { name: "Filter assigned work" });
+  const filters = page.locator(".tasks-filters");
   const assignedWork = page.getByRole("region", {
     name: "Assigned work",
     exact: true,
@@ -66,7 +66,7 @@ test("task dashboard filters visible work and keeps template creation open", asy
     name: "Create task template",
   });
 
-  await expect(filters.getByLabel("Status")).toBeVisible();
+  await expect(filters.getByLabel("Status")).toBeHidden();
   await expect(templateCreation.getByLabel("Due date anchor")).toBeVisible();
   await expect(
     templateCreation.getByRole("button", { name: "Create template" }),
@@ -109,6 +109,7 @@ test("task dashboard filters visible work and keeps template creation open", asy
     page.getByRole("status").filter({ hasText: "Speaker deadline extended" }),
   ).toBeVisible();
 
+  await filters.locator("summary").click();
   await filters.getByLabel("Status").selectOption("completed");
   await filters.getByRole("button", { name: "Apply filters" }).click();
   await expect(page).toHaveURL(/state=completed/u);
@@ -120,6 +121,9 @@ test("task dashboard filters visible work and keeps template creation open", asy
     assignedWork.getByText("Upload presentation slides", { exact: true }),
   ).toHaveCount(0);
 
+  await filters.locator("summary").click();
+  await expect(filters.locator("summary")).toHaveText("Filters · Active");
+  await filters.locator("summary").click();
   await filters.getByLabel("Status").selectOption("not_started");
   await filters.getByLabel("Task type").selectOption("file_upload");
   await filters.getByRole("button", { name: "Apply filters" }).click();
@@ -189,11 +193,12 @@ test("task status bulk actions require an exact preview and can be cancelled", a
     "href",
     "/admin/communications?audience=overdue_speakers&category=task_reminder",
   );
-  await waitForInterface(page, "/admin/tasks");
+  await waitForInterface(page, "/admin/tasks?state=");
   const unchangedTask = page.getByRole("row").filter({
     has: page.getByText("Complete your speaker profile", { exact: true }),
   });
   await expect(unchangedTask.getByLabel("Complete status")).toBeVisible();
+  await unchangedTask.getByText("Task details", { exact: true }).click();
   await expect(unchangedTask).toContainText("Revision 1");
 });
 
@@ -508,4 +513,68 @@ test("organizers request private headshots and speakers see image limits", async
   await task.getByRole("button", { name: "Upload file" }).click();
   await expect(task).toContainText("The file exceeds this event's 10 MB limit");
   await expect(task).not.toContainText("Uploaded file versions");
+});
+
+test("laptop tasks start with actionable rows and quick choices", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await waitForInterface(page, "/admin/tasks");
+  await expect(page.getByLabel("Status", { exact: true })).toBeHidden();
+  const rows = page.locator(".tasks-assigned tbody tr");
+  await expect(rows).toHaveCount(2);
+  await expect(rows.nth(0)).toBeInViewport();
+  await expect(rows.nth(1)).toBeInViewport();
+  await expect(
+    page.getByText("Dependencies refresh before every read"),
+  ).toHaveCount(0);
+  await page.getByRole("link", { name: "All", exact: true }).click();
+  await expect(rows).toHaveCount(3);
+  await page.reload();
+  await expect(rows).toHaveCount(3);
+  await page.getByRole("button", { name: /Templates/ }).click();
+  await page.getByRole("button", { name: /Assigned work/ }).click();
+  await expect(rows).toHaveCount(3);
+  await page.getByRole("link", { name: "Needs review", exact: true }).click();
+  await expect(page).toHaveURL(/state=submitted/);
+  await expect(
+    page.getByText("No assigned work matches these filters"),
+  ).toBeVisible();
+  await page.getByRole("link", { name: "Overdue", exact: true }).click();
+  await expect(page).toHaveURL(/state=overdue/);
+  await page.getByRole("link", { name: "Outstanding", exact: true }).click();
+  await expect(rows).toHaveCount(2);
+});
+
+test("dashboard work counts open the corresponding filtered records", async ({
+  page,
+}) => {
+  await waitForInterface(page, "/admin/tasks");
+  await waitForInterface(page, "/public/programme/future-of-events-2027");
+  await waitForInterface(page, "/admin/command");
+  const work = page.getByRole("region", { name: "Work needing attention" });
+  await expect(
+    work.getByRole("link", {
+      name: "1 Speakers with outstanding requirements",
+    }),
+  ).toBeVisible();
+  await expect(
+    work.getByRole("link", { name: /Proposals awaiting decisions/ }),
+  ).toHaveAttribute("href", "/admin/submissions?status=decision_ready");
+  await expect(
+    work.getByRole("link", { name: /Sessions still needing a slot/ }),
+  ).toHaveAttribute("href", "/admin/schedule?filter=unscheduled");
+  await expect(
+    work.getByRole("link", { name: /Items awaiting organiser review/ }),
+  ).toHaveAttribute("href", "/admin/tasks?state=submitted");
+  await work
+    .getByRole("link", { name: /Speakers with outstanding requirements/ })
+    .click();
+  await expect(page).toHaveURL(/owner=participant&state=open/);
+  await expect(page.locator(".tasks-assigned tbody tr")).toHaveCount(2);
+  await expect(
+    page
+      .locator(".tasks-assigned")
+      .getByText("Upload presentation slides", { exact: true }),
+  ).toBeVisible();
 });

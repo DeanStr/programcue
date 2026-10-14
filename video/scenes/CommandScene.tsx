@@ -258,8 +258,8 @@ export function CommandScene({ duration }: ProductSceneProps) {
     duration - 40,
     duration,
   );
-  const cursorLocalX = between(frame, 394, 478, 742, 1034, ease);
-  const cursorLocalY = between(frame, 394, 478, 112, 204, ease);
+  const cursorLocalX = between(frame, 394, 478, 360, 515, ease);
+  const cursorLocalY = between(frame, 394, 478, 112, 188, ease);
   const cursorPress =
     timelineFrame >= clickStart && timelineFrame <= clickRelease
       ? timelineFrame <= clickStart + 5
@@ -303,9 +303,6 @@ export function CommandScene({ duration }: ProductSceneProps) {
   // coordinates below, so they never drift from the UI they explain.
   const readinessProgress = between(frame, 100, 190, 0, 1, softEase);
   const actionProgress = between(frame, 350, 438, 0, 1, softEase);
-  const actionEdgeFade = between(frame, 390, 460, 0, 1, softEase);
-  const actionEdgeMatteWidth = mix(0, 360, actionEdgeFade);
-  const actionEdgeFeather = mix(0, 10, actionEdgeFade);
   const commandZoom =
     frame < 100
       ? between(frame, 0, 100, 1, 1.08, softEase)
@@ -318,16 +315,12 @@ export function CommandScene({ duration }: ProductSceneProps) {
             : frame < 610
               ? 1.48
               : between(frame, 610, 678, 1.48, 1.06, softEase);
-  // Keep the readiness pass flush to the browser edge so a zoom never opens
-  // a paper-coloured gutter. The action pass can travel left, but is clamped
-  // so the enlarged image still covers the browser viewport.
+  // The refreshed dashboard puts the ranked action at the left, with its
+  // smaller readiness calculation beneath it. Both passes stay in that column.
   const readinessPanX = 0;
-  const actionPanX = Math.max(
-    commandWindowWidth - 1085 * commandZoom,
-    548 - 742 * commandZoom,
-  );
-  const readinessPanY = -18;
-  const actionPanY = -24;
+  const actionPanX = 0;
+  const readinessPanY = -150;
+  const actionPanY = -18;
   const focusPanX =
     frame < 350
       ? mix(0, readinessPanX, readinessProgress)
@@ -466,57 +459,27 @@ export function CommandScene({ duration }: ProductSceneProps) {
         x={718}
         y={178}
       >
-        <div
-          aria-hidden="true"
-          style={{
-            background:
-              "linear-gradient(90deg, #f7f6f0 0%, #f7f6f0 96%, rgba(247,246,240,0) 100%)",
-            bottom: 0,
-            left: 0,
-            opacity: actionEdgeFade,
-            pointerEvents: "none",
-            position: "absolute",
-            top: 0,
-            width: actionEdgeMatteWidth + actionEdgeFeather,
-            zIndex: 1,
-          }}
-        />
-        <div
-          aria-hidden="true"
-          style={{
-            background:
-              "linear-gradient(90deg, #f7f6f0 0%, #f7f6f0 94%, rgba(247,246,240,0) 100%)",
-            bottom: 0,
-            left: 0,
-            opacity: actionEdgeFade,
-            pointerEvents: "none",
-            position: "absolute",
-            top: commandImageTop + 302 * commandZoom,
-            width: 640,
-            zIndex: 1,
-          }}
-        />
         <FocusRing
           color={PALETTE.copper}
-          height={150}
+          height={145}
           label="Needs attention"
           opacity={between(frame, 176, 224, 0, 1, ease) * focusOne}
           radius={7}
           scale={commandZoom}
-          width={365}
+          width={496}
           x={commandPanX + 187 * commandZoom}
-          y={commandImageTop + 153 * commandZoom}
+          y={commandImageTop + 303 * commandZoom}
         />
         <FocusRing
           color={PALETTE.copper}
-          height={125}
+          height={88}
           label="Do this next"
           labelPosition="top"
           opacity={focusTwo}
           radius={8}
           scale={commandZoom}
-          width={503}
-          x={commandPanX + 568 * commandZoom}
+          width={353}
+          x={commandPanX + 187 * commandZoom}
           y={commandImageTop + 153 * commandZoom}
         />
         <div
@@ -528,16 +491,16 @@ export function CommandScene({ duration }: ProductSceneProps) {
             borderRadius: 7 * commandZoom,
             boxShadow: `0 0 ${28 * actionResponse}px rgba(190,98,66,.28), inset 0 0 ${18 * actionResponse}px rgba(190,98,66,.12)`,
             display: "flex",
-            height: 82 * commandZoom,
+            height: 75 * commandZoom,
             justifyContent: "flex-end",
-            left: commandPanX + 576 * commandZoom,
+            left: commandPanX + 191 * commandZoom,
             opacity: actionResponse,
             pointerEvents: "none",
             position: "absolute",
-            top: commandImageTop + 181 * commandZoom,
+            top: commandImageTop + 156 * commandZoom,
             transform: `scale(${1 - cursorPress * 0.008})`,
             transformOrigin: "center",
-            width: 487 * commandZoom,
+            width: 343 * commandZoom,
             zIndex: 2,
           }}
         >

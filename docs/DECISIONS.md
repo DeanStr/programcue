@@ -2439,3 +2439,57 @@ coverage. Publication independently prepares and validates actual placements, so
 failed conflict or assist exercises do not skip otherwise reachable widgets.
 Readiness and publication failures still block their consumers. The 98 upstream
 criteria and weights remain unchanged; the revised setup requires fresh evidence.
+
+
+## 14 October 2026 — Put programme work before supporting controls
+
+At widths below 1440px, the schedule inspector starts collapsed, including
+session deep links. Selecting a source session or changing the placement form
+selects it without opening the inspector; opening the notes/content control or
+activating a calendar card explicitly opens details. Larger desktops retain the
+open inspector default. Break creation belongs in the page toolbar and AI copy
+belongs in session details. Keep calendar scrolling inside the planner so day,
+room and time context remains visible.
+
+Assigned work defaults to Outstanding; an explicit empty `state` query means All
+and survives reloads and workspace tab changes. Quick choices reuse the existing
+server status filters. Additional filters remain behind a disclosure. Show owner
+and deadline on task rows, with type/revision in details and named prerequisites
+only when they block a task.
+
+Command Centre leads with the ranked next action and linked record counts.
+Awaiting decisions means `decision_ready` proposals; outstanding speakers are
+distinct participant owners of incomplete speaker or session tasks, including
+slides attached to a session. Event and administrator-only tasks do not contribute
+to that count. The linked task queue uses the same ownership rule. Organiser review
+means submitted tasks. Sessions needing a slot are sessions without a placement
+in the same active draft/latest published version used by the planner, regardless
+of their source status. These counts describe their linked queues rather than
+readiness scoring, whose existing calculation stays below them.
+
+
+### 14 October 2026 — Review corrections to workflow presentation
+
+Break creation has a dedicated dialog fetcher. Keep validation and committed
+follow-up warnings inside the modal, disable submission and dismissal while
+saving, and offer only Close after a committed warning. Completion depends on
+the response outcome, not its display wording; reopening starts a fresh form.
+
+Day and Week calendars fill the available canvas rather than using a fixed
+720px height. Stacked tablet layouts keep a bounded scrolling canvas and put
+the calendar before the session tray, preserving the day, room and time axes.
+On mobile, allow the stage and canvas to grow for the agenda and Track view;
+bound the room grid and Day/Week calendars individually. A shared mobile height
+cap can otherwise collapse the room grid or clip the bottom of these views.
+Track view has an explicitly labelled, focusable scrolling region so longer
+tracks remain reachable by keyboard inside the bounded tablet/laptop canvas.
+Collapsed Filters marks custom status and focused-task filters as active. An
+empty ranked action is an invitation to inspect queues, not a claim that their
+record counts are zero. Film focus rings and pointer motion must move with their
+pinned screenshot targets; snapshot hashes alone cannot establish that alignment.
+
+The new dashboard count query must return a row with nonnegative safe-integer
+counts; missing or malformed values fail explicitly rather than becoming zero.
+Break creation requires a success message or an error explanation. An incomplete
+response stops further submission and asks the organiser to refresh and check
+the schedule before retrying, because the mutation may already have committed.

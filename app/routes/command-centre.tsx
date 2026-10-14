@@ -373,10 +373,10 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
   ]
     .filter(Boolean)
     .join(" · ");
-  const blockerCount = loaderData.blockers.length;
   const remainingBlockers = loaderData.blockers.filter(
     (blocker) => blocker.key !== loaderData.topAction?.key,
   );
+  const blockerCount = remainingBlockers.length;
   const blockerGroups = Object.entries(blockerGroupLabels)
     .map(([key, label]) => ({
       key: key as keyof typeof blockerGroupLabels,
@@ -409,6 +409,64 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
           </>
         }
       />
+
+      <section
+        className="command-region command-work-overview"
+        aria-label="Work needing attention"
+      >
+        <div>
+          {loaderData.topAction ? (
+            <Link
+              className={`command-top-action ${loaderData.topAction.severity === "danger" ? "is-danger" : "is-warning"}`}
+              to={loaderData.topAction.href}
+            >
+              <span className="command-top-action-kicker">Do this next</span>
+              <strong>{loaderData.topAction.action}</strong>
+              <small>
+                {loaderData.topAction.label} · {loaderData.topAction.count}{" "}
+                affected
+              </small>
+              <ChevronRight aria-hidden size={18} />
+            </Link>
+          ) : (
+            <p className="help">Choose a work queue to continue.</p>
+          )}
+        </div>
+        <div className="command-work-counts">
+          {[
+            {
+              label: "Proposals awaiting decisions",
+              count: loaderData.workCounts.proposalsAwaitingDecisions,
+              href: "/admin/submissions?status=decision_ready",
+            },
+            {
+              label: "Speakers with outstanding requirements",
+              count: loaderData.workCounts.speakersOutstanding,
+              href: "/admin/tasks?owner=participant&state=open",
+            },
+            {
+              label: "Sessions still needing a slot",
+              count: loaderData.workCounts.sessionsNeedingSlot,
+              href: "/admin/schedule?filter=unscheduled",
+            },
+            {
+              label: "Items awaiting organiser review",
+              count: loaderData.workCounts.itemsAwaitingReview,
+              href: "/admin/tasks?state=submitted",
+            },
+          ].map((item) => (
+            <Link
+              className="command-work-count"
+              to={item.href}
+              key={item.label}
+            >
+              <strong className="pc-num">{item.count}</strong>
+              <span>{item.label}</span>
+              <ChevronRight aria-hidden size={16} />
+            </Link>
+          ))}
+        </div>
+      </section>
 
       {completedSetupSteps < loaderData.setupGuide.length ? (
         <section
@@ -458,7 +516,10 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
         </section>
       ) : null}
 
-      <section className="command-region command-hero" aria-label="Readiness">
+      <section
+        className={`command-region command-hero${remainingBlockers.length ? "" : " is-clear"}`}
+        aria-label="Readiness"
+      >
         <section
           className="command-score"
           data-state={loaderData.readiness.status}
@@ -493,32 +554,16 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
           </details>
         </section>
 
-        <section className="command-queue" id="action-queue">
-          <div className="command-panel-head command-queue-head">
-            <h2 className="command-section-head">Action queue</h2>
-            <p>
-              {blockerCount}
-              {blockerCount === 1 ? " condition" : " conditions"}
-            </p>
-          </div>
-          {blockerCount ? (
+        {remainingBlockers.length ? (
+          <section className="command-queue" id="action-queue">
+            <div className="command-panel-head command-queue-head">
+              <h2 className="command-section-head">Action queue</h2>
+              <p>
+                {blockerCount}
+                {blockerCount === 1 ? " condition" : " conditions"}
+              </p>
+            </div>
             <div className="command-blockers">
-              {loaderData.topAction ? (
-                <Link
-                  className={`command-top-action ${loaderData.topAction.severity === "danger" ? "is-danger" : "is-warning"}`}
-                  to={loaderData.topAction.href}
-                >
-                  <span className="command-top-action-kicker">
-                    Do this next
-                  </span>
-                  <strong>{loaderData.topAction.action}</strong>
-                  <small>
-                    {loaderData.topAction.label} · {loaderData.topAction.count}{" "}
-                    affected
-                  </small>
-                  <ChevronRight aria-hidden size={18} />
-                </Link>
-              ) : null}
               {blockerGroups.map((group) => (
                 <section className="command-blocker-group" key={group.key}>
                   <h3>{group.label}</h3>
@@ -552,14 +597,8 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
                 </section>
               ))}
             </div>
-          ) : (
-            <EmptyState
-              title="No blockers"
-              description="No declared blockers in the current records."
-              tone="positive"
-            />
-          )}
-        </section>
+          </section>
+        ) : null}
       </section>
 
       <section

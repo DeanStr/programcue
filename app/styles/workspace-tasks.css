@@ -1,47 +1,48 @@
 /* Tasks */
 
-/* Compact strip, not five equal tiles. Zero stays visible; it just stops
-   competing with the numbers that actually moved. */
+.tasks-quick-choices {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+.tasks-filters {
+  flex: 1 1 auto;
+}
+.tasks-filters > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  cursor: pointer;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+}
+.tasks-filters[open] {
+  flex-basis: 100%;
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.tasks-filters[open] > summary {
+  margin-bottom: var(--space-3);
+}
 .tasks-summary {
   display: flex;
   flex-wrap: wrap;
-  gap: 0;
-  overflow: hidden;
+  gap: var(--space-2) var(--space-4);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  margin: 0 0 var(--space-3);
 }
-.tasks-summary .metric {
-  flex: 1 1 140px;
+.tasks-summary strong {
+  color: var(--ink);
 }
-.tasks-summary .metric {
-  padding: var(--space-3) var(--space-4);
-  border: 0;
-  border-right: 1px solid var(--line);
-  border-radius: 0;
-  box-shadow: none;
+.tasks-result-count {
+  margin-left: auto;
 }
-.tasks-summary .metric:last-child {
-  border-right: 0;
-}
-.tasks-summary .metric .value {
-  font-size: var(--text-xl);
-  margin: 2px 0;
-}
-.tasks-summary .metric[data-zero="true"] .value {
-  color: var(--text-tertiary);
-  font-weight: var(--weight-semibold);
-}
-
-.tasks-filters {
-  padding: var(--space-3) var(--space-4);
-}
-.tasks-filters .card-title {
-  margin-bottom: var(--space-2);
-}
-.tasks-filters .card-title h3 {
-  font-size: var(--text-sm);
-}
-
 .tasks-workspace-tabs {
-  margin-bottom: var(--space-5);
+  margin-bottom: var(--space-3);
 }
 .tasks-workspace-panel {
   min-width: 0;
@@ -270,9 +271,6 @@
   }
   .tasks-plan-assignment {
     grid-column: auto;
-  }
-  .tasks-summary .metric {
-    flex-basis: 50%;
   }
   .tasks-assigned .pc-responsive-table tbody {
     gap: 0;

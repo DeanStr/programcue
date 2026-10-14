@@ -36,7 +36,14 @@ function taskData(overrides: Partial<AdminTasksData> = {}) {
       },
     ],
     sessions: [],
-    filters: { task: "", state: "", impact: "", target: "", type: "" },
+    filters: {
+      owner: "",
+      task: "",
+      state: "",
+      impact: "",
+      target: "",
+      type: "",
+    },
     filterSignature: "all",
     focusedTaskId: null,
     focusedSpeakerId: null,
@@ -110,6 +117,7 @@ describe("administrator task discoverability", () => {
         filters: {
           task: "",
           state: "waived",
+          owner: "",
           target: "",
           type: "",
           impact: "",
@@ -117,10 +125,11 @@ describe("administrator task discoverability", () => {
       }),
     );
 
+    expect(markup).toContain("Filters · Active");
     expect(markup).toContain("Showing 0 of 7 tasks");
-    expect(markup).toContain('<div class="value">42%</div>');
-    expect(markup).toContain('<div class="value">5</div>');
-    expect(markup).not.toContain('<div class="value">100%</div>');
+    expect(markup).toContain("<strong>42%</strong> ready");
+    expect(markup).toContain("<strong>5</strong> outstanding");
+    expect(markup).not.toContain("<strong>100%</strong> ready");
   });
 
   it("does not offer administrator completion for participant session review", () => {
@@ -145,6 +154,7 @@ describe("administrator task discoverability", () => {
             readinessPercent: 0,
             isOverdue: false,
             isSessionDetailsReview: true,
+            blockingDependencies: [],
             participantActionable: true,
             readinessRelevant: true,
             revision: 1,
@@ -193,6 +203,7 @@ describe("administrator task discoverability", () => {
             readinessPercent: 0,
             isOverdue: false,
             isSessionDetailsReview: false,
+            blockingDependencies: [],
             participantActionable: false,
             readinessRelevant: true,
             revision: 1,
@@ -240,6 +251,7 @@ describe("administrator task discoverability", () => {
             readinessPercent: 100,
             isOverdue: false,
             isSessionDetailsReview: false,
+            blockingDependencies: [],
             participantActionable: true,
             readinessRelevant: true,
             revision: 3,

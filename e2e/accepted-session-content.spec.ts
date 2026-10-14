@@ -71,14 +71,14 @@ test("an accepted session opens before its first draft and enters content review
   await expect(page).toHaveURL(/\/admin\/schedule\?session=/);
   await page.keyboard.press("Escape");
   await page
-    .getByRole("button", { name: "Create next draft", exact: true })
+    .getByRole("button", { name: "Edit next version", exact: true })
     .click();
   await page
-    .getByRole("dialog", { name: "Create the next schedule draft?" })
+    .getByRole("dialog", { name: "Edit next version?" })
     .getByRole("button", { name: "Confirm new draft" })
     .click();
   await expect(
-    page.getByRole("dialog", { name: "Create the next schedule draft?" }),
+    page.getByRole("dialog", { name: "Edit next version?" }),
   ).not.toBeVisible();
   expect((await page.goto(detailUrl))?.status()).toBe(200);
   await expect(
