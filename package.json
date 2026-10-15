@@ -96,8 +96,8 @@
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/utilities": "^3.2.2",
     "@fullcalendar/react": "^7.0.2",
-    "@modelcontextprotocol/client": "2.0.0",
-    "@modelcontextprotocol/sdk": "1.30.0",
+    "@modelcontextprotocol/client": "2.3.1",
+    "@modelcontextprotocol/sdk": "1.32.1",
     "@noble/hashes": "^2.3.0",
     "@radix-ui/react-dialog": "^1.1.23",
     "@scalar/api-reference-react": "^0.9.61",
@@ -106,7 +106,7 @@
     "@tiptap/starter-kit": "^3.30.4",
     "@uppy/aws-s3": "^5.1.0",
     "@uppy/core": "^5.2.0",
-    "agents": "0.20.1",
+    "agents": "0.28.1",
     "ai": "7.0.58",
     "better-auth": "^1.6.26",
     "class-variance-authority": "^0.7.1",
@@ -153,7 +153,8 @@
   },
   "overrides": {
     "miniflare": {
-      "sharp": "0.35.4"
+      "sharp": "0.35.5",
+      "undici": "^7.29.1"
     }
   }
 }
