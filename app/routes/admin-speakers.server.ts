@@ -129,6 +129,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
               await unavailableDirectSessionSpeakerEmails({
                 env,
                 organisationId: viewer.organisationId,
+                eventId: viewer.eventId,
                 emails: [focusedSpeaker.email],
               })
             ).length > 0,
@@ -375,6 +376,7 @@ export async function action({ request, context }: Route.ActionArgs) {
             await unavailableDirectSessionSpeakerEmails({
               env,
               organisationId: viewer.organisationId,
+              eventId: viewer.eventId,
               emails: [rosterPerson.email],
             })
           ).length > 0,

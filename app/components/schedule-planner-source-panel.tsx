@@ -189,6 +189,8 @@ export function ScheduleSourcePanel({
     <aside
       aria-labelledby="schedule-source-heading"
       className="schedule-source"
+      // biome-ignore lint/a11y/noNoninteractiveTabindex: The scrollable session list needs keyboard focus so arrow and page keys can expose overflow content.
+      tabIndex={0}
     >
       <div className="schedule-inbox-head">
         <h2 id="schedule-source-heading" tabIndex={-1}>

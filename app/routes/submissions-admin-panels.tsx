@@ -761,10 +761,11 @@ export function AdminCreationForm(props: AdminCreationFormProps) {
               review.
             </p>
             <p className="help">
-              Sessions start in the unscheduled programme. Speaker invitations
-              are handled when you add the session; speakers must confirm
-              participation before it can be published. Choose its slot in the
-              schedule planner after saving.
+              Sessions start in the unscheduled programme. Speakers already on
+              this event’s active roster can be added before they accept portal
+              access. Speaker invitations are handled when you add the session;
+              speakers must confirm participation before it can be published.
+              Choose its slot in the schedule planner after saving.
             </p>
             <input type="hidden" name="_intent" value="create_direct_session" />
             <input

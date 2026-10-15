@@ -310,7 +310,7 @@ describe("manual speaker identity checks", () => {
       addedSpeaker: {
         id: person!.id,
         name: "Priya Shah",
-        needsPortalAccessForSession: true,
+        needsPortalAccessForSession: false,
       },
     });
     const requestHandoff = (path: string) =>
@@ -336,16 +336,12 @@ describe("manual speaker identity checks", () => {
     expect(roster.focusedSpeaker).toEqual({
       id: person!.id,
       name: "Priya Shah",
-      needsPortalAccessForSession: true,
+      needsPortalAccessForSession: false,
       workflowStatus: "prospect",
     });
     const detail = await detailLoader(recordArgs as never);
-    expect(detail.needsPortalAccessForSession).toBe(true);
-    expect(sessionForm.speakerNeedingPortalAccess).toEqual({
-      id: person!.id,
-      name: "Priya Shah",
-      email,
-    });
+    expect(detail.needsPortalAccessForSession).toBe(false);
+    expect(sessionForm.speakerNeedingPortalAccess).toBeNull();
     const taskForm = await taskLoader({
       request: requestHandoff(`/admin/tasks?view=plans&person=${person!.id}`),
       params: {},

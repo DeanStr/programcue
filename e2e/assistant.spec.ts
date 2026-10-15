@@ -330,9 +330,9 @@ test("assistant task preview requires confirmation and executes through the real
   await proposal.getByRole("link", { name: "Open created task" }).click();
   await expect(page).toHaveURL(/\/admin\/tasks\?task=/);
   await expect(
-    page.getByRole("status").filter({
-      hasText: /Showing 1 of \d+ tasks\./,
-    }),
+    page
+      .getByRole("region", { name: "Assigned work", exact: true })
+      .getByText(/^Showing 1 of \d+ tasks$/u),
   ).toBeVisible();
   await expect(
     page

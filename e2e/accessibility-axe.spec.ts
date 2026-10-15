@@ -89,16 +89,32 @@ for (const viewport of VIEWPORTS) {
     for (const surface of SURFACES) {
       await selectDemoRole(page, surface.role);
       await openHydrated(page, surface.path);
+      if (surface.path === "/admin/schedule" && viewport.label === "tablet") {
+        const sessionList = page.getByRole("complementary", {
+          name: "Sessions",
+          exact: true,
+        });
+        await sessionList.focus();
+        await expect(sessionList).toBeFocused();
+        await sessionList.press("End");
+        await expect
+          .poll(() => sessionList.evaluate((element) => element.scrollTop))
+          .toBeGreaterThan(0);
+      }
       if (surface.path === "/api/docs") {
         const copyButtons = page.locator("button.scalar-code-copy");
         await expect(copyButtons.first()).toHaveAttribute(
           "aria-label",
-          "Copy code",
+          /^Copy (?:\S+ )?code$/u,
         );
+        // Scalar names language-specific controls, such as "Copy JSON code".
+        // Preserve those more descriptive accessible names.
         expect(
           await copyButtons.evaluateAll((buttons) =>
-            buttons.every(
-              (button) => button.getAttribute("aria-label") === "Copy code",
+            buttons.every((button) =>
+              /^Copy (?:\S+ )?code$/u.test(
+                button.getAttribute("aria-label") ?? "",
+              ),
             ),
           ),
         ).toBe(true);

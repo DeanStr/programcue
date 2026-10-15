@@ -46,10 +46,10 @@ export function AdminSpeakerNextSteps({
           </ButtonLink>
           <p className="help">
             {inactive && speaker.needsPortalAccessForSession
-              ? "Restore an active roster status, then invite this speaker to the portal and wait for them to accept portal access before you can create their session. "
+              ? "Restore an active roster status, then check session access again. "
               : speaker.needsPortalAccessForSession
                 ? "Invite this speaker to the portal and wait for them to accept portal access before you can create their session. "
-                : ""}
+                : "You can prepare their session before they accept portal access. "}
             They must confirm participation before the session can be published.
           </p>
         </li>

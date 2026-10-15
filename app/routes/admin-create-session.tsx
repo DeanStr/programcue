@@ -64,6 +64,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
         await unavailableDirectSessionSpeakerEmails({
           env,
           organisationId: viewer.organisationId,
+          eventId: viewer.eventId,
           emails: [speaker.email],
         })
       ).length

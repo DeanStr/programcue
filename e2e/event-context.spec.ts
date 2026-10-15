@@ -204,6 +204,10 @@ test("an invited speaker can explicitly choose the created event and see its tas
   const assignment = page.locator("section").filter({
     has: page.getByRole("heading", { name: "Assign a plan" }),
   });
+  await assignment.getByLabel("Template").selectOption({ label: taskName });
+  await assignment
+    .getByRole("combobox", { name: "Speaker", exact: true })
+    .selectOption({ label: "Priya Shah · priya.speaker@example.com" });
   await assignment
     .getByRole("button", { name: "Assign with prerequisites" })
     .click();

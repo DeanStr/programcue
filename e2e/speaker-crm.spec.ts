@@ -118,7 +118,7 @@ test("adding a speaker hands off to portal access, a session and onboarding", as
   await expect(nextSteps).toBeVisible();
   await expect(nextSteps.getByRole("heading")).toBeFocused();
   await expect(nextSteps).toContainText(
-    "wait for them to accept portal access before you can create their session",
+    "You can prepare their session before they accept portal access",
   );
   await nextSteps.screenshot({
     path: ".artifacts/speaker-creation-handoff.png",
@@ -154,7 +154,7 @@ test("adding a speaker hands off to portal access, a session and onboarding", as
     page.getByRole("heading", { name, level: 1, exact: true }),
   ).toBeVisible();
   await expect(nextSteps).toContainText(
-    "accept portal access before you can create their session",
+    "You can prepare their session before they accept portal access",
   );
   await nextSteps
     .getByRole("link", { name: "Assign onboarding tasks" })
@@ -228,17 +228,7 @@ test("adding a speaker hands off to portal access, a session and onboarding", as
   );
   await expect(
     page.getByRole("status").filter({ hasText: "needs portal access first" }),
-  ).toContainText("must accept portal access before you can add a session");
-  await page
-    .getByLabel("Email", { exact: true })
-    .fill("priya.speaker@example.com");
-  await expect(
-    page.getByRole("status").filter({ hasText: "needs portal access first" }),
   ).toHaveCount(0);
-  await page.getByLabel("Email", { exact: true }).fill(email);
-  await expect(
-    page.getByRole("status").filter({ hasText: "needs portal access first" }),
-  ).toBeVisible();
   await page.getByLabel("Session title").fill("Invited conference design talk");
   await page
     .getByRole("combobox", { name: "Track", exact: true })
@@ -246,16 +236,16 @@ test("adding a speaker hands off to portal access, a session and onboarding", as
   await page.getByRole("button", { name: "Add session", exact: true }).click();
   await page.getByLabel(/I reviewed these identities/u).check();
   await page.getByRole("button", { name: "Add session", exact: true }).click();
-  await expect(page.getByRole("alert")).toContainText(
-    "wait for acceptance before attaching that existing identity",
+  await expect(page).toHaveURL(/\/admin\/schedule\?session=[^&]+&created=1/u);
+  await page.reload();
+  await expect(
+    page.getByText("Invited conference design talk", { exact: true }).first(),
+  ).toBeVisible();
+  await page.getByRole("link", { name: "Event speakers", exact: true }).click();
+  await page.getByRole("textbox", { name: "Search", exact: true }).fill(email);
+  await expect(page).toHaveURL(
+    new RegExp(`query=${encodeURIComponent(email)}`),
   );
-
-  const inviteLink = page.getByRole("link", {
-    name: "Invite to speaker portal",
-    exact: true,
-  });
-  await inviteLink.click();
-  await expect(nextSteps).toBeVisible();
   await row.getByRole("link", { name, exact: true }).click();
   await nextSteps
     .getByRole("link", { name: "Add a session for this speaker" })

@@ -533,6 +533,9 @@ test.describe
       const placement = page.locator("details").filter({
         has: page.getByText("Place or move with form", { exact: true }),
       });
+      await placement
+        .getByText("Place or move with form", { exact: true })
+        .click();
       await expect(placement).toHaveAttribute("open", "");
       await selectScheduleSessionByTitle(placement, "AI in Event Operations");
       await placement.getByLabel("Room").selectOption({ label: "Room 301A" });

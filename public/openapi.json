@@ -927,7 +927,7 @@
       "post": {
         "operationId": "createDirectSession",
         "summary": "Create an unscheduled session directly",
-        "description": "Requires an event-authorised API key with `sessions:write` and an Idempotency-Key. The configured event format and optional default duration are revalidated, people are matched by normalised email, resource acknowledgements are materialised, and the API-key actor is audited without synthesising a human person.",
+        "description": "Requires an event-authorised API key with `sessions:write` and an Idempotency-Key. The configured event format and optional default duration are revalidated, people are matched by normalised email, resource acknowledgements are materialised, and the API-key actor is audited without synthesising a human person. Active event-roster speakers with an active organisation contact and non-revoked speaker membership may be attached before accepting portal access. This does not confirm participation or waive publication requirements; unrelated existing identities remain blocked.",
         "x-required-api-key-scope": "sessions:write",
         "security": [
           {

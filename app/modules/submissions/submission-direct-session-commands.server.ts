@@ -1,8 +1,8 @@
 import { materializePublishedResourceAcknowledgementsForSession } from "~/modules/resources/resource-service.server";
 import {
+  directSessionSpeakerRelationshipBindings,
+  directSessionSpeakerRelationshipSql,
   dispatchSpeakerInvitationsForCommand,
-  existingPersonOrganisationRelationshipSql,
-  organisationRelationshipBindings,
   prepareSpeakerInvitations,
   SpeakerInvitationAddressError,
   unavailableDirectSessionSpeakerEmails,
@@ -167,6 +167,7 @@ export class SubmissionDirectSessionCommands extends SubmissionAdministrationCom
     const unavailableEmails = await unavailableDirectSessionSpeakerEmails({
       env: this.env,
       organisationId: actor.organisationId,
+      eventId: actor.eventId,
       emails: input.speakers.map((speaker) => speaker.email),
     });
     if (unavailableEmails.length) {
@@ -246,7 +247,7 @@ export class SubmissionDirectSessionCommands extends SubmissionAdministrationCom
               JOIN people person
                 ON lower(person.email) =
                    lower(json_extract(requested_speaker.value, '$.email'))
-             WHERE NOT ${existingPersonOrganisationRelationshipSql}
+             WHERE NOT ${directSessionSpeakerRelationshipSql}
             )
             AND EXISTS (
               SELECT 1 FROM idempotency_records command
@@ -270,7 +271,10 @@ export class SubmissionDirectSessionCommands extends SubmissionAdministrationCom
         track.id,
         actor.eventId,
         JSON.stringify(input.speakers),
-        ...organisationRelationshipBindings(actor.organisationId),
+        ...directSessionSpeakerRelationshipBindings(
+          actor.organisationId,
+          actor.eventId,
+        ),
         command.recordId,
         command.organisationId,
         command.eventId,
@@ -319,7 +323,7 @@ export class SubmissionDirectSessionCommands extends SubmissionAdministrationCom
             FROM sessions session
             JOIN people person ON person.email = ? COLLATE NOCASE
            WHERE session.id = ? AND session.event_id = ?
-             AND (person.id = ? OR ${existingPersonOrganisationRelationshipSql})
+             AND (person.id = ? OR ${directSessionSpeakerRelationshipSql})
         `,
         ).bind(
           position,
@@ -328,7 +332,10 @@ export class SubmissionDirectSessionCommands extends SubmissionAdministrationCom
           sessionId,
           actor.eventId,
           proposedPersonIds.get(speaker.email),
-          ...organisationRelationshipBindings(actor.organisationId),
+          ...directSessionSpeakerRelationshipBindings(
+            actor.organisationId,
+            actor.eventId,
+          ),
         ),
       );
     });

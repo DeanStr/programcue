@@ -42,7 +42,7 @@ export type SpeakerInvitationOutcome = {
   status: SpeakerInvitationDelivery;
 };
 
-export const existingPersonOrganisationRelationshipSql = `(
+export const directSessionSpeakerRelationshipSql = `(
   EXISTS (
     SELECT 1 FROM memberships membership
      WHERE membership.organisation_id = ?
@@ -69,10 +69,32 @@ export const existingPersonOrganisationRelationshipSql = `(
      WHERE event.organisation_id = ?
        AND speaker.person_id = person.id
   )
+  OR EXISTS (
+    SELECT 1 FROM event_speaker_workflows workflow
+    JOIN events roster_event ON roster_event.id = workflow.event_id
+    JOIN organisation_contacts contact
+      ON contact.organisation_id = roster_event.organisation_id
+     AND contact.person_id = workflow.person_id AND contact.status = 'active'
+    JOIN memberships roster_membership
+      ON roster_membership.organisation_id = roster_event.organisation_id
+     AND roster_membership.event_id = workflow.event_id
+     AND roster_membership.person_id = workflow.person_id
+     AND roster_membership.role = 'speaker'
+     AND roster_membership.revoked_at IS NULL
+     WHERE roster_event.organisation_id = ? AND workflow.event_id = ?
+       AND roster_event.activation_status = 'active'
+       AND workflow.person_id = person.id
+       AND workflow.status IN ('prospect','invited','confirmed')
+  )
 )`;
 
-export function organisationRelationshipBindings(organisationId: string) {
-  return Array(4).fill(organisationId);
+// This is permission to prepare a session, never proof of portal acceptance or
+// participation. Keep the same predicate in the preflight and atomic writes.
+export function directSessionSpeakerRelationshipBindings(
+  organisationId: string,
+  eventId: string,
+) {
+  return [...Array(5).fill(organisationId), eventId];
 }
 
 export class SpeakerInvitationDeliveryError extends Error {
@@ -585,6 +607,7 @@ export async function dispatchSpeakerInvitationsForCommand(input: {
 export async function unavailableDirectSessionSpeakerEmails(input: {
   env: CloudflareEnvironment;
   organisationId: string;
+  eventId: string;
   emails: string[];
 }) {
   if (!input.emails.length) return [];
@@ -594,9 +617,15 @@ export async function unavailableDirectSessionSpeakerEmails(input: {
     `SELECT lower(person.email) AS email
        FROM people person
       WHERE lower(person.email) IN (${placeholders})
-        AND NOT ${existingPersonOrganisationRelationshipSql}`,
+        AND NOT ${directSessionSpeakerRelationshipSql}`,
   )
-    .bind(...emails, ...organisationRelationshipBindings(input.organisationId))
+    .bind(
+      ...emails,
+      ...directSessionSpeakerRelationshipBindings(
+        input.organisationId,
+        input.eventId,
+      ),
+    )
     .all<{ email: string }>();
   return rows.results.map((row) => row.email);
 }

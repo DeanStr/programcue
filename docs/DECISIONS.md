@@ -2,6 +2,29 @@
 
 This file records durable decisions. It does not imply that every decided capability is implemented; verified delivery status lives in `IMPLEMENTATION_STATUS.md`.
 
+## Invited-speaker session preparation — 15 October 2026
+
+Organisers may create and manually place sessions for speakers already on the
+current event's active roster before portal acceptance. The additional identity
+permission requires an active organisation contact, an active event workflow
+(prospect, invited or confirmed), and a non-revoked speaker membership in that
+same event. It does not grant access based on a pending invitation alone or a
+roster association in another event. Existing accepted organisation relationships
+remain valid. Preflight and atomic session/person-link writes use the same rule.
+This supersedes the portal-acceptance prerequisite for eligible roster speakers
+in the 14 October handoff decision.
+
+Session creation preserves the participant's canonical profile, leaves portal
+acceptance unset, and creates pending session participation. Existing explicit
+session-creation invitation delivery, retry/idempotency, profile approval and
+publication confirmation requirements are unchanged. No schema migration is
+needed. The API and organiser UI use the same command and eligibility rule.
+
+The release updates Agents and its exact MCP peers to patched compatible
+versions, refreshes vulnerable transitive packages, and updates Miniflare's
+Sharp/Undici overrides. The dependency gate stays at high severity; low Scalar
+transitive advisories remain visible rather than suppressed.
+
 ## Speaker creation handoff — 14 October 2026
 
 Adding a speaker creates an event roster record without sending email. The

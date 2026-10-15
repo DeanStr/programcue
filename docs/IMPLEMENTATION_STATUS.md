@@ -1,6 +1,6 @@
 # Verified implementation status
 
-Evidence recorded through **14 October 2026** (latest deployment evidence remains 13 September).
+Evidence recorded through **15 October 2026** (latest deployment evidence remains 13 September).
 This is the current capability,
 requirements and acceptance index; consolidation does not constitute a new
 verification or deployment. The [product specification](../sessionboard-replacement-full-scope-implementation-specification-with-competition-ux.md)
@@ -43,6 +43,48 @@ Status terms:
 - **Demonstration only:** explicitly gated fixtures or simulations.
 - **Not implemented / external acceptance outstanding:** absent behavior or an
   existing path that still lacks the relevant external verification.
+
+## Invited-speaker preparation — 15 October 2026
+
+**Production slice; local evidence only.** Organisers can prepare and manually
+place a session for an active speaker on the current event roster before portal
+acceptance. Canonical profiles and pending participation remain unchanged;
+publication still requires the existing participation, profile and content checks.
+The additional identity permission requires a same-event non-revoked speaker
+membership and active organisation contact/workflow, and is rechecked atomically.
+Existing unrelated identities and other-event prospect associations remain blocked.
+The organiser UI and API share this rule; OpenAPI contracts are synchronized.
+
+Seven focused service regressions cover creation, placement, idempotent retry,
+publication refusal, inactive records, event/organisation isolation and a concurrent
+roster withdrawal. The updated Chromium handoff creates the session and verifies
+it after reload. Related route/intake/API checks and regenerated TypeScript passed.
+Dependencies were updated to resolve the release audit blocker; the audit now
+passes the unchanged high-severity gate with seven low findings remaining.
+
+The full release check passed its core lanes: 666 unit tests, 1,974 Worker tests,
+the agent test, generated types/TypeScript, lint, production build, configuration,
+schema, recovery and OpenAPI checks. Its first browser run exposed a missing
+keyboard scrolling target in the schedule session list, stale expectations for
+the merged workspace controls and Scalar's descriptive copy labels, and an
+orphaned local Firefox lock. The list is now keyboard-focusable, with a real
+tablet keyboard-scrolling assertion; the tests exercise explicit template
+selection and opening the placement form. The full browser rerun passed 237
+checks with two opt-in performance checks skipped and one remaining test-locator
+failure. After correcting that locator, all three event-context tests passed,
+including invited-speaker acceptance and task access. All 238 application browser
+contracts therefore have passing evidence across the rerun and focused correction;
+the separate evaluation suite passed 12 tests and the public-site suite passed 16.
+Final lint, TypeScript and the five schedule-workspace unit tests also passed.
+The initial `npm run check` failure was resolved through these post-fix checks;
+the entire core suite was not repeated after the browser-only corrections.
+
+**Deployment blocked:** Cloudflare rejected the configured local deployment token
+with error 9109 (invalid access token); no GitHub release secrets or local Wrangler
+login were available. A bounded, read-only check confirmed production `/evaluate`
+login and organiser workspaces work, but health still reports revision
+`c2c402cf585f05915395d5556c34785ab3020515` from 13 September. These changes and the
+merged October workspace improvements have not been deployed or verified live.
 
 ## Local workflow presentation — 14 October 2026
 
