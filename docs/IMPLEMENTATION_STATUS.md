@@ -1,6 +1,6 @@
 # Verified implementation status
 
-Evidence recorded through **15 October 2026** (latest deployment evidence remains 13 September).
+Evidence recorded through **18 October 2026**, including the application release and bounded live checks that day.
 This is the current capability,
 requirements and acceptance index; consolidation does not constitute a new
 verification or deployment. The [product specification](../sessionboard-replacement-full-scope-implementation-specification-with-competition-ux.md)
@@ -11,11 +11,14 @@ Git history retains earlier committed work logs.
 
 - The modular monolith has connected Worker/D1-backed product slices. Repository
   coverage does not establish replacement readiness or live-provider acceptance.
-- Source `c2c402cf` was deployed after the full release gate on 13 September at
-  11:50 UTC; exact-revision production health passed. Reviewer reminders retain
-  names, and speaker file tasks support private headshot collection with scanning
-  and version history. Revised evaluation dependencies retain local evidence only;
-  no fresh deployed `/evaluate` run was performed, as requested.
+- Source `00d47fb3` was deployed after the full release gate on 18 October at
+  05:52 UTC; exact-revision production health passed. The October workspace
+  priorities and invited-speaker preparation are deployed. Bounded live
+  `/evaluate` checks verified the organiser workspaces and session-form handoff
+  for an existing unaccepted prospect, including reload. Session creation and
+  publication guards retain local Worker/browser evidence; no live session was
+  submitted, notification sent or fixture reset. A fresh full AEK run remains
+  outstanding.
 - Scanner source `7b27ce4d` was released on 9 September at 16:24 UTC.
   Fresh deployed `/evaluate` run `2026-09-09T16-27-25` verified headshot upload,
   clean scan/release within 65 seconds, rendered portrait and organiser download.
@@ -46,7 +49,7 @@ Status terms:
 
 ## Invited-speaker preparation — 15 October 2026
 
-**Production slice; local evidence only.** Organisers can prepare and manually
+**Production slice; deployed 18 October 2026.** Organisers can prepare and manually
 place a session for an active speaker on the current event roster before portal
 acceptance. Canonical profiles and pending participation remain unchanged;
 publication still requires the existing participation, profile and content checks.
@@ -79,16 +82,21 @@ Final lint, TypeScript and the five schedule-workspace unit tests also passed.
 The initial `npm run check` failure was resolved through these post-fix checks;
 the entire core suite was not repeated after the browser-only corrections.
 
-**Deployment blocked:** Cloudflare rejected the configured local deployment token
-with error 9109 (invalid access token); no GitHub release secrets or local Wrangler
-login were available. A bounded, read-only check confirmed production `/evaluate`
-login and organiser workspaces work, but health still reports revision
-`c2c402cf585f05915395d5556c34785ab3020515` from 13 September. These changes and the
-merged October workspace improvements have not been deployed or verified live.
+**Release evidence, 18 October:** replacing the invalid deployment token resolved
+the earlier 9109 blocker. The ordinary `npm run deploy` passed the complete gate
+in 748.9 seconds, verified all 58 already-applied migrations and the remote schema,
+and deployed `00d47fb380822d20e55a08586e4def99159e9c2a`. Exact-revision health passed.
+Live `/evaluate` checks verified the speaker's three next-step links and the
+prefilled session form with no portal-acceptance blocker, including after reload.
+The existing prospect had no accepted organisation membership or proposal/session
+links; a post-check confirmed acceptance remains unset and no session was created.
+The live scope covers navigation and server-loader eligibility; session mutation,
+idempotency and publication refusal were exercised by the local release gate.
+Receipts and before/after screenshots: `.artifacts/release-20261018/`.
 
 ## Local workflow presentation — 14 October 2026
 
-**Production slice; local evidence only.** The connected schedule planner starts
+**Production slice; deployed 18 October 2026.** The connected schedule planner starts
 with its inspector collapsed below 1440px, keeps placement selection separate
 from opening details, moves break creation to a toolbar dialog and AI copy to
 session details, and retains day/room/time context in the scrolling calendar.
@@ -106,8 +114,10 @@ in [DECISIONS.md](DECISIONS.md).
 
 Evidence: focused component/service tests, `e2e/schedule-calendar.spec.ts`,
 `e2e/task-bulk-undo.spec.ts`, and refreshed laptop schedule/task plus desktop/mobile
-Command Centre and mobile task snapshots. This does not establish deployment or
-external-provider acceptance. Browser evidence remains scoped; a full film render
+Command Centre and mobile task snapshots. The 18 October release additionally
+verified the live Command Centre priorities, default Outstanding task filter and
+collapsed/openable laptop schedule inspector through `/evaluate`. This does not
+establish external-provider acceptance. Browser evidence remains scoped; a full film render
 was not requested or run. The film's pinned snapshot hashes are synchronized with
 the reviewed captures. Review corrections add in-dialog
 break failure/progress/committed-warning coverage, fitted Day/Week calendars,
@@ -131,16 +141,16 @@ Before local merge, `npm run check` passed its core gates with
 plus build, types and repository contracts. The initial uncapped run hit the
 existing headshot test's five-second timeout. The full retry stopped at the
 dependency audit (28 vulnerabilities: seven low, six moderate, 14 high and one
-critical). This branch changes neither dependency manifest. The complete browser,
+critical). That workspace-priority change did not update the dependency manifests. The complete browser,
 evaluation and public-website gates did not run because the audit failed; the
-earlier focused browser checks passed. This does not establish a passing release
-gate.
+earlier focused browser checks passed. That attempt did not establish a passing
+release gate; the successful 18 October release supersedes it.
 
 ## Latest recorded deployments
 
 | Surface | Latest retained evidence | Boundary |
 | --- | --- | --- |
-| Application | `c2c402cf585f05915395d5556c34785ab3020515`, Worker `47962095-8de3-4dda-b4a9-f7935399fcc4`, deployed 13 September at 11:50 UTC; full release gate and exact-revision health passed. | Named reviewer reminders and private headshot tasks are deployed. Their browser/service checks were local; fresh deployed workflow and evaluation acceptance remain pending. The fixture was unchanged. |
+| Application | `00d47fb380822d20e55a08586e4def99159e9c2a`, Worker `c6ef9fc0-2a7d-4484-82b7-46e450edd4dc`, deployed 18 October at 05:52 UTC; full release gate and exact-revision health passed. | Workspace priorities and invited-speaker preparation deployed. Live organiser navigation, task defaults, inspector interaction and an unaccepted prospect's session-form eligibility/reload passed. Session creation and publication refusal retain local evidence; no fixture reset or live notification test. |
 | Public website | Bundle `67d5b4b4`, Worker `e9398ee9-5a85-4c73-b751-0de7468c0032`, deployed and exercised on 5 September. | Separate website release; includes the approved film and guide pages. |
 | Scanner | Source `7b27ce4dabbd46e3ce26ebec64b506cc505a0ec7`, Worker `370e3d6b-1ce2-4e54-bcb2-ecb4d0e9c4e8`, deployed 9 September at 16:24 UTC; exact-revision health and real headshot scan/release/download passed. | Fresh signatures and cold-start recovery verified; sustained burst capacity remains outstanding. |
 
@@ -215,6 +225,7 @@ change. The latest complete gate supersedes older test-count histories.
 
 | Scope | Recorded result | Limit |
 | --- | --- | --- |
+| `00d47fb3`, 18 October | `npm run deploy` completed the full release gate in 748.9 s: 666 unit tests, 1,974 Worker tests and one agent test; types, lint, build, configuration, scanner, schema/recovery/OpenAPI and dependency policy; 238 application browser, 12 evaluation and 16 website checks. All 58 migrations were already applied; remote schema, deployment and exact-revision health passed. Bounded live `/evaluate` checks passed with no observed server errors. Receipts: `.artifacts/release-20261018/`. | Two opt-in performance tests skipped; seven low dependency advisories remain. Live checks used the existing showcase and prospect without submitting a session, sending notifications or resetting the fixture. No new full AEK acceptance run or separate scanner/public-site deployment. |
 | Post-feedback handoff review, 14 October 2026 | The requested Codex/high review resumed after both user findings were fixed. Round 3 reproduced an inactive-speaker onboarding link to 404; the finding was accepted and fixed with persisted workflow status and restoration guidance. All 18 affected Worker tests and four targeted Chromium cases passed. Latest completed round 5 reported no actionable regressions after 24 focused unit/Worker tests, generated TypeScript and two active/inactive Chromium handoffs passed. No findings were dismissed. Findings and rationale are captured in `.artifacts/speaker-handoff-review-loop/triage.json`. | Round 4 was interrupted while correcting an isolated-test fixture leak and is excluded from acceptance. Local fixtures only; full release gate and deployment were not run. |
 | Persistent speaker handoff, 14 October 2026 | Next-step controls now come from the loaded focused roster record and speaker detail as well as the creation response. The session link explains the portal-acceptance prerequisite before form entry, using the existing server identity rule; Worker coverage verifies it clears after access acceptance. The Chromium handoff follows invitation → reload → detail → onboarding → roster search → detail → session using visible links, without cached invitation/session URLs. Eighteen focused Worker tests, four targeted Chromium workflows, regenerated TypeScript, build and Biome passed. Review additionally found inactive-record onboarding links that led to 404; controls now explain restoration, with declined/withdrawn and active-restoration browser coverage. The expanded workflow exposed a long-email D1 `LIKE` failure; literal substring search and case-insensitive long-email/partial-name/wildcard regressions passed. | Local fixture evidence only; the first browser attempts required navigation-wait correction and exposed the search bug. The integrity regression uses an isolated record after correcting shared-fixture pollution. Full release gate and deployment were not run. |
 | Codex speaker-handoff review loop, 14 October 2026 | Two runs of `codex exec review --uncommitted -m gpt-6.1-sol -c 'model_reasoning_effort="high"'` each reported no actionable regressions or individual findings. No additional fixes or dismissed findings. Both reviewed the same patch without modifying source. Round 1 passed 29 focused unit/Worker tests; round 2 passed nine focused and 85 related tests. Generated TypeScript checks, production build and Chromium handoff passed in both rounds. Findings, raw logs, patch snapshots and triage are captured in `.artifacts/speaker-handoff-review-loop/`. | Local fixture and source-review evidence only; full release gate and deployment were not run. |
