@@ -1,6 +1,12 @@
 #!/bin/sh
 set -eu
 
+scanner_proxy_ca=/etc/cloudflare/certs/cloudflare-containers-ca.crt
+if [ ! -r "$scanner_proxy_ca" ] || [ ! -s "$scanner_proxy_ca" ]; then
+  echo "The Cloudflare interception CA is required for ClamAV signature updates." >&2
+  exit 1
+fi
+
 /init &
 
 (
@@ -16,7 +22,10 @@ set -eu
 
   # Refresh even when the image's baked database has aged out. HTTP readiness
   # checks the daemon's loaded database on every probe, including after reload.
-  freshclam --daemon --foreground --checks=24 --daemon-notify=/etc/clamav/clamd.conf \
+  # FreshClam uses libcurl's CA bundle; Python's R2 trust configuration does not
+  # apply to this process. Keep certificate verification enabled for the proxy.
+  CURL_CA_BUNDLE="$scanner_proxy_ca" \
+    freshclam --daemon --foreground --checks=24 --daemon-notify=/etc/clamav/clamd.conf \
     --stdout --user=clamav
 ) &
 

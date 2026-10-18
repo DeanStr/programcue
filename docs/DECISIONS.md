@@ -2,6 +2,22 @@
 
 This file records durable decisions. It does not imply that every decided capability is implemented; verified delivery status lives in `IMPLEMENTATION_STATUS.md`.
 
+## Scanner signature updates through HTTPS interception — 18 October 2026
+
+The production scanner requires Cloudflare's runtime-injected interception CA
+before starting. Pass that CA to FreshClam through `CURL_CA_BUNDLE`; the Python
+adapter's explicit R2 trust configuration does not configure the separate
+signature updater. Keep TLS verification and the seven-day loaded-signature
+freshness limit enabled. Missing trust or failed updates must leave files
+quarantined, rather than accepting stale signatures or disabling verification.
+The image-build update still uses the build environment's ordinary trust store.
+
+This addresses the live acceptance failure where the aged September image could
+not refresh its signatures: FreshClam reported TLS error 60 and the scanner
+remained unready. The supported trust mechanisms are documented by
+[Cloudflare](https://developers.cloudflare.com/containers/configuration/outbound-traffic/)
+and [ClamAV](https://docs.clamav.net/faq/faq-freshclam.html).
+
 ## Invited-speaker session preparation — 15 October 2026
 
 Organisers may create and manually place sessions for speakers already on the
