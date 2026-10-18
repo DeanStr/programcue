@@ -85,6 +85,12 @@ test("schedule publication previews material changes and readiness", async ({
   await expect(publication).toContainText("No publication blockers found");
   await expect(publication).toContainText("Participant change email");
   await expect(publication).toContainText("Off for this event");
+  await expect(publication).toContainText(
+    "No schedule-change emails will be sent.",
+  );
+  await expect(publication).toContainText(
+    "Calendar invitations and updates are separate and may still be emailed to participants.",
+  );
   await expect(
     publication.getByRole("button", { name: "Confirm publication" }),
   ).toBeEnabled();

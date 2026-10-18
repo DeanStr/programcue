@@ -103,6 +103,14 @@ Receipts and before/after screenshots: `.artifacts/release-20261018/`.
 
 ## Controlled production journey — 18 October 2026
 
+**Publication wording follow-up:** the confirmation now says that disabled
+schedule-change emails will not be sent and separately explains that calendar
+invitations and updates may still be emailed. The calendar notice appears in the
+notification section for every change-email state. The focused Chromium
+publication workflow, generated TypeScript and Biome passed. This changes the
+disclosure only; delivery behavior and publication guards are unchanged.
+Deployment is recorded separately after the release gate.
+
 A separate synthetic event, `invited-speaker-live-20261018`, exercises the
 invited-speaker path on application `00d47fb3` without resetting the shared
 evaluation fixture. The organiser added the existing controlled showcase speaker,
@@ -149,8 +157,8 @@ the expected speaker, session and 09:00–09:30 America/Toronto placement, inclu
 after reload. D1 confirmed published status, confirmed participation and a null
 `source_submission_id`. Publication also queued a calendar invitation; Resend
 recorded delivery on its first attempt. Schedule-change email was disabled, but
-calendar delivery was separate. The publication dialog's broad “No participants
-will be emailed” wording should distinguish these two channels more clearly.
+calendar delivery was separate. This exposed the publication dialog's broad
+“No participants will be emailed” wording, corrected in the follow-up above.
 The completed workflow proves hosted scan/callback/R2
 transport with fresh baked signatures; production refresh of an aged image and
 sustained scan load remain separate acceptance boundaries.
@@ -642,8 +650,7 @@ acknowledgement latency remain outstanding.
    and newer task acceptance remain incomplete, although the separate controlled
    invited-speaker journey passed real publication and upload/release. Anonymous
    Cloudflare verification remains manual. CRM new-event transfer/import and
-   independent inbox inspection still lack evidence. The publication dialog must
-   distinguish disabled schedule-change emails from separate calendar invitations.
+   independent inbox inspection still lack evidence.
 2. **Provider paths:** exercise Airtable authority/recovery, Accelevents live
    reconciliation, external AI/tool-loop/assessment and fresh provider-error
    callbacks. Verify newer schedule-change emails, reminder cron and controlled

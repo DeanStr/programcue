@@ -609,7 +609,7 @@ export function SchedulePublicationDialog({
         {!preview.notifications.enabled ? (
           <div className="validation-item info">
             <strong>Off for this event</strong>
-            <span>No participants will be emailed by this publication.</span>
+            <span>No schedule-change emails will be sent.</span>
           </div>
         ) : preview.notifications.problem ? (
           <div className="validation-item error">
@@ -640,6 +640,10 @@ export function SchedulePublicationDialog({
             </span>
           </div>
         )}
+        <p>
+          Calendar invitations and updates are separate and may still be emailed
+          to participants.
+        </p>
       </section>
 
       <section aria-labelledby="schedule-publication-readiness">
@@ -808,8 +812,7 @@ export function SchedulePublicationDialog({
         </div>
       ) : null}
       <p className="help">
-        The current public version remains available in history. Calendar
-        updates are queued separately.
+        The current public version remains available in history.
       </p>
     </Dialog>
   );
