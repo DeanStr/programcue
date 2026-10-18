@@ -498,11 +498,25 @@ The temporary Workflow, restore database and local plaintext were removed.
 SQL SHA-256: `815ce92e5f601eaf93ee11eae8644850c23da2dd8cca82e059c985ee0b6b4b40`.
 
 Autonomous 14/15 August exports failed before the polling correction in deployed
-source `5109324`. No later autonomous success is recorded. The 02:17 UTC backup
-and 03:47 R2 evidence monitor still need paired acceptance; the logical export
-briefly made D1 unavailable, so its low-traffic window is an operational
-constraint. Alert firing and one delayed email prove a path, not timely repeatable
-delivery. Do not claim the 24-hour RPO or incident RTO is met. Procedures:
+source `5109324`. On 18 October, read-only production inspection verified five
+consecutive completed daily Workflows for 14–18 October. The 18 October instance
+started at 02:17:21 UTC and stored its SQL at 02:17:35; its scheduled timestamp
+was 02:17:17. The paired 03:47:19 UTC `monitor-verified` log matches the manifest's
+date, object key, byte count and checksum. These jobs ran on source `c2c402cf`,
+before the October release deployed later that morning.
+
+The private R2 SQL was downloaded and independently checked against its manifest:
+3,244,770 bytes, matching ETag, SHA-256
+`e0cbd06d10c15492fd0aa53d32e5d5c3f817547acc09f2cb0a0f44e70e6d79ec`.
+An isolated in-memory SQLite restore passed whole-database integrity and foreign-key
+checks (117 tables, 390 indexes including automatic indexes, 172 triggers and two
+views). The downloaded plaintext was removed. Private receipts are retained under
+`.artifacts/live-journey-20261018/`. This verifies unattended backup plus monitor
+and local restorability; it is not a production D1 restore or a measured incident
+RTO. The logical export can briefly make D1 unavailable, so its low-traffic window
+remains an operational constraint. Alert firing and one historical delayed email
+prove a path, not timely repeatable delivery. Do not claim the 24-hour RPO or
+incident RTO is met. Procedures:
 [recovery](RECOVERY.md) and [deployment](DEPLOYMENT.md).
 
 ### Performance measurements
@@ -554,8 +568,9 @@ acknowledgement latency remain outstanding.
    reconciliation, external AI/tool-loop/assessment and fresh provider-error
    callbacks. Verify newer schedule-change emails, reminder cron and controlled
    SBEK mailbox delivery. Complete historical Google callback follow-up.
-3. **Operational recovery:** prove autonomous backup plus monitor, timely
-   repeatable condition-specific alerts, trace continuity and incident RPO/RTO.
+3. **Operational recovery:** the 18 October autonomous backup and paired monitor
+   are verified above. Prove timely repeatable condition-specific alerts, trace
+   continuity and incident RPO/RTO.
    Broaden scanner load and provider-side erasure acceptance.
 4. **Performance and accessibility:** collect deployed RUM and representative
    scale/geography measurements; complete manual screen-reader, keyboard-only,
