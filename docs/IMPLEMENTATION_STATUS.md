@@ -1,6 +1,6 @@
 # Verified implementation status
 
-Evidence recorded through **18 October 2026**, including the application release and bounded live checks that day.
+Evidence recorded through **18 October 2026**, including application/scanner releases, a controlled live invited-speaker journey and autonomous backup acceptance.
 This is the current capability,
 requirements and acceptance index; consolidation does not constitute a new
 verification or deployment. The [product specification](../sessionboard-replacement-full-scope-implementation-specification-with-competition-ux.md)
@@ -15,23 +15,30 @@ Git history retains earlier committed work logs.
   05:52 UTC; exact-revision production health passed. The October workspace
   priorities and invited-speaker preparation are deployed. Bounded live
   `/evaluate` checks verified the organiser workspaces and session-form handoff
-  for an existing unaccepted prospect, including reload. Session creation and
-  publication guards retain local Worker/browser evidence; no live session was
-  submitted, notification sent or fixture reset. A fresh full AEK run remains
-  outstanding.
-- Scanner source `7b27ce4d` was released on 9 September at 16:24 UTC.
-  Fresh deployed `/evaluate` run `2026-09-09T16-27-25` verified headshot upload,
-  clean scan/release within 65 seconds, rendered portrait and organiser download.
-  Three real sessions were scheduled with persisted placements and conflict checks.
+  for an existing unaccepted prospect, including reload. A separate controlled
+  production event subsequently passed direct session creation before new-event
+  acceptance, delivered invitation, ordinary magic-link sign-in, separate role
+  confirmation, checklist/upload completion, clean file release and publication.
+  The returning-speaker and mailbox-inspection boundaries are recorded below.
+  No shared fixture reset was performed.
+- Scanner source `38a5ad24` was released on 18 October. The live journey exposed
+  TLS trust failures in signature updates from the aged September image. The fix
+  passed the full release gate and exact-revision health; all four container
+  slots rolled out at 09:22 UTC. A fresh retry scanned and released the original
+  upload at 09:29 UTC, and its authenticated download matched every source byte.
 - External endpoint path/query confirmation and AI review-aid evidence labels
   retain local regression evidence; the latest run did not exercise those paths.
-- Fresh run `2026-09-13T08-07-46` finalized all 22 scenario outcomes and judging:
+- The latest completed scored run, `2026-09-13T08-07-46`, finalized all 22 scenario outcomes and judging:
   13 completed, eight blocked, one feature unavailable. Coverage was **51.155%**;
   the 60% gate exited 2 and the overall score remains withheld. All 1,230 artifacts
   verified. The pinned AEK `05823a0` run had no provider timeout, captured rendered
   email previews and delivered checkpoint images to judging. Direct session
   creation, claimed biography, 2:1 scoring, AI assessment, speaker upload/download
   and CRM workflows progressed; content and scheduling blockers remain below.
+- The 18 October run was stopped at the user's request at 09:33:57 UTC. Four
+  scenarios completed collection before interruption during ABS-S2; no judging
+  or score was produced. Partial evidence and production fixture state remain
+  intact. Do not resume or reset without a new explicit instruction.
 - The fixture was reset at **11:03:42 UTC** on 13 September. All four saved persona
   sessions were invalidated, clean applicant/reviewer baselines and no selected
   persona verified, and application health matched `5a758933`.
@@ -94,6 +101,81 @@ The live scope covers navigation and server-loader eligibility; session mutation
 idempotency and publication refusal were exercised by the local release gate.
 Receipts and before/after screenshots: `.artifacts/release-20261018/`.
 
+## Controlled production journey — 18 October 2026
+
+A separate synthetic event, `invited-speaker-live-20261018`, exercises the
+invited-speaker path on application `00d47fb3` without resetting the shared
+evaluation fixture. The organiser added the existing controlled showcase speaker,
+created and reloaded a direct session with no CFP submission, and placed it before
+acceptance of the new event invitation. Adding the roster record sent no mail;
+explicit session creation queued one invitation. Resend recorded delivery on the
+first attempt. Opening the link from the stored copy of that sent message in a
+fresh browser established an ordinary Better Auth session. The speaker explicitly
+accepted event access and, separately, the primary-speaker role, then completed
+a checklist and uploaded the real 569-byte headshot fixture through multipart R2.
+
+The draft programme returned 404 anonymously. Publication was initially blocked
+by unapproved content and unconfirmed participation; its confirmation button was
+disabled. After the speaker confirmed and the organiser approved the exact content
+revision, the publication dialog reported no blockers. File approval separately
+refused quarantined evidence, and anonymous private-file download redirected to
+sign-in. These checks did not bypass either gate.
+
+This is a returning speaker, so it does not independently isolate the new
+fresh-roster identity eligibility branch. That branch retains the earlier live
+prospect loader check and local atomic-write regressions. The delivery webhook
+and real magic-link authentication do not establish mailbox rendering or inbox
+inspection. Receipt details and screenshots are private under
+`.artifacts/live-journey-20261018/`.
+
+The upload exposed an aged-signature failure in the September scanner image:
+FreshClam could not trust Cloudflare's HTTPS interception certificate (TLS error
+60). Source `38a5ad24` supplies the required runtime CA explicitly without
+weakening TLS or signature freshness. A real FreshClam HTTPS test rejected an
+untrusted synthetic CA and succeeded with the configured bundle; missing runtime
+trust failed explicitly. All 15 scanner tests and the complete release gate
+passed (736.8 seconds: 666 unit, 1,974 Worker, one agent, 238 application browser,
+12 evaluation browser and 16 website checks; two opt-in performance skips and
+seven low dependency findings). Scanner Worker `4dd9dc62-478b-422a-83c7-c23a766743a1`
+passed exact-revision health, and the container rollout completed at 09:22:07 UTC
+with all four slots on image `fe6c98d3a27a6e48dea5b9f5fcb4579d56252d39d96e0b3402fd3540887e77b4`.
+The retry begun during rollout still failed readiness and retained quarantine;
+a new retry after rollout completed with a clean verdict at 09:29:39 UTC,
+using ClamAV 1.4.6/signatures 28157 and scanning all 569 bytes. The authenticated
+speaker download matched the fixture exactly; anonymous access remained denied.
+The organiser approved the file task and both tasks persisted as completed.
+Schedule version 1 was published at 09:30:40 UTC. The anonymous programme exposed
+the expected speaker, session and 09:00–09:30 America/Toronto placement, including
+after reload. D1 confirmed published status, confirmed participation and a null
+`source_submission_id`. Publication also queued a calendar invitation; Resend
+recorded delivery on its first attempt. Schedule-change email was disabled, but
+calendar delivery was separate. The publication dialog's broad “No participants
+will be emailed” wording should distinguish these two channels more clearly.
+The completed workflow proves hosted scan/callback/R2
+transport with fresh baked signatures; production refresh of an aged image and
+sustained scan load remain separate acceptance boundaries.
+
+### Independent evaluation stopped at the user's request
+
+Collection `2026-10-18T08-48-13` exhausted its 120-call budget during CFP-S1 after
+event/form/template setup, leaving dependent scenarios blocked. Its 84 artifacts
+verified. The event was retained as `DevFlow setup probe — 18 October 2026`;
+no shared fixture reset was performed. A subsequent run,
+`2026-10-18T08-59-49`, used a 200-call budget and Codex as the selected judge
+because the configured Claude login was unavailable. Before judging began, the
+user explicitly instructed that the evaluation not run. SIGINT stopped the
+runner and its provider process at 09:33:57 UTC (exit 130).
+
+CFP-S1, CFP-S2, ABS-S1 and CFP-S3 completed collection: event/CFP/template setup,
+draft recovery and two submissions, a third proposal and co-speaker claiming,
+then reviewer invitation, isolated assignment and submitted scoring. ABS-S2 was
+interrupted during collection. These are partial collector outcomes, not judged
+criterion results or replacement-readiness acceptance. There is no new score,
+coverage result or complete sealed acceptance bundle. The earlier September
+score boundary remains in force. Retain the unfinished fixture and evidence;
+do not resume collection, judge or reset without new authorization. Stop receipt:
+`.artifacts/live-journey-20261018/evaluation-stopped.json`.
+
 ## Local workflow presentation — 14 October 2026
 
 **Production slice; deployed 18 October 2026.** The connected schedule planner starts
@@ -150,9 +232,9 @@ release gate; the successful 18 October release supersedes it.
 
 | Surface | Latest retained evidence | Boundary |
 | --- | --- | --- |
-| Application | `00d47fb380822d20e55a08586e4def99159e9c2a`, Worker `c6ef9fc0-2a7d-4484-82b7-46e450edd4dc`, deployed 18 October at 05:52 UTC; full release gate and exact-revision health passed. | Workspace priorities and invited-speaker preparation deployed. Live organiser navigation, task defaults, inspector interaction and an unaccepted prospect's session-form eligibility/reload passed. Session creation and publication refusal retain local evidence; no fixture reset or live notification test. |
+| Application | `00d47fb380822d20e55a08586e4def99159e9c2a`, Worker `c6ef9fc0-2a7d-4484-82b7-46e450edd4dc`, deployed 18 October at 05:52 UTC; full release gate and exact-revision health passed. | Workspace priorities and invited-speaker preparation deployed. Live organiser navigation, task defaults, inspector interaction and an unaccepted prospect's session-form eligibility/reload passed. A separate controlled event also passed direct session creation, delivered invitation, ordinary speaker acceptance, onboarding, quarantine/release and publication. No shared fixture reset; mailbox inspection remains unverified. |
 | Public website | Bundle `67d5b4b4`, Worker `e9398ee9-5a85-4c73-b751-0de7468c0032`, deployed and exercised on 5 September. | Separate website release; includes the approved film and guide pages. |
-| Scanner | Source `7b27ce4dabbd46e3ce26ebec64b506cc505a0ec7`, Worker `370e3d6b-1ce2-4e54-bcb2-ecb4d0e9c4e8`, deployed 9 September at 16:24 UTC; exact-revision health and real headshot scan/release/download passed. | Fresh signatures and cold-start recovery verified; sustained burst capacity remains outstanding. |
+| Scanner | Source `38a5ad247b0c1199542a89348d2fbc7223b9abd6`, Worker `4dd9dc62-478b-422a-83c7-c23a766743a1`, deployed 18 October at 09:20 UTC; container rollout complete at 09:22 UTC. Full gate, exact-revision health and real headshot scan/release/exact-byte download passed. | FreshClam trusts the required interception CA; real TLS positive/negative regression passed. The live successful retry used fresh baked signatures; aged-image refresh and sustained burst capacity remain outstanding. |
 
 These are recorded observations, not current health checks. Use the
 [deployment runbook](DEPLOYMENT.md) for release procedures.
@@ -168,9 +250,9 @@ acceptance sections qualify their live evidence.
 | Authentication and events | **Production slice.** Identity creation, invitations, tenant/event roles, provisioning, switching and cloning. Signup alone grants no organisation or event access. | Fresh identity/provider-error exercises and production security-hardening acceptance. |
 | Forms and submissions | **Production slice.** Immutable form versions, conditional/stepped intake, event-owned tracks/formats, opening/closing dates and caps, anonymous/verified drafts, co-speaker claims, proposal revisions, direct-session intake and administration. | Deployed recovery/save/publication verified; anonymous interaction and subsequent independent acceptance remain blocked. |
 | Evaluation and decisions | **Production slice.** Rounds, reviewer pools, mixed rubrics, blind review, assignments, abstention, review recovery, committee discussion, moderation/reopen and atomic decision/onboarding/notification intent. | Independent end-to-end acceptance; committee editing, notifications and realtime chat are not implemented. |
-| Participants and tasks | **Production slice.** Independent Speaker/Moderator/Chair responses, participant workspace, availability, reusable event fields, task evidence snapshots, comments, dependencies, roster CSV and read-only organiser preview. Speaker creation links to confirmed portal invitation controls, a prefilled Add session form and onboarding assignment with the speaker selected. | Custom fields have fixed types, without formulas or conditional rules; newer reminder paths and the creation handoff need live evidence. |
+| Participants and tasks | **Production slice.** Independent Speaker/Moderator/Chair responses, participant workspace, availability, reusable event fields, task evidence snapshots, comments, dependencies, roster CSV and read-only organiser preview. Speaker creation links to confirmed portal invitation controls, a prefilled Add session form and onboarding assignment with the speaker selected. | Custom fields have fixed types, without formulas or conditional rules; newer reminder paths need live evidence; the controlled returning-speaker creation handoff passed on 18 October. |
 | Speaker Network | **Optional competition production slice.** Organisation-scoped history, contacts, tags, segments, sourcing/imports and event outreach at `/admin/crm`. | General CRM is excluded; participant adoption is deferred and the newer organiser-created mutation lacks live acceptance. |
-| Files and resources | **Production slice; partial live acceptance.** Private multipart upload, quarantine/scanner release, versioned resources, typed embeds, bounded asset/history reads, confirmed durable ZIP exports, retention and erasure. | Sustained live scan load and broader provider-side erasure; local ClamAV evidence does not prove hosted transport. |
+| Files and resources | **Production slice; partial live acceptance.** Private multipart upload, quarantine/scanner release, versioned resources, typed embeds, bounded asset/history reads, confirmed durable ZIP exports, retention and erasure. | Sustained live scan load, aged-image refresh and broader provider-side erasure. Hosted scan/callback/R2 transport passed on 18 October. |
 | Schedule and content | **Production slice.** Authoritative conflicts, deterministic subset auto-placement, editorial revisions/restoration, approval gates, immutable publication, read-only published planning, breaks/resources and placement undo. | Production drag pacing and scale; publication always rechecks conflicts and content invariants. |
 | Scenario Lab and readiness | **Production slices.** One ranked next action, scoped readiness, up to ten private proposals against the active draft, stale-proposal rejection and atomic bounded publication digests. | Scenarios are not independent schedule versions; newer UX/AI increments have repository acceptance only. |
 | Public programme and embeds | **Production slice.** Published programme, speakers, timetable/day-by-day schedule, gallery, itineraries and calendars; configurable stateless and managed embeds with audited lifecycle. | Installation detection/analytics and XML output are absent. Private file and published-data restrictions remain enforced. |
@@ -225,6 +307,7 @@ change. The latest complete gate supersedes older test-count histories.
 
 | Scope | Recorded result | Limit |
 | --- | --- | --- |
+| `38a5ad24` scanner and controlled production journey, 18 October | Full `npm run check` passed in 736.8 s: 666 unit, 1,974 Worker, one agent, 15 scanner, 238 application browser, 12 evaluation and 16 website checks, plus types/lint/build/configuration/schema/recovery/OpenAPI/dependency gates. Real FreshClam TLS trust positive/negative checks passed. Scanner deployed and all four image slots rolled out; original uploaded file scanned clean, released and downloaded with exact-byte equality. Direct invited session, real invitation authentication, separate participation confirmation, two onboarding tasks and anonymous published programme passed. | Returning controlled speaker; sent-message link used without inbox inspection. One retry started during rollout failed closed before a fresh retry succeeded. Two opt-in performance skips and seven low dependency findings. Sustained load and aged-image production refresh not established. Receipts: `.artifacts/live-journey-20261018/`. |
 | `00d47fb3`, 18 October | `npm run deploy` completed the full release gate in 748.9 s: 666 unit tests, 1,974 Worker tests and one agent test; types, lint, build, configuration, scanner, schema/recovery/OpenAPI and dependency policy; 238 application browser, 12 evaluation and 16 website checks. All 58 migrations were already applied; remote schema, deployment and exact-revision health passed. Bounded live `/evaluate` checks passed with no observed server errors. Receipts: `.artifacts/release-20261018/`. | Two opt-in performance tests skipped; seven low dependency advisories remain. Live checks used the existing showcase and prospect without submitting a session, sending notifications or resetting the fixture. No new full AEK acceptance run or separate scanner/public-site deployment. |
 | Post-feedback handoff review, 14 October 2026 | The requested Codex/high review resumed after both user findings were fixed. Round 3 reproduced an inactive-speaker onboarding link to 404; the finding was accepted and fixed with persisted workflow status and restoration guidance. All 18 affected Worker tests and four targeted Chromium cases passed. Latest completed round 5 reported no actionable regressions after 24 focused unit/Worker tests, generated TypeScript and two active/inactive Chromium handoffs passed. No findings were dismissed. Findings and rationale are captured in `.artifacts/speaker-handoff-review-loop/triage.json`. | Round 4 was interrupted while correcting an isolated-test fixture leak and is excluded from acceptance. Local fixtures only; full release gate and deployment were not run. |
 | Persistent speaker handoff, 14 October 2026 | Next-step controls now come from the loaded focused roster record and speaker detail as well as the creation response. The session link explains the portal-acceptance prerequisite before form entry, using the existing server identity rule; Worker coverage verifies it clears after access acceptance. The Chromium handoff follows invitation → reload → detail → onboarding → roster search → detail → session using visible links, without cached invitation/session URLs. Eighteen focused Worker tests, four targeted Chromium workflows, regenerated TypeScript, build and Biome passed. Review additionally found inactive-record onboarding links that led to 404; controls now explain restoration, with declined/withdrawn and active-restoration browser coverage. The expanded workflow exposed a long-email D1 `LIKE` failure; literal substring search and case-insensitive long-email/partial-name/wildcard regressions passed. | Local fixture evidence only; the first browser attempts required navigation-wait correction and exposed the search bug. The integrity regression uses an isolated record after correcting shared-fixture pollution. Full release gate and deployment were not run. |
@@ -263,6 +346,8 @@ Requested CLI model/effort receipts do not confirm a resolved provider snapshot.
 
 | Run | Outcome | Evidence and boundary |
 | --- | --- | --- |
+| Deployed upstream `2026-10-18T08-59-49` | User-stopped at 09:33:57 UTC, exit 130. Four scenarios collected; ABS-S2 interrupted. No judging, score or coverage result. | App `00d47fb3`; scanner changed from `7b27ce4d` to `38a5ad24` during collection. Codex collector, 200-call override; Codex judge selected but never invoked. Fixture preserved and no reset performed. Do not resume without a new explicit request. |
+| Deployed collection `2026-10-18T08-48-13` | CFP-S1 budget-blocked at 120 calls; dependent scenarios blocked. All 84 artifacts verified; no judging. | Retained setup event renamed to a dated probe before the subsequent attempt. No shared reset or applicant/reviewer action in this initial collection. |
 | Deployed upstream `2026-09-13T08-07-46` | 13 completed, eight blocked, one `feature_not_found`; 17 manual checks pending. Coverage **51.155%**, score withheld, 60% gate exit 2. All **1,230 artifacts verified**. | App `5a758933`, scanner `7b27ce4d`, evaluator `e46a6a1c`, pinned AEK `05823a0`, requested Astra agent/judge, 1,800 s scenario limit. Abstract management 98% / 89.286% coverage; CFP 91.176% / 89.474%; speakers 85.455% / 83.333%; CRM 89.655% / 76.316%. Content coverage 19.355%; agenda/widgets 0%. AI advisory 3.5/5 and separate human assessment 4.0/5 persisted without changing canonical 3.33/5. One CI placement persisted; conflict testing/publication blocked. Reset and all four old-session invalidations verified at 11:03 UTC. Receipts: `.artifacts/evaluation-20260913/`. |
 | Deployed upstream `2026-09-10T09-16-55` | Four scenarios completed; ABS-S2 browser called completed but provider finalisation failed at the configured 20-minute limit. No judge or score; `aek verify` rejects the aborted scenario’s unindexed artifacts. | Program Cue `5a758933`, installed AEK master `7a97ab5`, Astra agent/judge requested. Saved submissions/edits, claimed biography and reviewer isolation passed; raw ABS-S2 evidence shows correct 2-assigned/0-submitted progression and readable personalised preview text. Preview screenshot remains blank; AI, session creation, CRM and checkpoint-to-judge delivery untested. Fixture reset and all four old-session invalidations verified at 10:19 UTC. Receipts: `.artifacts/evaluation-20260910/`. |
 | Local regression `2026-09-07T02-12-32` | Nine criteria, 100% score and coverage with requested Astra/medium agent and judge; 265 artifacts verified. | Mailpit capture, real ClamAV clean/EICAR scans, versioned downloads/ZIP, anonymous denial and publication. Active baseline `2026-09-07T02-29-38-534Z-67a9d91b487d-ee63187c`; self-comparison has zero drift. Not the 98-criterion upstream suite or hosted-provider acceptance. |
@@ -475,9 +560,9 @@ provider paths.
 | Identity and mail | Owner Turnstile/Resend magic link, delivered/bounced receipts, Google and hardened Microsoft sign-in. | Fresh email-link/Microsoft identity creation and third-party failure callbacks, broader recipients and controlled SBEK inbox evidence. |
 | Calendars | Google/Microsoft connections and invitation create/update/cancel lifecycles. | Fresh provider-error exercise and any provider-requested verification; historical flagged callback follow-up. |
 | Participant operations | Live preview, structured task validation/completion and draft discard/replacement under `6c811a3`; multi-role acceptance under `1ba0531` on 2 September. | Newer task/reminder behavior and positive co-participant presentation where the canonical fixture lacks such a session. |
-| Files/scanner | Historical Uppy/R2 upload, clean release, EICAR quarantine, error/retry and erasure evidence; `ae6133c` exercised shutdown. Scanner `7b27ce4d` subsequently passed deployed headshot scan/release, portrait reload and download on 9 September. | Sustained capacity and broader erasure; the earlier failed scanner instance's root cause remains unverified. |
+| Files/scanner | Historical Uppy/R2 upload, clean release, EICAR quarantine, error/retry and erasure evidence; `ae6133c` exercised shutdown. Scanner `38a5ad24` passed real multipart upload, clean scan/callback/release, exact-byte authenticated download and anonymous denial on 18 October after correcting FreshClam trust. | Sustained capacity, aged-image refresh and broader erasure; the earlier September failed instance's root cause remains unverified. |
 | AI | DeepSeek structured readiness through Workers AI; malformed/over-budget output failed explicitly. | Full agent tool-loop, assessments and external model providers. |
-| Operations | Retained structured logs, empty Queue/DLQ inspection, scoped alert firing, one delayed owner alert email and exact private-R2 backup restore. | Autonomous post-fix backup, timely repeatable alerts, trace continuity and measured RPO/RTO. |
+| Operations | Retained structured logs, empty Queue/DLQ inspection, scoped alert firing, one delayed owner alert email and exact private-R2 backup restore. The 18 October autonomous backup and paired monitor passed; the downloaded SQL matched its manifest and restored into isolated SQLite with integrity and foreign-key checks passing. | Timely repeatable alerts, trace continuity and measured incident RPO/RTO. |
 
 ### Public website
 
@@ -549,21 +634,16 @@ acknowledgement latency remain outstanding.
 
 ## Remaining acceptance work
 
-1. **Deployed evaluation:** the 13 September run cleared AEK session-route and
-   checkpoint-image access blockers. Follow-up implementation preserves reviewer
-   names in reminders and adds private headshot file-request tasks. Focused tests
-   verify personalized provider payloads, image policy, ownership, quarantine,
-   clean-scan approval and replacement versions. Two Chromium workflows and all
-   31 local evaluation-configuration tests passed; all three AEK profiles validate.
-   Evaluation setup now separates
-   headshots from presentation uploads and uses dedicated ready direct sessions
-   plus independent publication setup, preserving earlier decisions and reviews.
-   These changes have not been verified in a fresh deployed evaluation: the user
-   paused `/evaluate` reruns. The prior run verified only CI placement; conflict
-   testing, publication/widgets and the new task workflow still need live evidence.
-   Anonymous Cloudflare verification remains manual. CRM new-event transfer/import
-   and independent inbox delivery still lack evidence. Prior run receipts:
-   `.artifacts/evaluation-20260913/`.
+1. **Deployed evaluation:** the user stopped the 18 October run during ABS-S2;
+   four scenarios collected evidence and no judging occurred. Keep the retained
+   fixture and partial evidence unchanged; new authorization is required to
+   resume or reset. The September 51.155% coverage result remains the latest
+   completed score boundary. Independent content, conflict, publication/widget
+   and newer task acceptance remain incomplete, although the separate controlled
+   invited-speaker journey passed real publication and upload/release. Anonymous
+   Cloudflare verification remains manual. CRM new-event transfer/import and
+   independent inbox inspection still lack evidence. The publication dialog must
+   distinguish disabled schedule-change emails from separate calendar invitations.
 2. **Provider paths:** exercise Airtable authority/recovery, Accelevents live
    reconciliation, external AI/tool-loop/assessment and fresh provider-error
    callbacks. Verify newer schedule-change emails, reminder cron and controlled
