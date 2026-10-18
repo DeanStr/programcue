@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { type RefObject, useEffect, useRef, useState } from "react";
 import { Link, useFetcher, useRevalidator } from "react-router";
 import { Dialog } from "~/components/dialog";
 import { Button } from "~/components/ui/button";
@@ -390,6 +390,7 @@ export function SchedulePublicationDialog({
   workspace,
   fetcher,
   preview,
+  returnFocusRef,
   close,
   revealConflictEntries,
 }: {
@@ -398,13 +399,13 @@ export function SchedulePublicationDialog({
   };
   fetcher: ScheduleFetcher;
   preview: SchedulePublicationPreview;
+  returnFocusRef: RefObject<HTMLElement | null>;
   close: () => void;
   revealConflictEntries(entryIds: string[]): void;
 }) {
   const revalidator = useRevalidator();
   const [publishAttempted, setPublishAttempted] = useState(false);
   const submitLock = useRef(false);
-  const returnFocusRef = useRef<HTMLElement | null>(null);
   const skipReturnFocusRef = useRef(false);
   const publishing =
     fetcher.state !== "idle" &&

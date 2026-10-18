@@ -95,6 +95,22 @@ test("schedule publication previews material changes and readiness", async ({
     publication.getByRole("button", { name: "Confirm publication" }),
   ).toBeEnabled();
   await publication
+    .getByRole("button", { name: "Cancel", exact: true })
+    .click();
+  const publish = page.getByRole("button", {
+    name: "Publish schedule",
+    exact: true,
+  });
+  await expect(publication).toBeHidden();
+  await expect(publish).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(publication).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(publication).toBeHidden();
+  await expect(publish).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(publication).toBeVisible();
+  await publication
     .getByRole("button", { name: "Confirm publication" })
     .click();
   await expect(publication).toBeHidden();

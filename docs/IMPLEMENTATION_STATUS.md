@@ -21,11 +21,20 @@ Git history retains earlier committed work logs.
   confirmation, checklist/upload completion, clean file release and publication.
   The returning-speaker and mailbox-inspection boundaries are recorded below.
   No shared fixture reset was performed.
+- Source `a54f37c1` was subsequently deployed on 18 October after the complete
+  release gate passed on retry (793.9 seconds). Publication confirmation now
+  distinguishes schedule-change emails from separate calendar invitations.
+  Exact-revision production health passed. The earlier five-shard run hit a
+  tablet accessibility timeout; the unchanged case passed in isolation, then
+  the entire release gate passed with three browser shards.
 - Scanner source `38a5ad24` was released on 18 October. The live journey exposed
   TLS trust failures in signature updates from the aged September image. The fix
   passed the full release gate and exact-revision health; all four container
   slots rolled out at 09:22 UTC. A fresh retry scanned and released the original
   upload at 09:29 UTC, and its authenticated download matched every source byte.
+  A later isolated Cloudflare canary also verified real refresh from September 9
+  signatures to October 18 signatures, daemon reload and restored readiness.
+  The temporary Worker, container application and registry image were removed.
 - External endpoint path/query confirmation and AI review-aid evidence labels
   retain local regression evidence; the latest run did not exercise those paths.
 - The latest completed scored run, `2026-09-13T08-07-46`, finalized all 22 scenario outcomes and judging:
@@ -109,7 +118,23 @@ invitations and updates may still be emailed. The calendar notice appears in the
 notification section for every change-email state. The focused Chromium
 publication workflow, generated TypeScript and Biome passed. This changes the
 disclosure only; delivery behavior and publication guards are unchanged.
-Deployment is recorded separately after the release gate.
+Source `a54f37c168d64ab16aefc5a1fd959032643505a4` was deployed as Worker
+`6388fca7-0f93-4288-8367-5254f46fae15`. The complete release gate passed on retry
+in 793.9 seconds, including all 238 application browser checks, 12 local access
+checks and 16 website checks; two opt-in performance checks were skipped.
+The initial five-shard run timed out in the unchanged tablet accessibility sweep.
+That case passed in isolation and the full retry passed with three browser
+shards, without code changes or test exemptions. All 58 migrations were already
+applied; remote schema validation and exact-revision production health passed.
+
+The live disclosure check exposed a separate focus defect: preview refresh
+disabled the Publish button before the dialog captured its return target, so
+Cancel returned focus to the document body. Mouse and keyboard checks reproduced
+it in production, and the new local regression failed on the unchanged build.
+The follow-up now captures the initiating button before refresh and passes that
+stable target to the publication dialog, preserving its existing blocker links'
+focus overrides. The regression passes Cancel, keyboard reopening and Escape;
+generated TypeScript and Biome also pass. Its deployment is recorded separately.
 
 A separate synthetic event, `invited-speaker-live-20261018`, exercises the
 invited-speaker path on application `00d47fb3` without resetting the shared
@@ -159,9 +184,45 @@ after reload. D1 confirmed published status, confirmed participation and a null
 recorded delivery on its first attempt. Schedule-change email was disabled, but
 calendar delivery was separate. This exposed the publication dialog's broad
 “No participants will be emailed” wording, corrected in the follow-up above.
-The completed workflow proves hosted scan/callback/R2
-transport with fresh baked signatures; production refresh of an aged image and
-sustained scan load remain separate acceptance boundaries.
+The completed workflow proves hosted scan/callback/R2 transport with fresh baked
+signatures. The later canary below establishes aged-signature refresh separately;
+sustained scan load remains an acceptance boundary.
+
+### Hosted aged-signature refresh — 18 October 2026
+
+An isolated, authenticated Cloudflare Container started from the retained
+September scanner image with signatures **28118, built 9 September**. Its Python
+adapter matched the production file byte-for-byte; the only image change was the
+already-deployed `38a5ad24` entrypoint trust fix. The canary inherited production
+HTTPS interception, TLS verification and the seven-day loaded-signature limit.
+It allowed outbound access only to `database.clamav.net`, had one container slot
+and no D1, R2, Queue or production-data binding. Initial setup omitted required
+R2 metadata and failed explicitly; valid metadata naming an unbound dummy bucket
+resolved that canary configuration error before acceptance began.
+
+After daemon startup, readiness remained HTTP 503 while the old signatures were
+loaded. Hosted logs recorded the **28118 → 28157** update, database validation and
+ClamAV notification at **23:22:36 UTC**, followed by activation of the newly loaded
+database at **23:22:50 UTC**. The **23:23:05 UTC** probe returned HTTP 200/ready.
+Anonymous requests returned 401. This proves an actual vendor download through
+Cloudflare's interception trust boundary and daemon refresh, without lowering
+the freshness limit or replacing the live production image with stale data.
+
+The temporary Worker and container application were deleted and their API reads
+returned 404; the canary registry image was deleted and no longer listed. The
+production scanner still reported source `38a5ad24`. Receipts, image/adapter
+hashes and provider logs: `.artifacts/publication-followup-20261018/`.
+
+### Inbox evidence boundary
+
+No usable AgentMail or Purelymail credential was found in the local environment,
+project configuration or saved credential-location references. A live MX lookup
+for `programcue.com` returned `mailserver.purelymail.com`; forwarding to AgentMail
+has not been verified. The deployment token lacks the separate Cloudflare mail
+routing permission, so that read-only lookup could not establish forwarding.
+Inbox inspection remains pending the receiving-account clarification and saved
+credential location. No mailbox receipt or rendering is claimed from the
+existing Resend delivery webhooks or stored message copy.
 
 ### Independent evaluation stopped at the user's request
 
@@ -240,9 +301,9 @@ release gate; the successful 18 October release supersedes it.
 
 | Surface | Latest retained evidence | Boundary |
 | --- | --- | --- |
-| Application | `00d47fb380822d20e55a08586e4def99159e9c2a`, Worker `c6ef9fc0-2a7d-4484-82b7-46e450edd4dc`, deployed 18 October at 05:52 UTC; full release gate and exact-revision health passed. | Workspace priorities and invited-speaker preparation deployed. Live organiser navigation, task defaults, inspector interaction and an unaccepted prospect's session-form eligibility/reload passed. A separate controlled event also passed direct session creation, delivered invitation, ordinary speaker acceptance, onboarding, quarantine/release and publication. No shared fixture reset; mailbox inspection remains unverified. |
+| Application | `a54f37c168d64ab16aefc5a1fd959032643505a4`, Worker `6388fca7-0f93-4288-8367-5254f46fae15`, deployed 18 October; full release gate passed on retry and exact-revision health passed. | Corrected publication notification disclosure. The earlier controlled invited-speaker journey passed on `00d47fb3`; no shared fixture reset and mailbox inspection remains unverified. |
 | Public website | Bundle `67d5b4b4`, Worker `e9398ee9-5a85-4c73-b751-0de7468c0032`, deployed and exercised on 5 September. | Separate website release; includes the approved film and guide pages. |
-| Scanner | Source `38a5ad247b0c1199542a89348d2fbc7223b9abd6`, Worker `4dd9dc62-478b-422a-83c7-c23a766743a1`, deployed 18 October at 09:20 UTC; container rollout complete at 09:22 UTC. Full gate, exact-revision health and real headshot scan/release/exact-byte download passed. | FreshClam trusts the required interception CA; real TLS positive/negative regression passed. The live successful retry used fresh baked signatures; aged-image refresh and sustained burst capacity remain outstanding. |
+| Scanner | Source `38a5ad247b0c1199542a89348d2fbc7223b9abd6`, Worker `4dd9dc62-478b-422a-83c7-c23a766743a1`, deployed 18 October at 09:20 UTC; container rollout complete at 09:22 UTC. Full gate, exact-revision health and real headshot scan/release/exact-byte download passed. | FreshClam trusts the required interception CA; real TLS positive/negative regression passed. The live file retry used fresh baked signatures; a later isolated hosted canary verified aged-signature download, validation, daemon reload and restored readiness. Sustained burst capacity remains outstanding. |
 
 These are recorded observations, not current health checks. Use the
 [deployment runbook](DEPLOYMENT.md) for release procedures.
@@ -260,7 +321,7 @@ acceptance sections qualify their live evidence.
 | Evaluation and decisions | **Production slice.** Rounds, reviewer pools, mixed rubrics, blind review, assignments, abstention, review recovery, committee discussion, moderation/reopen and atomic decision/onboarding/notification intent. | Independent end-to-end acceptance; committee editing, notifications and realtime chat are not implemented. |
 | Participants and tasks | **Production slice.** Independent Speaker/Moderator/Chair responses, participant workspace, availability, reusable event fields, task evidence snapshots, comments, dependencies, roster CSV and read-only organiser preview. Speaker creation links to confirmed portal invitation controls, a prefilled Add session form and onboarding assignment with the speaker selected. | Custom fields have fixed types, without formulas or conditional rules; newer reminder paths need live evidence; the controlled returning-speaker creation handoff passed on 18 October. |
 | Speaker Network | **Optional competition production slice.** Organisation-scoped history, contacts, tags, segments, sourcing/imports and event outreach at `/admin/crm`. | General CRM is excluded; participant adoption is deferred and the newer organiser-created mutation lacks live acceptance. |
-| Files and resources | **Production slice; partial live acceptance.** Private multipart upload, quarantine/scanner release, versioned resources, typed embeds, bounded asset/history reads, confirmed durable ZIP exports, retention and erasure. | Sustained live scan load, aged-image refresh and broader provider-side erasure. Hosted scan/callback/R2 transport passed on 18 October. |
+| Files and resources | **Production slice; partial live acceptance.** Private multipart upload, quarantine/scanner release, versioned resources, typed embeds, bounded asset/history reads, confirmed durable ZIP exports, retention and erasure. | Sustained live scan load and broader provider-side erasure. Hosted scan/callback/R2 transport and isolated aged-signature refresh passed on 18 October. |
 | Schedule and content | **Production slice.** Authoritative conflicts, deterministic subset auto-placement, editorial revisions/restoration, approval gates, immutable publication, read-only published planning, breaks/resources and placement undo. | Production drag pacing and scale; publication always rechecks conflicts and content invariants. |
 | Scenario Lab and readiness | **Production slices.** One ranked next action, scoped readiness, up to ten private proposals against the active draft, stale-proposal rejection and atomic bounded publication digests. | Scenarios are not independent schedule versions; newer UX/AI increments have repository acceptance only. |
 | Public programme and embeds | **Production slice.** Published programme, speakers, timetable/day-by-day schedule, gallery, itineraries and calendars; configurable stateless and managed embeds with audited lifecycle. | Installation detection/analytics and XML output are absent. Private file and published-data restrictions remain enforced. |
@@ -568,7 +629,7 @@ provider paths.
 | Identity and mail | Owner Turnstile/Resend magic link, delivered/bounced receipts, Google and hardened Microsoft sign-in. | Fresh email-link/Microsoft identity creation and third-party failure callbacks, broader recipients and controlled SBEK inbox evidence. |
 | Calendars | Google/Microsoft connections and invitation create/update/cancel lifecycles. | Fresh provider-error exercise and any provider-requested verification; historical flagged callback follow-up. |
 | Participant operations | Live preview, structured task validation/completion and draft discard/replacement under `6c811a3`; multi-role acceptance under `1ba0531` on 2 September. | Newer task/reminder behavior and positive co-participant presentation where the canonical fixture lacks such a session. |
-| Files/scanner | Historical Uppy/R2 upload, clean release, EICAR quarantine, error/retry and erasure evidence; `ae6133c` exercised shutdown. Scanner `38a5ad24` passed real multipart upload, clean scan/callback/release, exact-byte authenticated download and anonymous denial on 18 October after correcting FreshClam trust. | Sustained capacity, aged-image refresh and broader erasure; the earlier September failed instance's root cause remains unverified. |
+| Files/scanner | Historical Uppy/R2 upload, clean release, EICAR quarantine, error/retry and erasure evidence; `ae6133c` exercised shutdown. Scanner `38a5ad24` passed real multipart upload, clean scan/callback/release, exact-byte authenticated download and anonymous denial on 18 October after correcting FreshClam trust. | Sustained capacity and broader erasure; aged-signature refresh passed in the later hosted canary. The earlier September failed instance's root cause remains unverified. |
 | AI | DeepSeek structured readiness through Workers AI; malformed/over-budget output failed explicitly. | Full agent tool-loop, assessments and external model providers. |
 | Operations | Retained structured logs, empty Queue/DLQ inspection, scoped alert firing, one delayed owner alert email and exact private-R2 backup restore. The 18 October autonomous backup and paired monitor passed; the downloaded SQL matched its manifest and restored into isolated SQLite with integrity and foreign-key checks passing. | Timely repeatable alerts, trace continuity and measured incident RPO/RTO. |
 

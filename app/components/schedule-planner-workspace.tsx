@@ -44,6 +44,7 @@ export function SchedulePlannerWorkspace({
     warning: boolean;
   } | null>(null);
   const inspectorToggleRef = useRef<HTMLButtonElement>(null);
+  const publicationReturnFocusRef = useRef<HTMLElement | null>(null);
   const inspectorTitleRef = useRef<HTMLHeadingElement>(null);
   const inspectorFocusAfterToggle = useRef(false);
   useEffect(() => {
@@ -216,7 +217,10 @@ export function SchedulePlannerWorkspace({
               variant="primary"
               type="button"
               disabled={publishRefreshing || placementBusy}
-              onClick={requestPublish}
+              onClick={(event) => {
+                publicationReturnFocusRef.current = event.currentTarget;
+                void requestPublish();
+              }}
             >
               {publishRefreshing ? "Refreshing preview…" : "Publish schedule"}
             </Button>
@@ -703,6 +707,7 @@ export function SchedulePlannerWorkspace({
           workspace={{ ...workspace, version: workspace.version }}
           fetcher={fetcher}
           preview={workspace.publicationPreview}
+          returnFocusRef={publicationReturnFocusRef}
           close={() => setPublishOpen(false)}
           revealConflictEntries={revealConflictEntries}
         />
