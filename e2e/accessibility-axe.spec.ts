@@ -145,6 +145,11 @@ for (const viewport of VIEWPORTS) {
         ).toBe(true);
       }
       await expectNoViolations(page, `${surface.path} @ ${viewport.label}`);
+      // Finish this surface's subresource requests before the next navigation.
+      // Wrangler's local proxy can exit when a pending request is cancelled:
+      // https://github.com/cloudflare/workers-sdk/issues/15451
+      // This is transport cleanup; readiness and accessibility are asserted above.
+      await page.waitForLoadState("networkidle");
     }
   });
 }

@@ -9,6 +9,15 @@ The release checks give the multipart headshot workflow 15 seconds and each
 multi-step workflows under CPU contention; assertions, retries and the global
 test defaults are unchanged.
 
+The multi-page accessibility sweep waits for outstanding page requests to settle
+after its assertions and before navigating again. Two release attempts lost the
+local Wrangler server to `ProxyWorker: Network connection lost`; this matches
+the cancelled-request failure reported in
+[Cloudflare workers-sdk #15451](https://github.com/cloudflare/workers-sdk/issues/15451).
+The wait is local test transport cleanup, not an application readiness assertion
+or an error retry. Other browser interactions and the production runtime are
+unchanged.
+
 Sponsor contacts have company-scoped access through their authenticated email
 and an explicit acceptance step. They do not gain organiser, submitter or speaker
 membership. Organisers own tiers, allowances, deadlines and contact access;
