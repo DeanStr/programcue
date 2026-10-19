@@ -1,15 +1,15 @@
 # Verified implementation status
 
-Evidence recorded through **19 October 2026**, including application/scanner releases, a controlled live invited-speaker journey and autonomous backup acceptance.
+Evidence recorded through **19 October 2026**, including the sponsor/deliverables release, application/scanner releases, a controlled live invited-speaker journey and autonomous backup acceptance.
 This is the current capability,
 requirements and acceptance index; consolidation does not constitute a new
 verification or deployment. The [product specification](../sessionboard-replacement-full-scope-implementation-specification-with-competition-ux.md)
 owns intended scope, [DECISIONS.md](DECISIONS.md) owns engineering decisions, and
 Git history retains earlier committed work logs.
 
-## Sponsor portal and deliverables candidate — 19 October 2026
+## Sponsor portal and deliverables release — 19 October 2026
 
-**Production slice, local candidate; not deployed.** `/admin/sponsors` manages
+**Production slice, deployed.** `/admin/sponsors` manages
 company profiles, tiers, session allowances, event-local editing deadlines and
 contacts. `/sponsor` lists authenticated invitations and company workspaces;
 acceptance, profile editing, session drafts/submission/withdrawal and organiser
@@ -43,17 +43,25 @@ including Clear and browser history navigation. Review regression evidence:
 retention, deliverables rules and the route; the forward migration upgrade test
 and generated TypeScript check also passed.
 
-The review-fix validation ran `npm run check:core`: 666 unit tests and 1,995
-Worker tests passed; the existing headshot-upload test exceeded its 5-second
-timeout. Its unchanged isolated rerun passed at the default timeout, and the
-agent test passed separately. All other core lanes passed, including production
-build, TypeScript, formatting, migration validation, recovery and OpenAPI
-consistency. Both sponsor/deliverables Chromium workflows passed, including
-Clear, back/forward navigation and reapplying cleared filters. After adding the
-retention disclosure, the build and sponsor browser workflow passed again.
-The default core command therefore did not finish cleanly; the full repository
-browser gate was not repeated for these focused review fixes. Nothing from this
-candidate has been deployed.
+Source `2663a312740bec2446f4874c91de4ea5957175c3` was deployed on
+19 October as Worker `1286692b-673d-411b-8e33-8093c2d63740`. The ordinary
+`npm run deploy` gate passed in 1,319.0 seconds: 666 unit tests, 1,996 Worker
+tests, one agent runtime test, 240 browser tests (two configured opt-in
+performance skips), 12 local public-application authentication tests and 16
+public-website tests. Build, TypeScript, formatting, configuration, scanner,
+migration, audit, recovery, OpenAPI and dependency policy checks passed.
+Production preflight verified a clean checkout, the required secrets and the
+migration prefix. Migrations `0058` and `0059` applied; the remote schema check
+passed with 60 migrations, and health reported the exact deployed source.
+
+Earlier focused validation hit the existing five-second multipart headshot
+timeout; its isolated unchanged rerun passed. The release now gives that
+multi-step test 15 seconds and each 19-page accessibility sweep 90 seconds,
+without removing assertions. Two subsequent release attempts passed core but
+lost the local Wrangler proxy during browser navigation and stopped before
+production changes. Waiting for outstanding requests after each accessibility
+surface passed all ten focused accessibility tests and then the complete release
+gate. The independent AI evaluation was not run.
 
 Focused Worker evidence covers company/event/organisation isolation, acceptance
 and revocation, concurrent allowance enforcement, idempotency, stale revisions,
@@ -66,27 +74,39 @@ workflows passed, including WCAG A/AA checks. The affected mobile Tasks baseline
 was updated and reviewed; the focused desktop/laptop/mobile run passed all five
 cases.
 
-The core phase of `PROGRAM_CUE_E2E_SHARDS=3 npm run check` passed (898.7 seconds):
-666 unit tests, 1,989 Worker tests, one agent runtime test, generated TypeScript,
-production build, lint, design-system, migration, audit, recovery and API checks.
-The dependency audit also passed. The full browser run had 237 passes and three
-30-second timeouts in the existing multi-page accessibility sweeps. Those three
-sweeps also exceeded 30 seconds in isolation, then all passed with unchanged
-assertions and a command-line `--timeout=90000`; the repository's default timeout
-was not changed. This is qualified browser evidence, not a clean default-timing
-`npm run check` result. The subsequent local public-application browser suite
-passed all 12 cases and the public-site suite passed all 16 cases. The independent
-AI evaluation was not run.
+A bounded live browser check in the separate controlled invited-speaker event
+verified sponsor creation/contact access, invitation draft preparation after
+publishing revised template wording, ordinary speaker authentication, sponsor
+acceptance, proposal submission and organiser approval. The accepted sponsor
+proposal becomes read-only. The live matrix selected zero reminder recipients
+for administrator-only work and one for an outstanding speaker checklist. Clear,
+back/forward navigation and reapplying the cleared form kept URL, controls and
+results consistent. The checklist reminder produced a one-recipient preview.
+
+Read-only D1 verification confirmed one accepted proposal linked to an
+unscheduled direct session, no CFP source, and pending speaker participation.
+The two invitation messages and one reminder remained drafts; the existing two
+deliveries and published schedule were unchanged. Anonymous checks confirmed
+the new session was absent from the public programme and the sponsor portal
+required sign-in. No email was dispatched, no programme change was published,
+and no shared fixture reset was performed. Private screenshots, browser receipts,
+before/after database observations and release logs are retained under ignored
+`.artifacts/sponsor-release-20261019/`.
 
 Boundaries: the matrix covers speaker-target tasks; session/event deliverables
 remain in Tasks & readiness. No new REST resources, sponsor file-upload flow,
 sponsor-side editing of accepted sessions or automatic public sponsor publishing.
 Programme publication
 still enforces existing consent/readiness/conflict gates. The independent AI
-evaluation remains stopped, and no production migration or deployment has run.
+evaluation remains stopped. Retention erasure and post-erasure rejection have
+automated Worker/migration evidence; no live erasure was performed.
 
 ## Current position
 
+- Source `2663a312` deployed on 19 October after the complete release gate
+  passed (1,319.0 seconds), with migrations `0058` and `0059` and exact-revision
+  health verified. Sponsor portals, speaker deliverables and the four review
+  corrections are deployed; acceptance evidence and boundaries are recorded above.
 - The modular monolith has connected Worker/D1-backed product slices. Repository
   coverage does not establish replacement readiness or live-provider acceptance.
 - Source `00d47fb3` was deployed after the full release gate on 18 October at
@@ -414,7 +434,7 @@ release gate; the successful 18 October release supersedes it.
 
 | Surface | Latest retained evidence | Boundary |
 | --- | --- | --- |
-| Application | `41420df2d1aa852f46942ab085af3b9504008943`, Worker `19adc1db-3e8a-4b1f-b98b-63b08a0d5831`, deployed 19 October; full release gate passed on retry (916.1 seconds) and exact-revision health passed. | Publication notification disclosure and Cancel/Escape focus passed live, including reload and keyboard reopening. The earlier controlled invited-speaker journey passed on `00d47fb3`; no shared fixture reset. The user confirmed the manual inbox check on 19 October. |
+| Application | `2663a312740bec2446f4874c91de4ea5957175c3`, Worker `1286692b-673d-411b-8e33-8093c2d63740`, deployed 19 October; complete release gate passed (1,319.0 seconds), migrations `0058`/`0059` applied and exact-revision health passed. | Sponsor portal and deliverables release; controlled live acceptance and boundaries recorded above. Earlier publication focus and invited-speaker acceptance evidence remains below; no shared fixture reset or independent AI evaluation. |
 | Public website | Bundle `67d5b4b4`, Worker `e9398ee9-5a85-4c73-b751-0de7468c0032`, deployed and exercised on 5 September. | Separate website release; includes the approved film and guide pages. |
 | Scanner | Source `38a5ad247b0c1199542a89348d2fbc7223b9abd6`, Worker `4dd9dc62-478b-422a-83c7-c23a766743a1`, deployed 18 October at 09:20 UTC; container rollout complete at 09:22 UTC. Full gate, exact-revision health and real headshot scan/release/exact-byte download passed. | FreshClam trusts the required interception CA; real TLS positive/negative regression passed. The live file retry used fresh baked signatures; a later isolated hosted canary verified aged-signature download, validation, daemon reload and restored readiness. Sustained burst capacity remains outstanding. |
 
