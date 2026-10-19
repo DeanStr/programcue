@@ -11,7 +11,22 @@ info:
     currently use authenticated HTML loader/action routes, not versioned API
     resources. Sponsor portal access does not grant an event membership or API
     permissions; accepted proposals enter the existing session, speaker-consent
-    and programme-publication workflows.
+    and programme-publication workflows. Sponsor asset uploads use company-scoped
+    browser multipart routes and the existing private file/scanner lifecycle.
+    Version and idempotency lookups, including cancellation, enforce the acting
+    company. Current contacts can cancel their own uploads after editing closes.
+    Download access requires accepted company contact or organiser authority;
+    clean files still require organiser review. Approved logos become public
+    only when their exact version is included in the published event website.
+    Publication and file release are rechecked after reading private storage.
+    Logo selection allows editable website copy; clearing a draft logo takes
+    effect publicly only after website publication. Expired pending uploads
+    count as sponsor action for readiness and reminders.
+    Pending erasure cleanup does not block review of an earlier eligible upload.
+    Participant retention anonymises sponsor upload attribution, including
+    contacts without event membership.
+    Sponsor readiness reminders create ordinary communication drafts and do not
+    send email until the existing preview/confirmation workflow is completed.
 servers:
   - url: /
     description: Current Program Cue deployment

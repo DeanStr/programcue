@@ -1,11 +1,11 @@
 import { z } from "zod";
-
 import { uploadTargetSchema } from "./file-service.server";
 import { isApplicantActor } from "./multipart-upload-access.server";
 import type {
   MultipartActor,
   MultipartRow,
 } from "./multipart-upload-contracts";
+import { isSponsorActor } from "./multipart-upload-contracts";
 import { FileMultipartStateError } from "./multipart-upload-errors";
 
 export const MULTIPART_EXPIRY_SECONDS = 24 * 60 * 60;
@@ -74,9 +74,10 @@ export function multipartAuditProvenance(actor: MultipartActor) {
   }
   return {
     actorKind: "person" as const,
-    origin: ["owner", "administrator"].includes(actor.role)
-      ? ("admin_ui" as const)
-      : ("participant_ui" as const),
+    origin:
+      !isSponsorActor(actor) && ["owner", "administrator"].includes(actor.role)
+        ? ("admin_ui" as const)
+        : ("participant_ui" as const),
   };
 }
 

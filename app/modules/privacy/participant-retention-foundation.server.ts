@@ -201,8 +201,18 @@ export const participantPredicateSql = `(
   OR EXISTS (SELECT 1 FROM communication_unsubscribes candidate_unsubscribe
     WHERE candidate_unsubscribe.event_id = ? AND candidate_unsubscribe.person_id = person.id)
   OR EXISTS (SELECT 1 FROM file_assets candidate_file
-    WHERE candidate_file.event_id = ? AND candidate_file.owner_person_id = person.id
-      AND candidate_file.target_type IN ('person','submission','session','task'))
+    WHERE candidate_file.event_id = ?
+      AND (
+        (candidate_file.owner_person_id = person.id
+          AND (candidate_file.target_type IN ('person','submission','session','task')
+            OR candidate_file.target_id GLOB 'sponsor-asset-*'))
+        OR (candidate_file.target_type = 'resource'
+          AND candidate_file.target_id GLOB 'sponsor-asset-*'
+          AND EXISTS (SELECT 1 FROM file_versions candidate_version
+            WHERE candidate_version.asset_id = candidate_file.id
+              AND candidate_version.event_id = candidate_file.event_id
+              AND candidate_version.created_by_person_id = person.id))
+      ))
 )`;
 
 export function participantIdBindings(eventId: string) {

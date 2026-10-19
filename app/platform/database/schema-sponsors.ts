@@ -11,6 +11,7 @@ import {
 import { communicationTemplateVersions } from "./schema-communications";
 import { events, people } from "./schema-core";
 import { epochNow } from "./schema-helpers";
+import { fileVersions } from "./schema-participant";
 import { sessions } from "./schema-schedule";
 
 export const eventSponsorships = sqliteTable(
@@ -134,6 +135,48 @@ export const sponsoredSessionProposals = sqliteTable(
     check(
       "sponsored_proposal_acceptance",
       sql`(${table.status}='accepted' AND ${table.sessionId} IS NOT NULL) OR (${table.status}<>'accepted' AND ${table.sessionId} IS NULL)`,
+    ),
+  ],
+);
+
+export const sponsorAssetRequests = sqliteTable(
+  "sponsor_asset_requests",
+  {
+    id: text("id").primaryKey(),
+    eventId: text("event_id").notNull(),
+    sponsorId: text("sponsor_id").notNull(),
+    name: text("name").notNull(),
+    kind: text("kind").notNull().$type<"logo" | "document">(),
+    required: integer("required").notNull().default(1),
+    reviewStatus: text("review_status")
+      .notNull()
+      .default("pending")
+      .$type<"pending" | "approved" | "changes_requested">(),
+    reviewedVersionId: text("reviewed_version_id"),
+    reviewNote: text("review_note").notNull().default(""),
+    revision: integer("revision").notNull().default(1),
+    createdAt: integer("created_at").notNull().default(epochNow),
+  },
+  (table) => [
+    uniqueIndex("sponsor_asset_requests_id_event_unique").on(
+      table.id,
+      table.eventId,
+    ),
+    index("sponsor_asset_requests_company").on(table.eventId, table.sponsorId),
+    foreignKey({
+      columns: [table.sponsorId, table.eventId],
+      foreignColumns: [eventSponsorships.id, eventSponsorships.eventId],
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.reviewedVersionId, table.eventId],
+      foreignColumns: [fileVersions.id, fileVersions.eventId],
+    }),
+    check("sponsor_asset_request_id", sql`${table.id} GLOB 'sponsor-asset-*'`),
+    check("sponsor_asset_kind", sql`${table.kind} IN ('logo','document')`),
+    check("sponsor_asset_required", sql`${table.required} IN (0,1)`),
+    check(
+      "sponsor_asset_review",
+      sql`${table.reviewStatus} IN ('pending','approved','changes_requested')`,
     ),
   ],
 );

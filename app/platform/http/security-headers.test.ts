@@ -95,6 +95,10 @@ describe("Worker security headers", () => {
 
   it("prevents private workspace documents and route data from being cached", () => {
     for (const pathname of [
+      "/sponsor",
+      "/sponsor.data",
+      "/sponsor/event/company",
+      "/sponsor/event/company/uploads/initiate",
       "/admin",
       "/admin.data",
       "/admin/command",

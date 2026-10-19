@@ -263,7 +263,7 @@ export abstract class ParticipantRetentionExecution extends ParticipantRetention
         "file_assets",
         "owner_person_id",
         "event_id = ?",
-        "target_type IN ('person','submission','session','task')",
+        "(target_type IN ('person','submission','session','task') OR target_id GLOB 'sponsor-asset-*')",
       ),
       mapStatement(
         this.env,
@@ -271,7 +271,7 @@ export abstract class ParticipantRetentionExecution extends ParticipantRetention
         "file_versions",
         "created_by_person_id",
         "event_id = ?",
-        "asset_id IN (SELECT id FROM file_assets WHERE event_id = file_versions.event_id AND target_type IN ('person','submission','session','task'))",
+        "asset_id IN (SELECT id FROM file_assets WHERE event_id = file_versions.event_id AND (target_type IN ('person','submission','session','task') OR target_id GLOB 'sponsor-asset-*'))",
       ),
       mapStatement(
         this.env,

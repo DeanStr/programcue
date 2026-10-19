@@ -9,7 +9,23 @@ export type ApplicantMultipartActor = {
   fieldId: string;
 };
 
-export type MultipartActor = Viewer | ApplicantMultipartActor;
+export type SponsorMultipartActor = {
+  kind: "sponsor";
+  organisationId: string;
+  eventId: string;
+  personId: string;
+  email: string;
+  sponsorId: string;
+};
+export type MultipartActor =
+  | Viewer
+  | ApplicantMultipartActor
+  | SponsorMultipartActor;
+export function isSponsorActor(
+  actor: MultipartActor,
+): actor is SponsorMultipartActor {
+  return "kind" in actor && actor.kind === "sponsor";
+}
 
 export type MultipartRow = {
   versionId: string;
@@ -19,6 +35,7 @@ export type MultipartRow = {
   assetKind: string;
   targetType: string;
   targetId: string;
+  sponsorId: string | null;
   ownerPersonId: string | null;
   assetStatus: string;
   erasureRequested: number;

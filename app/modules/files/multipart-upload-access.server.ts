@@ -5,6 +5,7 @@ import type {
   MultipartActor,
   MultipartRow,
 } from "./multipart-upload-contracts";
+import { isSponsorActor } from "./multipart-upload-contracts";
 import { FileMultipartStateError } from "./multipart-upload-errors";
 
 export type { ApplicantMultipartActor } from "./multipart-upload-contracts";
@@ -43,6 +44,9 @@ export class MultipartUploadAccessRepository {
            event.organisation_id AS organisationId,
            upload.asset_id AS assetId, asset.asset_kind AS assetKind,
            asset.target_type AS targetType, asset.target_id AS targetId,
+           (SELECT sponsor_request.sponsor_id FROM sponsor_asset_requests sponsor_request
+             WHERE asset.target_type = 'resource' AND sponsor_request.id = asset.target_id
+               AND sponsor_request.event_id = asset.event_id) AS sponsorId,
            asset.owner_person_id AS ownerPersonId,
            asset.status AS assetStatus,
            EXISTS (
@@ -91,6 +95,9 @@ export class MultipartUploadAccessRepository {
            event.organisation_id AS organisationId,
            upload.asset_id AS assetId, asset.asset_kind AS assetKind,
            asset.target_type AS targetType, asset.target_id AS targetId,
+           (SELECT sponsor_request.sponsor_id FROM sponsor_asset_requests sponsor_request
+             WHERE asset.target_type = 'resource' AND sponsor_request.id = asset.target_id
+               AND sponsor_request.event_id = asset.event_id) AS sponsorId,
            asset.owner_person_id AS ownerPersonId,
            asset.status AS assetStatus,
            EXISTS (
@@ -148,6 +155,18 @@ export class MultipartUploadAccessRepository {
       throw new FileMultipartStateError(
         "This multipart upload was revoked by permanent file erasure.",
       );
+    if (isSponsorActor(actor)) {
+      if (
+        row.targetType !== "resource" ||
+        !row.targetId.startsWith("sponsor-asset-") ||
+        row.sponsorId !== actor.sponsorId ||
+        row.createdByPersonId !== actor.personId
+      )
+        throw new FileAccessError(
+          "This upload belongs to another sponsor company or contact.",
+        );
+      return;
+    }
     if (isApplicantActor(actor)) {
       const ownedByApplicant = actor.personId
         ? row.ownerPersonId === actor.personId &&

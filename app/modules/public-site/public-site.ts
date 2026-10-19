@@ -199,12 +199,19 @@ const sponsorWebsiteUrlSchema = optionalCredentialFreeHttpsUrlSchema({
   tooLongMessage: "Sponsor website URL is too long.",
 });
 
-const sponsorLogoUrlSchema = optionalCredentialFreeHttpsUrlSchema({
-  invalidMessage: "Enter a valid sponsor logo URL.",
-  httpsMessage: "Sponsor logo URLs must use HTTPS.",
-  credentialsMessage: "Sponsor logo URLs cannot contain credentials.",
-  tooLongMessage: "Sponsor logo URL is too long.",
-});
+const sponsorLogoUrlSchema = z.union([
+  z
+    .string()
+    .regex(
+      /^\/public\/sponsor-assets\/[A-Za-z0-9_-]+\/sponsor-asset-[A-Za-z0-9-]+\/[A-Za-z0-9_-]+$/,
+    ),
+  optionalCredentialFreeHttpsUrlSchema({
+    invalidMessage: "Enter a valid sponsor logo URL.",
+    httpsMessage: "Sponsor logo URLs must use HTTPS.",
+    credentialsMessage: "Sponsor logo URLs cannot contain credentials.",
+    tooLongMessage: "Sponsor logo URL is too long.",
+  }),
+]);
 
 const sponsorNameSchema = boundedText(
   120,

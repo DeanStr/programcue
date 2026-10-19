@@ -1,5 +1,5 @@
 import type { z } from "zod";
-
+import { assertSponsorUpload } from "~/modules/sponsors/sponsor-upload-access.server";
 import {
   participantTaskAccessSql,
   taskConfiguration,
@@ -23,6 +23,7 @@ import type {
   MultipartActor,
   MultipartRow,
 } from "./multipart-upload-contracts";
+import { isSponsorActor } from "./multipart-upload-contracts";
 import { FileMultipartConflictError } from "./multipart-upload-errors";
 
 export class MultipartUploadAuthorizer {
@@ -31,6 +32,7 @@ export class MultipartUploadAuthorizer {
   participantTaskGuard(actor: MultipartActor) {
     if (
       isApplicantActor(actor) ||
+      isSponsorActor(actor) ||
       ["owner", "administrator"].includes(actor.role)
     ) {
       return null;
@@ -42,6 +44,8 @@ export class MultipartUploadAuthorizer {
   }
 
   async assertTarget(actor: MultipartActor, target: UploadTarget) {
+    if (isSponsorActor(actor))
+      return assertSponsorUpload(this.env, actor, target);
     if (isApplicantActor(actor)) {
       if (
         target.targetType !== "submission" ||
@@ -189,7 +193,10 @@ export class MultipartUploadAuthorizer {
   ) {
     const target = this.uploadTarget(row);
     validateDirectFileDeclaration(
-      target.assetKind,
+      target.targetId.startsWith("sponsor-asset-") &&
+        target.assetKind === "other"
+        ? "headshot"
+        : target.assetKind,
       { name: row.filename, type: row.contentType, size: row.sizeBytes },
       parseEventFilePolicy(row.filePolicyJson),
       {

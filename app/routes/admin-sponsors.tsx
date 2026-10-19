@@ -1,9 +1,11 @@
 import { data, Form, Link, redirect, useNavigation } from "react-router";
 import { z } from "zod";
+import { SponsorAssets } from "~/components/sponsor-assets";
 import { SponsorProfileFields } from "~/components/sponsor-fields";
 import { Button, ButtonLink } from "~/components/ui/button";
 import { EventDateTime } from "~/components/ui/event-date-time";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
+import { SponsorAssetService } from "~/modules/sponsors/sponsor-assets.server";
 import {
   requireSponsorConfirmation,
   sponsorFormError,
@@ -11,6 +13,7 @@ import {
   sponsorProfileInput,
   sponsorRevision,
 } from "~/modules/sponsors/sponsor-forms.server";
+import { SponsorReadinessService } from "~/modules/sponsors/sponsor-readiness.server";
 import { SponsorService } from "~/modules/sponsors/sponsor-service.server";
 import { fixedDateEndEpoch } from "~/modules/tasks/task-service-foundation.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
@@ -51,7 +54,15 @@ export async function loader({ request, context }: Route.LoaderArgs) {
         day: "2-digit",
       }).format(workspace.sponsor.closesAt * 1000)
     : "";
+  const assets = new SponsorAssetService(env);
   return {
+    readiness: await new SponsorReadinessService(env).workspace(
+      viewer,
+      Object.fromEntries(new URL(request.url).searchParams),
+    ),
+    assets: sponsorId ? await assets.adminAssets(viewer, sponsorId) : [],
+    filePolicy: await assets.filePolicy(viewer.eventId),
+    eventId: viewer.eventId,
     sponsors: await service.listAdmin(viewer),
     workspace,
     timezone: event.timezone,
@@ -68,6 +79,84 @@ export async function action({ request, context }: Route.ActionArgs) {
   const sponsorId = String(form.get("sponsorId") ?? "");
   try {
     const key = sponsorKey(form);
+    const assets = new SponsorAssetService(env);
+    if (intent === "remind-sponsors") {
+      const draft = await new SponsorReadinessService(env).reminder(
+        viewer,
+        Object.fromEntries(new URL(request.url).searchParams),
+        String(form.get("templateVersionId")),
+        key,
+      );
+      return redirect(`/admin/communications/compose/${draft.id}`);
+    }
+    if (intent === "request-asset") {
+      await assets.request(
+        viewer,
+        sponsorId,
+        {
+          name: form.get("assetName"),
+          kind: form.get("kind"),
+          required: form.get("required") === "yes",
+        },
+        key,
+      );
+      const warning = await recordRouteChange(env, viewer, {
+        entityType: "sponsorship",
+        entityId: sponsorId,
+        changeType: "updated",
+      });
+      if (warning) return data(warning, { status: 207 });
+      return data({ ok: true, message: "Sponsor asset requested." });
+    }
+    if (intent === "review-asset") {
+      requireSponsorConfirmation(form);
+      await assets.review(
+        viewer,
+        sponsorId,
+        {
+          id: form.get("requestId"),
+          versionId: form.get("versionId"),
+          revision: sponsorRevision(form),
+          decision: form.get("decision"),
+          note: form.get("note"),
+        },
+        key,
+      );
+      const warning = await recordRouteChange(env, viewer, {
+        entityType: "sponsorship",
+        entityId: sponsorId,
+        changeType: "updated",
+      });
+      if (warning) return data(warning, { status: 207 });
+      return data({ ok: true, message: "Asset review saved." });
+    }
+    if (intent === "stage-logo") {
+      requireSponsorConfirmation(form);
+      await assets.stageLogo(
+        viewer,
+        sponsorId,
+        String(form.get("requestId")),
+        String(form.get("versionId")),
+        {
+          name: form.get("name"),
+          tier: form.get("tier"),
+          description: form.get("description"),
+          websiteUrl: form.get("websiteUrl"),
+        },
+        key,
+      );
+      const warning = await recordRouteChange(env, viewer, {
+        entityType: "public_site",
+        entityId: viewer.eventId,
+        changeType: "updated",
+      });
+      if (warning) return data(warning, { status: 207 });
+      return data({
+        ok: true,
+        message:
+          "Approved logo copied to the website draft. Review and publish the website separately.",
+      });
+    }
     if (intent === "save") {
       const event = await env.DB.prepare(
         "SELECT timezone FROM events WHERE id=? AND organisation_id=?",
@@ -190,6 +279,148 @@ export default function Sponsors({
       </div>
       {actionData && (
         <p role={actionData.ok ? "status" : "alert"}>{actionData.message}</p>
+      )}
+      <section className="card pad mb stack" aria-label="Sponsor readiness">
+        <h2>Sponsor readiness</h2>
+        <Form
+          key={JSON.stringify(d.readiness.filters)}
+          method="get"
+          className="row-actions"
+        >
+          <label className="label">
+            Company
+            <input
+              className="field"
+              name="q"
+              defaultValue={d.readiness.filters.q}
+            />
+          </label>
+          <label className="label">
+            Readiness
+            <select
+              className="select"
+              name="state"
+              defaultValue={d.readiness.filters.state}
+            >
+              <option value="all">All sponsors</option>
+              <option value="invitation">Invitation not accepted</option>
+              <option value="sessions">Sessions to submit</option>
+              <option value="assets">Assets needing sponsor action</option>
+              <option value="review">Awaiting organiser review</option>
+              <option value="due">Deadline within 7 days or overdue</option>
+              <option value="ready">Ready</option>
+            </select>
+          </label>
+          <Button type="submit" disabled={busy}>
+            Filter sponsors
+          </Button>
+          <ButtonLink to="/admin/sponsors">Clear</ButtonLink>
+        </Form>
+        <section
+          className="table-wrap"
+          aria-label="Sponsor requirements table"
+          // biome-ignore lint/a11y/noNoninteractiveTabindex: Keyboard users must be able to scroll the requirements table.
+          tabIndex={0}
+        >
+          <table className="data-table">
+            <caption>Sponsor requirements and next steps</caption>
+            <thead>
+              <tr>
+                <th>Company</th>
+                <th>Access</th>
+                <th>Sessions</th>
+                <th>Assets</th>
+                <th>Deadline</th>
+              </tr>
+            </thead>
+            <tbody>
+              {d.readiness.rows.map((s) => (
+                <tr key={s.id}>
+                  <td>
+                    <Link to={`?sponsor=${s.id}`}>{s.name}</Link>
+                    {s.readiness.ready && <p>Ready</p>}
+                  </td>
+                  <td>
+                    {s.readiness.acceptedContacts}/{s.readiness.contacts}{" "}
+                    contacts accepted
+                  </td>
+                  <td>
+                    {s.readiness.submitted}/{s.sessionLimit} submitted ·{" "}
+                    {s.readiness.approved} approved
+                  </td>
+                  <td>
+                    {s.readiness.actionableAssets} need sponsor action ·{" "}
+                    {s.readiness.assetReview} awaiting review ·{" "}
+                    {s.readiness.outstandingAssets} required outstanding
+                  </td>
+                  <td>
+                    {s.closesAt ? (
+                      <>
+                        <EventDateTime
+                          epochSeconds={s.closesAt}
+                          timeZone={d.timezone}
+                          showTimeZone
+                        />
+                        {s.readiness.closed && <p>Editing closed</p>}
+                      </>
+                    ) : (
+                      "No deadline"
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+        {!d.readiness.rows.length && <p>No sponsors match these filters.</p>}
+        <p>
+          {d.readiness.recipients.length} contacts have outstanding sponsor
+          work. Work awaiting checks or organiser review and closed editing
+          periods are excluded.
+        </p>
+        {d.readiness.templates.length ? (
+          <Form method="post" className="row-actions">
+            {hidden("remind-sponsors")}
+            <label className="label">
+              Sponsor reminder template
+              <select className="select" name="templateVersionId">
+                {d.readiness.templates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <Button
+              type="submit"
+              disabled={busy || !d.readiness.recipients.length}
+            >
+              Prepare sponsor reminder
+            </Button>
+            <p>
+              Creates an editable draft for matching contacts. Nothing is sent
+              until you preview and confirm delivery.
+            </p>
+          </Form>
+        ) : (
+          <p>
+            Publish an ad hoc or reminder template in{" "}
+            <Link to="/admin/communications">Communications</Link> to prepare
+            reminders.
+          </p>
+        )}
+      </section>
+      {w && (
+        <SponsorAssets
+          assets={d.assets}
+          eventId={d.eventId}
+          sponsorId={w.sponsor.id}
+          companyProfile={w.sponsor}
+          commandKey={d.key}
+          admin
+          busy={busy}
+          filePolicy={d.filePolicy}
+        />
       )}
       <nav className="page-actions mb" aria-label="Event sponsors">
         {d.sponsors.map((s) => (

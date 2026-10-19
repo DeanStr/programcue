@@ -48,6 +48,7 @@ export abstract class ParticipantRetentionAnalysis extends ParticipantRetentionF
         )
         SELECT
           (SELECT COUNT(*) FROM event_sponsorships WHERE event_id IN locked)
+          + (SELECT COUNT(*) FROM sponsor_asset_requests WHERE event_id IN locked)
           + (SELECT COUNT(*) FROM sponsor_contacts WHERE event_id IN locked)
           + (SELECT COUNT(*) FROM sponsored_session_proposals WHERE event_id IN locked)
           AS total`,

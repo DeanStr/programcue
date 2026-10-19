@@ -41,15 +41,31 @@ function SponsorFields({ sponsor }: { sponsor?: PublicSiteSponsor }) {
           defaultValue={sponsor?.websiteUrl ?? ""}
         />
       </label>
-      <label className="label">
-        Logo URL
-        <input
-          className="field"
-          name="logoUrl"
-          type="url"
-          defaultValue={sponsor?.logoUrl ?? ""}
-        />
-      </label>
+      {sponsor?.logoUrl?.startsWith("/public/sponsor-assets/") ? (
+        <div>
+          <span className="label">Uploaded logo</span>
+          <p>
+            Approved sponsor logo. Select a replacement from the sponsor
+            workspace, or clear this logo and publish the website to withdraw
+            it.
+          </p>
+          <input type="hidden" name="logoUrl" value={sponsor.logoUrl} />
+          <label className="label">
+            <input type="checkbox" name="clearLogo" value="yes" />
+            Clear uploaded logo from website draft
+          </label>
+        </div>
+      ) : (
+        <label className="label">
+          Logo URL
+          <input
+            className="field"
+            name="logoUrl"
+            type="url"
+            defaultValue={sponsor?.logoUrl ?? ""}
+          />
+        </label>
+      )}
       <label className="label is-wide">
         Description
         <textarea

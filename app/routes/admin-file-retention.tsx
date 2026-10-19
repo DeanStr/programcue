@@ -264,7 +264,8 @@ export default function AdminFileRetention({
               links with pseudonyms, and redact stored submissions, reviews,
               delivery snapshots, provider identifiers and file metadata. This
               also permanently removes private sponsor profiles, contacts and
-              proposal snapshots.
+              proposal snapshots. Sponsor asset requests and reviews are also
+              removed.
             </p>
           </div>
           <span

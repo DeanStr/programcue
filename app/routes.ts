@@ -7,6 +7,22 @@ import {
 
 export default [
   index("routes/home.tsx"),
+  route(
+    "sponsor/:eventId/:sponsorId/uploads/:operation",
+    "routes/sponsor-file-multipart.ts",
+  ),
+  route(
+    "sponsor/:eventId/:sponsorId/assets/:requestId/:versionId",
+    "routes/sponsor-file-download.ts",
+  ),
+  route(
+    "admin/sponsor-assets/:sponsorId/:requestId/:versionId",
+    "routes/admin-sponsor-file-download.ts",
+  ),
+  route(
+    "public/sponsor-assets/:eventId/:requestId/:versionId",
+    "routes/public-sponsor-logo.ts",
+  ),
   route("sponsor", "routes/sponsor-index.tsx"),
   route("sponsor/:eventId/:sponsorId", "routes/sponsor-portal.tsx"),
   route("sign-in", "routes/sign-in.tsx"),

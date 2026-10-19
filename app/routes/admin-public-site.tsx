@@ -27,6 +27,7 @@ import {
   PublicSiteService,
   PublicSiteValidationError,
 } from "~/modules/public-site/public-site-service.server";
+import { SponsorAssetService } from "~/modules/sponsors/sponsor-assets.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import { notifyRouteChange } from "~/platform/realtime/route-realtime.server";
@@ -94,6 +95,14 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   ];
   return {
     ...workspace,
+    draftLogoPreviews: Object.fromEntries(
+      (await new SponsorAssetService(env).allAdminAssets(viewer))
+        .filter((a) => a.kind === "logo" && a.reviewedVersionId)
+        .map((a) => [
+          `/public/sponsor-assets/${viewer.eventId}/${a.id}/${a.reviewedVersionId}`,
+          `/admin/sponsor-assets/${a.sponsorId}/${a.id}/${a.reviewedVersionId}?inline=1`,
+        ]),
+    ),
     hasRenderableRecordings,
     publicOrigin: new URL(request.url).origin,
     consequentialCommandIds: Object.fromEntries(
@@ -144,7 +153,10 @@ export async function action({ request, context }: Route.ActionArgs) {
                 name: values.get("name"),
                 tier: values.get("tier"),
                 websiteUrl: values.get("websiteUrl"),
-                logoUrl: values.get("logoUrl"),
+                logoUrl:
+                  values.get("clearLogo") === "yes"
+                    ? ""
+                    : values.get("logoUrl"),
                 description: values.get("description"),
                 position: values.get("position"),
               })
@@ -808,7 +820,13 @@ export default function AdminPublicSite({ loaderData }: Route.ComponentProps) {
         <AdminPublicSitePreview
           configuration={configuration}
           draftSponsors={loaderData.sponsors.map(
-            ({ revision: _revision, ...sponsor }) => sponsor,
+            ({ revision: _revision, ...sponsor }) => ({
+              ...sponsor,
+              logoUrl: sponsor.logoUrl
+                ? (loaderData.draftLogoPreviews[sponsor.logoUrl] ??
+                  sponsor.logoUrl)
+                : null,
+            }),
           )}
           programme={loaderData.programme}
           event={loaderData.publicEvent}

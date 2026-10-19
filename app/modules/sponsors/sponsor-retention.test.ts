@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { ParticipantRetentionService } from "~/modules/privacy/participant-retention-service.server";
 import { seedExpiredRetentionEvent } from "~/modules/privacy/participant-retention-test-fixture";
+import { SponsorAssetService } from "./sponsor-assets.server";
 import { SponsorService } from "./sponsor-service.server";
 
 const key = () => crypto.randomUUID();
@@ -66,6 +67,102 @@ async function fixture() {
 }
 
 describe("sponsor participant retention", () => {
+  it.each([false, true])(
+    "anonymises sponsor-only upload attribution while preserving shared identities when needed: %s",
+    async (shared) => {
+      const f = await fixture();
+      const db = f.testEnv.DB;
+      const uploaderId = key();
+      const uploader = {
+        personId: uploaderId,
+        email: `${uploaderId}@example.com`,
+        restrictedOrganisationId: null,
+      };
+      await db
+        .prepare(
+          "INSERT INTO people(id,email,display_name) VALUES (?,?,'Sponsor-only contact')",
+        )
+        .bind(uploaderId, uploader.email)
+        .run();
+      await f.service.addContact(
+        f.owner,
+        f.sponsorId,
+        { name: "Sponsor-only contact", email: uploader.email },
+        key(),
+      );
+      await f.service.accept(uploader, f.eventId, f.sponsorId, key());
+      if (shared) {
+        const otherViewer = { ...f.owner, eventId: f.otherEventId };
+        const otherSponsor = await f.service.save(
+          otherViewer,
+          { name: "Other event company", sessionLimit: 0, closesAt: null },
+          key(),
+        );
+        await f.service.addContact(
+          otherViewer,
+          otherSponsor,
+          { name: "Sponsor-only contact", email: uploader.email },
+          key(),
+        );
+      }
+      const requestId = await new SponsorAssetService(f.testEnv).request(
+        f.owner,
+        f.sponsorId,
+        { name: "Private company document", kind: "document", required: true },
+        key(),
+      );
+      // Resource uploads have no owner; their retained version identifies the uploader.
+      await db.batch([
+        db
+          .prepare(
+            "UPDATE file_assets SET owner_person_id=NULL,target_type='resource',target_id=? WHERE id=?",
+          )
+          .bind(requestId, f.fileAssetId),
+        db
+          .prepare("UPDATE file_versions SET created_by_person_id=? WHERE id=?")
+          .bind(uploaderId, f.fileVersionId),
+      ]);
+      expect(
+        await db
+          .prepare("SELECT 1 FROM memberships WHERE person_id=?")
+          .bind(uploaderId)
+          .first(),
+      ).toBeNull();
+      const result = await new ParticipantRetentionService(
+        f.testEnv,
+      ).anonymiseExpiredParticipants(f.owner, {
+        confirmation: "Expired privacy event",
+        acknowledged: true,
+      });
+      expect(result).toMatchObject({
+        complete: true,
+        state: { integrityViolations: [] },
+      });
+      const attribution = await db
+        .prepare(`SELECT person.id,person.email,version.original_filename AS filename
+        FROM file_versions version JOIN people person ON person.id=version.created_by_person_id
+        WHERE version.id=? AND version.event_id=?`)
+        .bind(f.fileVersionId, f.eventId)
+        .first<{ id: string; email: string; filename: string }>();
+      expect(attribution).toMatchObject({ filename: "retained-file" });
+      expect(attribution?.id).toMatch(/^retained-participant-/);
+      expect(attribution?.email).not.toBe(uploader.email);
+      const identity = await db
+        .prepare("SELECT email FROM people WHERE id=?")
+        .bind(uploaderId)
+        .first<{ email: string }>();
+      if (shared) expect(identity).toEqual({ email: uploader.email });
+      else expect(identity?.email).not.toBe(uploader.email);
+      if (shared) {
+        expect(
+          (await f.service.listPortal(uploader)).map(
+            (company) => company.eventId,
+          ),
+        ).toEqual([f.otherEventId]);
+      }
+    },
+  );
+
   it("preserves a participant identity needed by a sponsor contact in another event", async () => {
     const f = await fixture();
     const otherViewer = { ...f.owner, eventId: f.otherEventId };
@@ -157,6 +254,20 @@ describe("sponsor participant retention", () => {
       ]);
       expect(audit.metadata).not.toContain(f.person.email);
     }
+    const assets = new SponsorAssetService(f.testEnv);
+    const requestId = await assets.request(
+      f.owner,
+      f.sponsorId,
+      { name: "Private contact document", kind: "document", required: true },
+      key(),
+    );
+    // Reuse the fixture's erased file to verify sponsor-target metadata scrubbing.
+    await db
+      .prepare(
+        "UPDATE file_assets SET target_type='resource',target_id=? WHERE id=?",
+      )
+      .bind(requestId, f.fileAssetId)
+      .run();
     const retention = new ParticipantRetentionService(f.testEnv);
     const result = await retention.anonymiseExpiredParticipants(f.owner, {
       confirmation: "Expired privacy event",
@@ -166,8 +277,44 @@ describe("sponsor participant retention", () => {
       complete: true,
       state: { integrityViolations: [] },
     });
+    await expect(
+      assets.request(
+        f.owner,
+        f.sponsorId,
+        { name: "Restored private document", kind: "document", required: true },
+        key(),
+      ),
+    ).rejects.toThrow();
+    await expect(
+      db
+        .prepare(
+          "INSERT INTO sponsor_asset_requests(id,event_id,sponsor_id,name,kind) VALUES (?,?,?,'Private document','document')",
+        )
+        .bind(`sponsor-asset-${key()}`, f.eventId, f.sponsorId)
+        .run(),
+    ).rejects.toThrow("participant retention is complete");
+    await expect(
+      db
+        .prepare(
+          "INSERT INTO file_assets(id,event_id,target_type,target_id,asset_kind,status) VALUES (?,?,'resource',?,'supporting_document','pending')",
+        )
+        .bind(key(), f.eventId, requestId)
+        .run(),
+    ).rejects.toThrow("participant retention is complete");
+    expect(
+      await db
+        .prepare(
+          "SELECT original_filename,object_key FROM file_versions WHERE asset_id=?",
+        )
+        .bind(f.fileAssetId)
+        .first(),
+    ).toMatchObject({
+      original_filename: "retained-file",
+      object_key: `retained/${f.fileVersionId}`,
+    });
     for (const table of [
       "event_sponsorships",
+      "sponsor_asset_requests",
       "sponsor_contacts",
       "sponsored_session_proposals",
     ]) {

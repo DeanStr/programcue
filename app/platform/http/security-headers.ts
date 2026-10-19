@@ -14,6 +14,9 @@ export const SECURITY_HEADERS = {
 
 function isPrivateWorkspacePath(pathname: string) {
   return (
+    pathname === "/sponsor" ||
+    pathname === "/sponsor.data" ||
+    pathname.startsWith("/sponsor/") ||
     pathname === "/admin" ||
     pathname === "/admin.data" ||
     pathname.startsWith("/admin/") ||

@@ -4,7 +4,10 @@ import {
   isAtomicBatchGuardError,
 } from "~/platform/database/atomic-batch-guard.server";
 import type { PublicSiteCommand } from "./public-site-command.server";
-import { PublicSiteIntegrityError } from "./public-site-errors";
+import {
+  PublicSiteIntegrityError,
+  PublicSiteValidationError,
+} from "./public-site-errors";
 
 type SqlPredicate = {
   sql: string;
@@ -139,6 +142,16 @@ export async function publicSiteAtomicBatch(
   try {
     return await env.DB.batch(statements);
   } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message.includes(
+        "Selected sponsor logo is no longer approved and available",
+      )
+    ) {
+      throw new PublicSiteValidationError(
+        "Selected sponsor logo is no longer approved and available. Review the website draft.",
+      );
+    }
     if (isAtomicBatchGuardError(error)) {
       throw new PublicSiteIntegrityError({ cause: error });
     }

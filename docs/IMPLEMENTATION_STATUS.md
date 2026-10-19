@@ -7,6 +7,75 @@ verification or deployment. The [product specification](../sessionboard-replacem
 owns intended scope, [DECISIONS.md](DECISIONS.md) owns engineering decisions, and
 Git history retains earlier committed work logs.
 
+## Sponsor assets and readiness — 19 October 2026
+
+**Production slice, local branch; not deployed.** `feat/sponsor-assets-readiness`
+adds private named logo/document requests, accepted-contact multipart uploads,
+scan-gated downloads, version-specific organiser approval/change requests, and
+explicit selection of approved logos into the event website draft. Public logo
+bytes require the exact published snapshot reference; publication revalidates
+approval and current file availability. Migration `0060_sponsor_assets.sql`
+adds scoped requests, retention guards and the publication invariant.
+
+The sponsor readiness view filters invitation acceptance, sessions to submit,
+assets needing sponsor action, organiser review, approaching/overdue deadlines
+and ready companies. Filtered reminders create ordinary editable Communications
+drafts after recomputing recipients; they exclude scanning, organiser review and
+closed editing periods. Filters reset correctly on Clear and history navigation.
+
+Review corrections add editable website details during logo selection, preserving
+longer company profiles and optional company tiers; a clear-logo control keeps
+the website sponsor record while allowing publication after replacement or
+erasure. Expired pending uploads count as sponsor action and reminder work,
+while uploads already completing remain recoverable. Public delivery rechecks
+publication and file release after the R2 read and cancels revoked response bodies.
+
+The requested Codex review/fix loop additionally found and fixed company-scoped
+multipart lookup authorization (including cancellation and idempotency reads)
+and demo-contact downloads incorrectly inferred from an incidental `role` field.
+Portal and organiser downloads now have explicit authorization paths. New
+regressions verify company isolation after contact revocation, legitimate
+cancellation after the editing deadline, and real authenticated demo downloads.
+A second review reproduced and corrected missing retention candidate selection
+for sponsor-only uploaders and disagreement between displayed/reviewable versions
+while replacement erasure awaits storage cleanup. Version creator attribution
+now participates in retention; shared identities remain available to other events.
+The three requested Codex review passes returned two, two and zero actionable
+findings. All four distinct findings were accepted and fixed; repeated copies
+of the CLI's final comments were recorded as duplicates requiring no separate
+fix. Review transcripts, assessments and check logs are captured locally in
+`.artifacts/sponsor-assets-review-loop-NoBC7uuV/`.
+
+Final validation: `npm run check:core` passed in 722.1 seconds,
+including 666 unit tests, 2,016 Worker tests and one agent test, TypeScript,
+production build, Biome, migration validation, audit/API contracts and the backup
+recovery drill. All 50 focused upload/asset tests and 35 asset/retention tests
+passed, as did generated TypeScript after each review's fixes. The 18 sponsor-asset
+tests cover public copy validation and private-profile preservation, expired-upload
+reminders and restart, recoverable completion, withdrawal/file revocation during
+the R2 read, company isolation, contact downloads and review during pending erasure.
+Retention tests cover sponsor-only uploaders and shared canonical identities.
+
+All three relevant Playwright workflows passed against the final build in
+101.8 seconds, with accessibility checks:
+asset requests, acceptance, filter clearing/history, reminder drafts, honest
+unconfigured upload failure, private download, organiser review, editable website
+copy for long company profiles with blank tiers, private website preview,
+publication and clearing stale logos while retaining sponsor records; existing
+sponsor session approval/revocation and speaker deliverables remain covered.
+Expired uploads appear as actionable in the real readiness interface. Browser
+coverage uses explicitly seeded local clean-file and expired-upload fixtures;
+synthetic pending intents are cleaned up even when assertions fail. Worker tests
+exercise real local D1/R2 multipart
+completion with an explicitly simulated scanner callback. No live provider
+acceptance or production deployment is claimed. The full release/merge gate
+(`npm run check`) was not run for this local feature branch.
+
+Boundaries: company-wide editing deadline, up to 20 requests per company, raster
+logos and supporting documents under existing file policies. No automatic
+publication, automated reminder sending, document publication, per-asset deadline,
+sponsor editing of accepted sessions or new versioned REST resources.
+
 ## Sponsor portal and deliverables release — 19 October 2026
 
 **Production slice, deployed.** `/admin/sponsors` manages
@@ -94,8 +163,8 @@ before/after database observations and release logs are retained under ignored
 `.artifacts/sponsor-release-20261019/`.
 
 Boundaries: the matrix covers speaker-target tasks; session/event deliverables
-remain in Tasks & readiness. No new REST resources, sponsor file-upload flow,
-sponsor-side editing of accepted sessions or automatic public sponsor publishing.
+remain in Tasks & readiness. At that release there was no sponsor file-upload flow (added locally above).
+No new REST resources, sponsor-side editing of accepted sessions or automatic public sponsor publishing.
 Programme publication
 still enforces existing consent/readiness/conflict gates. The independent AI
 evaluation remains stopped. Retention erasure and post-erasure rejection have
@@ -460,7 +529,7 @@ acceptance sections qualify their live evidence.
 | Public programme and embeds | **Production slice.** Published programme, speakers, timetable/day-by-day schedule, gallery, itineraries and calendars; configurable stateless and managed embeds with audited lifecycle. | Installation detection/analytics and XML output are absent. Private file and published-data restrictions remain enforced. |
 | Confidential programme review | **Production slice; separate disclosure path.** Frozen draft snapshots, explicit disclosure confirmation, hashed expiring capabilities, revocation and publication-triggered revocation. | Does not count as published-only public programme delivery. |
 | Event branding | **Production slice; schema deployed.** Revisioned draft, desktop/mobile previews, normalized image pipeline and explicit publication. | Live branding-image acceptance; custom fonts/CSS/domains and private-asset copying during cloning are absent. |
-| Public event site | **Production slice; deployed with local acceptance.** Event-scoped draft/publication, six fixed homepage sections, five optional pages, sponsors and recordings; can publish CFP content before an agenda. | Programme-dependent sections require published data. Generic blocks, arbitrary HTML/CSS, media upload/processing and sponsor-asset upload are absent. |
+| Public event site | **Production slice; deployed with local acceptance.** Event-scoped draft/publication, six fixed homepage sections, five optional pages, sponsors and recordings; can publish CFP content before an agenda. | Programme-dependent sections require published data. Generic blocks, arbitrary HTML/CSS and media processing are absent. Sponsor-asset upload and explicit logo selection are implemented locally above, not deployed. |
 | Communications and calendars | **Production slices; core provider lifecycle accepted.** Versioned templates, previews/confirmation, durable sends, reminders, receipts/suppression and calendar invitations. Optional schedule-change emails persist intent with publication. | Broader recipients, fresh provider-error callbacks and newer reminder/schedule-change email acceptance. No inbox, channel preferences, Slack or SMS. |
 | AI and assistant | **Production slice; partial live acceptance.** Permissioned evidence, explicit provider selection, approved durable proposals, guarded tool/stream execution, assessment failure evidence and requester-owned feedback. | DeepSeek structured readiness is accepted; full tool-loop, assessment and external-provider paths remain outstanding. Feedback is not an experimentation dashboard. |
 | Accelevents | **Production slice.** Confirmed preview, dry run, export/retry and immutable reconciliation CSV; exports require confirmed participants. | Live provider acceptance; dry runs do not prove writes. |

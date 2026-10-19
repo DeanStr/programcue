@@ -1,4 +1,5 @@
 import { data, Form, useNavigation } from "react-router";
+import { SponsorAssets } from "~/components/sponsor-assets";
 import {
   SponsorProfileFields,
   SponsorSessionFields,
@@ -6,6 +7,7 @@ import {
 import { Button, ButtonLink } from "~/components/ui/button";
 import { EventDateTime } from "~/components/ui/event-date-time";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
+import { SponsorAssetService } from "~/modules/sponsors/sponsor-assets.server";
 import {
   requireSponsorConfirmation,
   sponsorFormError,
@@ -30,13 +32,20 @@ async function access(request: Request, context: Route.LoaderArgs["context"]) {
   return { env, person, service: new SponsorService(env) };
 }
 export async function loader({ request, context, params }: Route.LoaderArgs) {
-  const { person, service } = await access(request, context);
+  const { env, person, service } = await access(request, context);
+  const workspace = await service.portalWorkspace(
+    person,
+    params.eventId,
+    params.sponsorId,
+  );
+  const assets = new SponsorAssetService(env);
   return {
-    ...(await service.portalWorkspace(
-      person,
-      params.eventId,
-      params.sponsorId,
-    )),
+    ...workspace,
+    eventId: params.eventId,
+    assets: workspace.ownContact.acceptedAt
+      ? await assets.portalAssets(person, params.eventId, params.sponsorId)
+      : [],
+    filePolicy: await assets.filePolicy(params.eventId),
     key: crypto.randomUUID(),
     now: Math.floor(Date.now() / 1000),
   };
@@ -214,6 +223,16 @@ export default function SponsorPortal({
             </ul>
             <p>Ask the organiser to add or remove contacts.</p>
           </details>
+          <SponsorAssets
+            assets={d.assets}
+            eventId={d.eventId}
+            sponsorId={d.sponsor.id}
+            companyProfile={d.sponsor}
+            commandKey={d.key}
+            closed={closed}
+            busy={busy}
+            filePolicy={d.filePolicy}
+          />
           <section className="stack" aria-label="Your sponsored sessions">
             <h2>Your sessions</h2>
             {!d.proposals.length && (

@@ -1,0 +1,204 @@
+import { ZodError } from "zod";
+import { FilePolicyError } from "~/modules/files/file-policy";
+import {
+  FileScanDispatchConfigurationError,
+  FileScanDispatchQueueError,
+} from "~/modules/files/file-scan-dispatch.server";
+import { FileAccessError } from "~/modules/files/file-service.server";
+import {
+  FileMultipartConflictError,
+  FileMultipartIncompleteError,
+  FileMultipartStateError,
+  MultipartUploadService,
+} from "~/modules/files/multipart-upload.server";
+import type { MultipartActor } from "~/modules/files/multipart-upload-contracts";
+import { R2S3ConfigurationError } from "~/modules/files/r2-s3-signing.server";
+import {
+  RequestBodyTooLargeError,
+  readBoundedText,
+} from "~/platform/http/read-body";
+
+const OPERATIONS = new Set([
+  "initiate",
+  "resume",
+  "list-parts",
+  "part-url",
+  "complete",
+  "abort",
+]);
+
+function logMultipartFailure(event: string, operation: string, error: unknown) {
+  const candidate = error instanceof Error ? error.name : "UnknownError";
+  const errorName = /^[A-Za-z][A-Za-z0-9_.-]{0,79}$/u.test(candidate)
+    ? candidate
+    : "UnknownError";
+  console.error(
+    JSON.stringify({
+      level: "error",
+      subsystem: "file-multipart",
+      event,
+      operation,
+      errorName,
+      // A slug, never the message: several distinct configuration faults share
+      // one error class, and the class alone cannot tell them apart. The
+      // message names the variable, which must stay out of logs.
+      ...(typeof (error as { reason?: unknown })?.reason === "string"
+        ? { reason: (error as { reason: string }).reason }
+        : {}),
+      message: "A file upload request could not be completed.",
+    }),
+  );
+}
+
+function response(body: unknown, status = 200) {
+  return Response.json(body, {
+    status,
+    headers: { "cache-control": "private, no-store" },
+  });
+}
+
+export function multipartMethodNotAllowed() {
+  return new Response("Method not allowed", {
+    status: 405,
+    headers: { allow: "POST", "cache-control": "no-store" },
+  });
+}
+
+export async function handleMultipart(
+  request: Request,
+  env: CloudflareEnvironment,
+  operation: string | undefined,
+  actor: () => Promise<MultipartActor>,
+) {
+  const params = { operation };
+  if (request.method !== "POST") return multipartMethodNotAllowed();
+  if (!params.operation || !OPERATIONS.has(params.operation))
+    return response({ error: "That upload step is not supported." }, 404);
+  try {
+    const viewer = await actor();
+    const rawBody = await readBoundedText(request, 128_000);
+    let body: unknown;
+    try {
+      body = JSON.parse(rawBody);
+    } catch {
+      return response(
+        {
+          error:
+            "That request could not be read. Reload the page and try again.",
+        },
+        400,
+      );
+    }
+    const service = new MultipartUploadService(env);
+    if (params.operation === "initiate" || params.operation === "resume") {
+      const idempotencyKey = request.headers.get("idempotency-key")?.trim();
+      if (!idempotencyKey)
+        return response(
+          {
+            error:
+              "That request was missing information needed to avoid duplicates. Reload the page and try again.",
+          },
+          400,
+        );
+      const record =
+        typeof body === "object" && body !== null
+          ? { ...body, idempotencyKey }
+          : body;
+      if (params.operation === "resume")
+        return response({
+          ok: true,
+          upload: await service.resume(viewer, record),
+        });
+      return response(
+        { ok: true, upload: await service.initiate(viewer, record) },
+        201,
+      );
+    }
+    if (params.operation === "list-parts")
+      return response({ ok: true, ...(await service.listParts(viewer, body)) });
+    if (params.operation === "part-url")
+      return response({
+        ok: true,
+        part: await service.createPartUrl(viewer, body),
+      });
+    if (params.operation === "complete")
+      return response({
+        ok: true,
+        upload: await service.complete(viewer, body),
+      });
+    return response({ ok: true, upload: await service.abort(viewer, body) });
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError)
+      return response({ error: "That request was too large to process." }, 413);
+    if (error instanceof ZodError)
+      return response(
+        {
+          error:
+            error.issues[0]?.message ??
+            "That upload request could not be read.",
+          issues: error.issues,
+        },
+        422,
+      );
+    if (error instanceof FileAccessError)
+      return response({ error: error.message }, 403);
+    if (error instanceof FilePolicyError)
+      return response({ error: error.message }, 422);
+    // Both errors name a deployment variable the uploader cannot set, so the
+    // reader gets a fixed sentence. `logMultipartFailure` records the error
+    // class and the failing operation, deliberately not the message: this
+    // project keeps configuration variable names out of logs, which
+    // `applicant-file-multipart.test.ts` asserts.
+    if (error instanceof R2S3ConfigurationError) {
+      logMultipartFailure(
+        "upload-configuration-unavailable",
+        params.operation,
+        error,
+      );
+      return response(
+        { error: "Uploads are unavailable right now. Try again later." },
+        503,
+      );
+    }
+    if (error instanceof FileScanDispatchConfigurationError) {
+      logMultipartFailure(
+        "scan-configuration-unavailable",
+        params.operation,
+        error,
+      );
+      return response(
+        { error: "Uploads are unavailable right now. Try again later." },
+        503,
+      );
+    }
+    if (
+      error instanceof FileMultipartStateError ||
+      error instanceof FileMultipartConflictError
+    )
+      return response({ error: error.message }, 409);
+    if (error instanceof FileMultipartIncompleteError) {
+      logMultipartFailure(
+        "provider-operation-incomplete",
+        params.operation,
+        error,
+      );
+      return response(
+        { error: error.message, committed: error.committed },
+        503,
+      );
+    }
+    if (error instanceof FileScanDispatchQueueError) {
+      logMultipartFailure("scan-queue-unavailable", params.operation, error);
+      return response(
+        {
+          error: error.message,
+          committed: true,
+          operationId: error.operationId,
+        },
+        503,
+      );
+    }
+    if (error instanceof Response) throw error;
+    throw error;
+  }
+}

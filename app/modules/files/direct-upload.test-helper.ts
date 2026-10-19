@@ -1,6 +1,6 @@
-import type { Viewer } from "~/platform/auth/authorize.server";
 import type { UploadTarget } from "./file-service.server";
 import { MultipartUploadService } from "./multipart-upload.server";
+import type { MultipartActor } from "./multipart-upload-contracts";
 
 /**
  * Exercises the production direct-upload protocol without making signed HTTP
@@ -9,7 +9,7 @@ import { MultipartUploadService } from "./multipart-upload.server";
  */
 export async function completeTestDirectUpload(
   env: CloudflareEnvironment,
-  actor: Viewer,
+  actor: MultipartActor,
   target: UploadTarget,
   file: File,
 ) {

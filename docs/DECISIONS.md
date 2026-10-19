@@ -2588,3 +2588,61 @@ counts; missing or malformed values fail explicitly rather than becoming zero.
 Break creation requires a success message or an error explanation. An incomplete
 response stops further submission and asks the organiser to refresh and check
 the schedule before retrying, because the mutation may already have committed.
+
+
+## 19 October 2026 — Sponsor asset requests and readiness
+
+Sponsor company contacts get a separate multipart actor scoped to an accepted,
+non-revoked contact and company. This grants no event membership. Each upload
+step checks the current company, event, deadline and retention state. Named logo
+or document requests reuse private resource file targets with reserved
+`sponsor-asset-` IDs and the existing multipart, quarantine, scan and erasure
+lifecycle. Logos use the raster headshot validation policy (JPEG, PNG or WebP);
+documents use the supporting-document policy. Requests are limited to 20 per
+company. The company's editing deadline applies to all uploads.
+
+Multipart lookups bind both version IDs and idempotency keys to the acting
+company as well as the uploading contact. Cancellation keeps that company
+boundary while allowing current contacts to cancel their own uploads after
+editing closes. Portal downloads and organiser downloads use separate service
+entry points with explicit authority checks; incidental identity fields such as
+the demo contact's `role` never choose the authorization path.
+
+Review pins the latest released version. Replacements require fresh review.
+Listing, review and staging all exclude committed file-erasure intents from
+latest-version selection, even when private-storage cleanup must be retried.
+Selecting an approved logo prefills editable website name, tier, description
+and URL fields from the company profile into one stable website sponsor draft
+record; it never publishes. Website copy keeps its existing 120-character name,
+1,000-character description and required tier rules without truncating or
+rewriting the private company profile. The staging command binds the chosen
+public copy into its idempotency hash. Publication rechecks that the pinned
+logo is still the latest approved, clean version in the same event. Private
+preview routes authenticate organisers. Public bytes require an exact reference
+in the published website snapshot and an unchanged R2 ETag; publication and file
+release state are checked together before and after the R2 read, cancelling the
+body if authority changes. No public bucket or provider URL is exposed. A logo
+can be cleared from the website draft while keeping its sponsor record and
+copy. A published logo stays available until that withdrawal is published, or
+file erasure makes it unavailable immediately.
+
+Readiness treats the session allowance as the expected session count, displays
+submitted and approved counts separately, and considers only required assets
+when deciding readiness. Reminders target active contacts who can still accept
+access, submit missing sessions or fix required assets before the editing
+deadline. Expired requested/initiated uploads need sponsor action and qualify
+for filtered reminders. Uploads already completing remain recoverable beyond
+the initiation deadline. Scanning and organiser-only review do not generate
+sponsor reminders.
+The server recomputes filtered recipients and deduplicates email addresses before
+creating an ordinary editable Communications draft. Sending retains the existing
+preview and confirmation boundary.
+
+Event participant erasure cascades asset requests with sponsor profiles and
+scrubs file metadata through the existing event-wide file erasure prerequisites.
+Existing file retention guards and new request guards prevent restoration after
+erasure. No sponsor files or contacts are automatically made public.
+Sponsor resource uploads have no file owner; retention therefore selects their
+uploaders through file-version creator attribution, including contacts with no
+event membership or other participant records. It remaps retained attribution
+to an event pseudonym while preserving canonical identities needed elsewhere.

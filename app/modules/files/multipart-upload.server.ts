@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import { sponsorUploadGuard } from "~/modules/sponsors/sponsor-upload-access.server";
 import {
   type assetKindSchema,
   DIRECT_MULTIPART_PART_SIZE_BYTES,
@@ -29,6 +30,7 @@ import type {
   MultipartActor,
   MultipartRow,
 } from "./multipart-upload-contracts";
+import { isSponsorActor } from "./multipart-upload-contracts";
 import {
   FileMultipartConflictError,
   FileMultipartIncompleteError,
@@ -183,16 +185,21 @@ export class MultipartUploadService {
   ) {
     const target = input.target;
     const participantTaskGuard = this.participantTaskGuard(actor);
-    const allocationGuardSql =
-      target.targetType === "task" && participantTaskGuard
+    const sponsorGuard = isSponsorActor(actor)
+      ? sponsorUploadGuard(actor, target.targetId)
+      : null;
+    const allocationGuardSql = sponsorGuard
+      ? `EXISTS (${sponsorGuard.sql})`
+      : target.targetType === "task" && participantTaskGuard
         ? `EXISTS (
              SELECT 1 FROM task_instances task
               WHERE task.id = ? AND task.event_id = ?
                 AND ${participantTaskGuard.sql}
            )`
         : "1 = 1";
-    const allocationGuardBindings =
-      target.targetType === "task" && participantTaskGuard
+    const allocationGuardBindings = sponsorGuard
+      ? sponsorGuard.bindings
+      : target.targetType === "task" && participantTaskGuard
         ? [target.targetId, actor.eventId, ...participantTaskGuard.bindings]
         : [];
     const auditProvenance = multipartAuditProvenance(actor);
@@ -405,8 +412,13 @@ export class MultipartUploadService {
 
   private async createProviderUpload(actor: MultipartActor, row: MultipartRow) {
     const participantTaskGuard = this.participantTaskGuard(actor);
-    const assetAccessSql = participantTaskGuard
-      ? `AND (
+    const sponsorGuard = isSponsorActor(actor)
+      ? sponsorUploadGuard(actor, row.targetId)
+      : null;
+    const assetAccessSql = sponsorGuard
+      ? `AND EXISTS (${sponsorGuard.sql})`
+      : participantTaskGuard
+        ? `AND (
            asset.target_type <> 'task'
            OR EXISTS (
              SELECT 1 FROM task_instances task
@@ -414,8 +426,9 @@ export class MultipartUploadService {
                 AND ${participantTaskGuard.sql}
            )
          )`
-      : "";
-    const assetAccessBindings = participantTaskGuard?.bindings ?? [];
+        : "";
+    const assetAccessBindings =
+      sponsorGuard?.bindings ?? participantTaskGuard?.bindings ?? [];
     let multipart: R2MultipartUpload;
     try {
       multipart = await this.provider.createUpload(row);
@@ -579,7 +592,9 @@ export class MultipartUploadService {
     );
     assertFileScanDispatchConfigured(this.env);
     validateDirectFileDeclaration(
-      input.target.assetKind,
+      isSponsorActor(actor) && input.target.assetKind === "other"
+        ? "headshot"
+        : input.target.assetKind,
       declaration,
       await this.access.loadEventFilePolicy(actor),
       {
@@ -641,7 +656,9 @@ export class MultipartUploadService {
       input.target,
     );
     validateDirectFileDeclaration(
-      input.target.assetKind,
+      isSponsorActor(actor) && input.target.assetKind === "other"
+        ? "headshot"
+        : input.target.assetKind,
       {
         name: input.filename,
         type: input.contentType,
@@ -1163,8 +1180,13 @@ export class MultipartUploadService {
   ) {
     const auditProvenance = multipartAuditProvenance(actor);
     const participantTaskGuard = this.participantTaskGuard(actor);
-    const assetAccessSql = participantTaskGuard
-      ? `AND (
+    const sponsorGuard = isSponsorActor(actor)
+      ? sponsorUploadGuard(actor, row.targetId)
+      : null;
+    const assetAccessSql = sponsorGuard
+      ? `AND EXISTS (${sponsorGuard.sql})`
+      : participantTaskGuard
+        ? `AND (
            asset.target_type <> 'task'
            OR EXISTS (
              SELECT 1 FROM task_instances task
@@ -1172,8 +1194,9 @@ export class MultipartUploadService {
                 AND ${participantTaskGuard.sql}
            )
          )`
-      : "";
-    const assetAccessBindings = participantTaskGuard?.bindings ?? [];
+        : "";
+    const assetAccessBindings =
+      sponsorGuard?.bindings ?? participantTaskGuard?.bindings ?? [];
     const commitResults = await this.env.DB.batch([
       this.env.DB.prepare(
         `UPDATE file_versions
@@ -1273,10 +1296,9 @@ export class MultipartUploadService {
                        '$.supportingDocumentMaximumBytes'
                      )
                    END
-                   WHEN 'other' THEN json_extract(
-                     policy_event.file_policy_json,
-                     '$.supportingDocumentMaximumBytes'
-                   )
+                   WHEN 'other' THEN CASE WHEN asset.target_type='resource' AND asset.target_id GLOB 'sponsor-asset-*'
+                     THEN json_extract(policy_event.file_policy_json,'$.headshotMaximumBytes')
+                     ELSE json_extract(policy_event.file_policy_json,'$.supportingDocumentMaximumBytes') END
                  END
                  AND (
                    asset.asset_kind <> 'task_evidence'

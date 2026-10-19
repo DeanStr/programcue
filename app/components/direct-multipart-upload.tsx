@@ -54,11 +54,12 @@ export class DirectUploadCompletionConflictError extends UserFacingError {
 }
 
 async function jsonRequest<T>(
+  endpoint: string,
   operation: ProgramCueMultipartOperation,
   body: unknown,
   options?: { idempotencyKey?: string; signal?: AbortSignal },
 ) {
-  const response = await fetch(`/files/multipart/${operation}`, {
+  const response = await fetch(`${endpoint}/${operation}`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -79,8 +80,10 @@ export function DirectMultipartUpload({
   description = "Your file uploads straight from this browser to private storage. Program Cue checks the completed file and keeps it quarantined until the malware scan passes.",
   onCompleted,
   disabled = false,
+  endpoint = "/files/multipart",
 }: {
   target: DirectUploadTarget;
+  endpoint?: string;
   kinds: DirectUploadKind[];
   heading?: string;
   description?: string;
@@ -281,6 +284,7 @@ export function DirectMultipartUpload({
       });
       const request: ProgramCueMultipartRequest = (operation, body, options) =>
         jsonRequest(
+          endpoint,
           operation,
           operation === "initiate" || operation === "resume"
             ? {

@@ -10,7 +10,7 @@ def validate_baseline(connection: sqlite3.Connection, schema_source: str) -> Non
         )
     }
     required = {
-        "event_sponsorships", "sponsor_contacts", "sponsored_session_proposals",
+        "event_sponsorships", "sponsor_contacts", "sponsored_session_proposals", "sponsor_asset_requests",
         "organisations", "people", "organisation_ai_settings", "events", "event_participant_profiles", "memberships",
         "organisation_contacts", "organisation_contact_profiles", "organisation_contact_tags", "organisation_contact_notes",
         "crm_segments", "crm_pipeline_entries", "crm_pipeline_activity",
