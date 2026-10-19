@@ -19,7 +19,8 @@ Git history retains earlier committed work logs.
   production event subsequently passed direct session creation before new-event
   acceptance, delivered invitation, ordinary magic-link sign-in, separate role
   confirmation, checklist/upload completion, clean file release and publication.
-  The returning-speaker and mailbox-inspection boundaries are recorded below.
+  The returning-speaker boundary and subsequent user-confirmed inbox check are
+  recorded below.
   No shared fixture reset was performed.
 - Source `a54f37c1` was subsequently deployed on 18 October after the complete
   release gate passed on retry (793.9 seconds). Publication confirmation now
@@ -182,8 +183,9 @@ sign-in. These checks did not bypass either gate.
 This is a returning speaker, so it does not independently isolate the new
 fresh-roster identity eligibility branch. That branch retains the earlier live
 prospect loader check and local atomic-write regressions. The delivery webhook
-and real magic-link authentication do not establish mailbox rendering or inbox
-inspection. Receipt details and screenshots are private under
+and real magic-link authentication alone do not establish mailbox rendering or
+inbox inspection; the user subsequently confirmed the manual inbox check below.
+Receipt details and screenshots are private under
 `.artifacts/live-journey-20261018/`.
 
 The upload exposed an aged-signature failure in the September scanner image:
@@ -238,16 +240,24 @@ returned 404; the canary registry image was deleted and no longer listed. The
 production scanner still reported source `38a5ad24`. Receipts, image/adapter
 hashes and provider logs: `.artifacts/publication-followup-20261018/`.
 
-### Inbox evidence boundary
+### Inbox acceptance — user-confirmed 19 October 2026
+
+The user checked the controlled speaker inbox and reported "all looks correct"
+against the requested checks: receipt of the speaker and calendar invitations,
+correct sender/event details and readable formatting, and an invitation link
+opening the speaker portal with access to the intended event. This closes the
+controlled journey's inbox acceptance through user-reported manual verification.
+No agent-side mailbox inspection or new inbox screenshots were collected; this
+does not constitute an independent evaluation result.
 
 No usable AgentMail or Purelymail credential was found in the local environment,
 project configuration or saved credential-location references. A live MX lookup
 for `programcue.com` returned `mailserver.purelymail.com`; forwarding to AgentMail
 has not been verified. The deployment token lacks the separate Cloudflare mail
 routing permission, so that read-only lookup could not establish forwarding.
-Inbox inspection remains pending the receiving-account clarification and saved
-credential location. No mailbox receipt or rendering is claimed from the
-existing Resend delivery webhooks or stored message copy.
+Mailbox integration is unnecessary for this completed manual check. Provider
+routing remains unverified; the inbox evidence comes from the user's confirmation,
+separately from the existing Resend delivery webhooks and stored message copy.
 
 ### Independent evaluation stopped at the user's request
 
@@ -326,7 +336,7 @@ release gate; the successful 18 October release supersedes it.
 
 | Surface | Latest retained evidence | Boundary |
 | --- | --- | --- |
-| Application | `41420df2d1aa852f46942ab085af3b9504008943`, Worker `19adc1db-3e8a-4b1f-b98b-63b08a0d5831`, deployed 19 October; full release gate passed on retry (916.1 seconds) and exact-revision health passed. | Publication notification disclosure and Cancel/Escape focus passed live, including reload and keyboard reopening. The earlier controlled invited-speaker journey passed on `00d47fb3`; no shared fixture reset and mailbox inspection remains unverified. |
+| Application | `41420df2d1aa852f46942ab085af3b9504008943`, Worker `19adc1db-3e8a-4b1f-b98b-63b08a0d5831`, deployed 19 October; full release gate passed on retry (916.1 seconds) and exact-revision health passed. | Publication notification disclosure and Cancel/Escape focus passed live, including reload and keyboard reopening. The earlier controlled invited-speaker journey passed on `00d47fb3`; no shared fixture reset. The user confirmed the manual inbox check on 19 October. |
 | Public website | Bundle `67d5b4b4`, Worker `e9398ee9-5a85-4c73-b751-0de7468c0032`, deployed and exercised on 5 September. | Separate website release; includes the approved film and guide pages. |
 | Scanner | Source `38a5ad247b0c1199542a89348d2fbc7223b9abd6`, Worker `4dd9dc62-478b-422a-83c7-c23a766743a1`, deployed 18 October at 09:20 UTC; container rollout complete at 09:22 UTC. Full gate, exact-revision health and real headshot scan/release/exact-byte download passed. | FreshClam trusts the required interception CA; real TLS positive/negative regression passed. The live file retry used fresh baked signatures; a later isolated hosted canary verified aged-signature download, validation, daemon reload and restored readiness. Sustained burst capacity remains outstanding. |
 
@@ -736,7 +746,8 @@ acknowledgement latency remain outstanding.
    and newer task acceptance remain incomplete, although the separate controlled
    invited-speaker journey passed real publication and upload/release. Anonymous
    Cloudflare verification remains manual. CRM new-event transfer/import and
-   independent inbox inspection still lack evidence.
+   independent evaluation inbox inspection still lack evidence; the separate
+   controlled journey's manual inbox check was confirmed by the user on 19 October.
 2. **Provider paths:** exercise Airtable authority/recovery, Accelevents live
    reconciliation, external AI/tool-loop/assessment and fresh provider-error
    callbacks. Verify newer schedule-change emails, reminder cron and controlled
