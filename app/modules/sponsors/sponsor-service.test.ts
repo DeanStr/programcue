@@ -1,5 +1,6 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { CommunicationService } from "~/modules/communications/communication-service.server";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { type SponsorPerson, SponsorStateError } from "./sponsor-schema";
@@ -425,5 +426,55 @@ describe("company-scoped sponsor workflow", () => {
       .first<{ audience: string; recipients: string; status: string }>();
     expect(record).toMatchObject({ status: "draft" });
     expect(record!.recipients).toContain(person.email);
+  });
+  it("uses revised published invitation wording and refuses an unpublished template", async () => {
+    await service.prepareInvitation(viewer, sponsorId, key());
+    const originalId = (await service.adminWorkspace(viewer, sponsorId)).sponsor
+      .invitationTemplateVersionId;
+    const original = await env.DB.prepare(
+      "SELECT template_id AS templateId FROM communication_template_versions WHERE id=?",
+    )
+      .bind(originalId)
+      .first<{ templateId: string }>();
+    const communications = new CommunicationService(testEnv);
+    const revision = await communications.saveTemplate(viewer, {
+      templateId: original!.templateId,
+      name: "Revised sponsor invitation",
+      category: "ad_hoc",
+      subject: "Updated sponsor portal invitation",
+      content: {
+        body: "Hello {{recipient.name}}, revised invitation wording for {{event.name}}.",
+        physicalAddress: "Toronto convention centre",
+      },
+    });
+    await communications.publishTemplate(viewer, revision.versionId);
+    expect(
+      await env.DB.prepare(
+        "SELECT status FROM communication_template_versions WHERE id=?",
+      )
+        .bind(originalId)
+        .first(),
+    ).toEqual({ status: "retired" });
+    const draft = await service.prepareInvitation(viewer, sponsorId, key());
+    const stored = await env.DB.prepare(
+      "SELECT template_version_id AS versionId FROM communications WHERE id=?",
+    )
+      .bind(draft.id)
+      .first<{ versionId: string }>();
+    expect(stored?.versionId).toBe(revision.versionId);
+    expect(
+      JSON.stringify(await communications.previewDraft(viewer, draft.id)),
+    ).toContain("revised invitation wording");
+    await env.DB.prepare(
+      "UPDATE communication_template_versions SET status='retired' WHERE id=?",
+    )
+      .bind(revision.versionId)
+      .run();
+    await expect(
+      service.prepareInvitation(viewer, sponsorId, key()),
+    ).rejects.toThrow(
+      "Publish a version of this sponsor's invitation template",
+    );
+    expect(queue).toHaveLength(0);
   });
 });

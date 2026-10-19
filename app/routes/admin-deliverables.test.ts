@@ -104,6 +104,39 @@ describe("deliverables route", () => {
         .first(),
     ).toBeNull();
   });
+  it("does not prepare reminders for administrator-only speaker tasks", async () => {
+    const version = await template();
+    const taskId = crypto.randomUUID();
+    await env.DB.prepare(
+      `INSERT INTO task_instances (id,event_id,target_type,target_id,title,task_type,impact,evidence_mode,status)
+       SELECT ?,event_id,target_type,target_id,'Organiser approval','administrator_only','medium','admin_approval','not_started'
+       FROM task_instances WHERE event_id=? AND template_id='task-template-handbook' AND target_id='person-demo-speaker' LIMIT 1`,
+    )
+      .bind(taskId, viewer.eventId)
+      .run();
+    const query = `?q=Priya&template=task:${taskId}`;
+    const matrix = await loader(args(query));
+    expect(matrix.rows).toHaveLength(1);
+    expect(matrix.recipientCount).toBe(0);
+    const id = crypto.randomUUID();
+    expect(
+      await action(
+        args(
+          query,
+          new URLSearchParams({
+            intent: "reminder",
+            templateVersionId: version,
+            draftId: id,
+          }),
+        ),
+      ),
+    ).toMatchObject({ data: { ok: false }, init: { status: 422 } });
+    expect(
+      await env.DB.prepare("SELECT id FROM communications WHERE id=?")
+        .bind(id)
+        .first(),
+    ).toBeNull();
+  });
   it("recomputes recipients when tasks are completed after the matrix was loaded", async () => {
     const version = await template();
     const before = await loader(

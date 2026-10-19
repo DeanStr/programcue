@@ -12,6 +12,18 @@ effect on reads and writes; restoration requires acceptance again. Private
 company profiles are separate from the published event-site sponsor collection.
 Existing HTTPS logo URLs are supported; this feature does not upload logos.
 
+Event participant retention deletes private sponsor companies and cascades to
+their contacts and proposal snapshots, including unregistered proposed speakers.
+Accepted programme sessions retain their existing retention policy. Completion
+integrity checks include all three sponsor tables; database guards prohibit new
+writes or moving rows into or out of a completed event. Migration `0059` also
+removes sponsor intake left behind by previously completed retention runs.
+Other-event sponsor access preserves a shared person's canonical identity.
+Sponsor mutation audit metadata contains identifiers only, never copied form
+payloads; existing immutable audit history retains its documented exception.
+Invitation preparation resolves the current published version of the company's
+original template, so publishing revised wording does not break new invitations.
+
 Draft, submitted and accepted proposals consume allowance; withdrawal releases
 it. Conditional D1 writes enforce allowance, deadlines and optimistic revisions,
 with audited, idempotent mutations. Organiser approval links the proposal to a
@@ -26,7 +38,7 @@ Active roster speakers form rows and speaker-target requirements form columns;
 multiple assignments retain their individual evidence and status. Filters select
 speakers but do not conceal other cell statuses. Reminder drafts recompute the
 current matching audience across every page, deduplicate speakers and exclude
-completed/waived work, non-actionable tasks and submitted evidence awaiting
+completed/waived work, administrator-only tasks, non-actionable tasks and submitted evidence awaiting
 organiser review. Only compatible published reminder templates are offered.
 Deadline extensions reuse the event-local, reasoned and audited task command.
 Invitations and reminders use Communications for exact-recipient preview and

@@ -262,7 +262,9 @@ export default function AdminFileRetention({
             <p className="subtle">
               Revoke event access and event-scoped sessions, replace participant
               links with pseudonyms, and redact stored submissions, reviews,
-              delivery snapshots, provider identifiers and file metadata.
+              delivery snapshots, provider identifiers and file metadata. This
+              also permanently removes private sponsor profiles, contacts and
+              proposal snapshots.
             </p>
           </div>
           <span

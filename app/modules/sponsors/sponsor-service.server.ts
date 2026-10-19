@@ -62,6 +62,7 @@ export class SponsorService extends SponsorStore {
       FROM event_sponsorships s JOIN events e ON e.id=s.event_id AND e.organisation_id=s.organisation_id
       JOIN sponsor_contacts c ON c.sponsor_id=s.id AND c.event_id=s.event_id
       WHERE lower(c.email)=lower(?) AND c.revoked_at IS NULL AND s.status='active' AND e.activation_status='active'
+        AND e.participant_retention_completed_at IS NULL
         AND (? IS NULL OR s.organisation_id=?) ORDER BY e.starts_at DESC,s.name`)
         .bind(
           person.email,
@@ -544,10 +545,27 @@ export class SponsorService extends SponsorStore {
     }
     if (!versionId)
       throw new Error("Sponsor invitation template was not saved.");
+    // The stored version anchors the template identity. Publishing revised
+    // wording retires it, so new invitations must resolve its published sibling.
+    const published = await this.env.DB.prepare(
+      `SELECT current.id FROM communication_template_versions original
+       JOIN communication_templates template ON template.id=original.template_id AND template.event_id=original.event_id
+       JOIN events event ON event.id=template.event_id
+       JOIN communication_template_versions current ON current.template_id=template.id AND current.event_id=template.event_id
+       WHERE original.id=? AND template.event_id=? AND event.organisation_id=?
+         AND template.status<>'archived' AND current.status='published' AND current.channel='email'
+       ORDER BY current.version_number DESC LIMIT 1`,
+    )
+      .bind(versionId, viewer.eventId, viewer.organisationId)
+      .first<{ id: string }>();
+    if (!published)
+      throw new SponsorStateError(
+        "Publish a version of this sponsor's invitation template before preparing an invitation.",
+      );
     return new CommunicationDraftService(this.env).create(
       viewer,
       {
-        templateVersionId: versionId,
+        templateVersionId: published.id,
         audienceType: "manual",
         manualRecipients: contacts
           .map((contact) => namedRecipient(contact.name, contact.email))

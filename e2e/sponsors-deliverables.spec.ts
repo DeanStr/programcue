@@ -134,6 +134,14 @@ test("sponsor contact submits within allowance and organiser accepts into the or
   await identity(page, "speaker");
   const response = await page.goto(portalUrl);
   expect(response?.status()).toBe(404);
+  await identity(page, "owner");
+  await page.goto("/admin/files/retention");
+  await expect(
+    page.getByText(
+      "This also permanently removes private sponsor profiles, contacts and proposal snapshots.",
+      { exact: false },
+    ),
+  ).toBeVisible();
 });
 
 test("deliverables matrix supports filters, evidence navigation and event-local deadline extension", async ({
@@ -198,4 +206,38 @@ test("deliverables matrix supports filters, evidence navigation and event-local 
     .getByRole("button", { name: "Apply filters", exact: true })
     .click();
   await expect(page).toHaveURL(/state=unassigned/);
+  await page
+    .getByRole("combobox", { name: "Show speakers with", exact: true })
+    .selectOption("outstanding");
+  await page
+    .getByRole("combobox", { name: "Requirement", exact: true })
+    .selectOption("task-template-handbook");
+  await page
+    .getByRole("button", { name: "Apply filters", exact: true })
+    .click();
+  await expect(page).toHaveURL(/state=outstanding/);
+  await page.getByRole("link", { name: "Clear", exact: true }).click();
+  await expect(page).toHaveURL(/\/admin\/tasks\/deliverables$/);
+  await expect(page.getByLabel("Speaker", { exact: true })).toHaveValue("");
+  await expect(
+    page.getByRole("combobox", { name: "Requirement", exact: true }),
+  ).toHaveValue("");
+  await expect(
+    page.getByRole("combobox", { name: "Show speakers with", exact: true }),
+  ).toHaveValue("all");
+  await page.goBack();
+  await expect(page.getByLabel("Speaker", { exact: true })).toHaveValue(
+    "Priya",
+  );
+  await expect(
+    page.getByRole("combobox", { name: "Show speakers with", exact: true }),
+  ).toHaveValue("outstanding");
+  await page.goForward();
+  await expect(page.getByLabel("Speaker", { exact: true })).toHaveValue("");
+  await page
+    .getByRole("button", { name: "Apply filters", exact: true })
+    .click();
+  await expect(page).toHaveURL(/state=all/);
+  expect(new URL(page.url()).searchParams.get("q")).toBe("");
+  expect(new URL(page.url()).searchParams.get("template")).toBe("");
 });

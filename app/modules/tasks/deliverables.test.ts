@@ -22,6 +22,7 @@ const task = (
   targetId,
   title: "Slides",
   status,
+  taskType: "file_upload",
   dueAt: 100,
   participantActionable: true,
   ...extra,
@@ -69,6 +70,23 @@ describe("speaker deliverables matrix", () => {
     expect(matrix({ q: "two@example.com" }).rows.map((s) => s.id)).toEqual([
       "two",
     ]);
+  });
+  it("keeps organiser-only work visible without selecting its speaker for reminders", () => {
+    const result = buildDeliverables(
+      {
+        ...workspace,
+        tasks: [
+          task("admin-work", "one", "not_started", {
+            taskType: "administrator_only",
+            participantActionable: true,
+          }),
+        ],
+      },
+      deliverablesFilterSchema.parse({ state: "outstanding" }),
+      200,
+    );
+    expect(result.rows.map((row) => row.id)).toEqual(["one"]);
+    expect(result.recipients).toEqual([]);
   });
   it("distinguishes unassigned requirements from completed work", () => {
     expect(matrix({ template: "bio", state: "unassigned" }).rows).toHaveLength(

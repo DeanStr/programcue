@@ -385,6 +385,15 @@ export abstract class ParticipantRetentionExecution extends ParticipantRetention
                   SELECT 1 FROM audit_events other
                    WHERE other.actor_person_id = people.id
                      AND (other.event_id IS NULL OR other.event_id <> ?)
+                )
+                AND NOT EXISTS (
+                  SELECT 1 FROM sponsor_contacts other
+                   WHERE lower(other.email) = lower(people.email)
+                     AND other.event_id <> ? AND other.revoked_at IS NULL
+                )
+                AND NOT EXISTS (
+                  SELECT 1 FROM sponsored_session_proposals other
+                   WHERE other.created_by_person_id = people.id AND other.event_id <> ?
                 )`,
           ).bind(
             mapping.retiredEmail,
@@ -394,6 +403,8 @@ export abstract class ParticipantRetentionExecution extends ParticipantRetention
             viewer.organisationId,
             operationId,
             mapping.pseudonymId,
+            viewer.eventId,
+            viewer.eventId,
             viewer.eventId,
             viewer.eventId,
             viewer.eventId,

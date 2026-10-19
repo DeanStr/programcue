@@ -25,6 +25,7 @@ export type DeliverableTask = {
   targetId: string;
   title: string;
   status: string;
+  taskType: string;
   dueAt: number | null;
   participantActionable: boolean;
 };
@@ -122,6 +123,7 @@ export function buildDeliverables<T extends DeliverableTask>(
       (task) =>
         !deliverableComplete(task) &&
         task.status !== "submitted" &&
+        task.taskType !== "administrator_only" &&
         task.participantActionable,
     ),
   );

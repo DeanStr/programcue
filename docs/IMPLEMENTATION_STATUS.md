@@ -18,12 +18,42 @@ tables. Approval reuses direct-session creation and leaves participation pending
 and the session unpublished. Contact restoration requires fresh acceptance.
 Invitation preparation creates an editable Communications draft, not a send.
 
+Review fixes add migration `0059_sponsor_retention_guards.sql`: event retention
+deletes private sponsor profiles, contacts and proposal snapshots, including
+accepted/withdrawn proposals and people never added to the roster. Database
+guards block subsequent inserts/updates and scope changes, and the migration
+cleans up rows left by earlier completed retention runs. Accepted programme
+sessions remain; other-event sponsor identities and records are preserved.
+The retention confirmation screen discloses removal of private sponsor intake.
+Completion integrity covers all three tables. New sponsor audits contain only
+identifiers; existing immutable audit history is not rewritten. Invitation
+preparation follows the original template's current published version.
+
 `/admin/tasks/deliverables` adds active-speaker rows, requirement columns,
 status/search/requirement filters, pagination, evidence links, deadline extensions
 and filtered reminder drafts across all matching pages. It uses the existing
 Task and Communications services. Source inspiration is Trackstage's sponsor
 portal and Conferencer's deliverables matrix; this is not a claim of complete
 feature parity with either repository.
+
+Reminder recipients now exclude administrator-only work even when the existing
+participant-access flag is true. Filter controls remount from loader filters,
+including Clear and browser history navigation. Review regression evidence:
+33 focused Worker tests passed across sponsor service/retention, participant
+retention, deliverables rules and the route; the forward migration upgrade test
+and generated TypeScript check also passed.
+
+The review-fix validation ran `npm run check:core`: 666 unit tests and 1,995
+Worker tests passed; the existing headshot-upload test exceeded its 5-second
+timeout. Its unchanged isolated rerun passed at the default timeout, and the
+agent test passed separately. All other core lanes passed, including production
+build, TypeScript, formatting, migration validation, recovery and OpenAPI
+consistency. Both sponsor/deliverables Chromium workflows passed, including
+Clear, back/forward navigation and reapplying cleared filters. After adding the
+retention disclosure, the build and sponsor browser workflow passed again.
+The default core command therefore did not finish cleanly; the full repository
+browser gate was not repeated for these focused review fixes. Nothing from this
+candidate has been deployed.
 
 Focused Worker evidence covers company/event/organisation isolation, acceptance
 and revocation, concurrent allowance enforcement, idempotency, stale revisions,

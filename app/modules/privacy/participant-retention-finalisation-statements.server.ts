@@ -24,6 +24,14 @@ export function buildParticipantRetentionFinalisationStatements(
     );
   const statements = [
     claimStatement,
+    // Private sponsor intake is disposable; accepted programme sessions remain
+    // governed by the ordinary session retention rules. Deletion cascades to
+    // contacts and proposal snapshots, including people never added to the roster.
+    guarded(
+      `DELETE FROM event_sponsorships WHERE event_id = ? AND organisation_id = ?`,
+      viewer.eventId,
+      viewer.organisationId,
+    ),
     guarded(
       `UPDATE submissions
           SET submitter_email = NULL, public_reference = 'retained-' || id,

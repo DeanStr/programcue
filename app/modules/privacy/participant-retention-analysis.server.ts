@@ -41,6 +41,18 @@ export abstract class ParticipantRetentionAnalysis extends ParticipantRetentionF
   protected async completionIntegrity(viewer: Viewer) {
     const checks = [
       {
+        area: "sponsor profile, contact, or proposal",
+        sql: `WITH locked AS (
+          SELECT event_id FROM participant_retention_locked_events
+           WHERE event_id = ? AND organisation_id = ?
+        )
+        SELECT
+          (SELECT COUNT(*) FROM event_sponsorships WHERE event_id IN locked)
+          + (SELECT COUNT(*) FROM sponsor_contacts WHERE event_id IN locked)
+          + (SELECT COUNT(*) FROM sponsored_session_proposals WHERE event_id IN locked)
+          AS total`,
+      },
+      {
         area: "participant identity or credential",
         sql: `WITH locked AS (
           SELECT event_id FROM participant_retention_locked_events
@@ -420,6 +432,15 @@ export abstract class ParticipantRetentionAnalysis extends ParticipantRetentionF
               WHERE actor_person_id = ? AND (event_id IS NULL OR event_id <> ?)
            )
            OR EXISTS (
+             SELECT 1 FROM sponsor_contacts contact
+             JOIN people person ON lower(person.email) = lower(contact.email)
+              WHERE person.id = ? AND contact.event_id <> ? AND contact.revoked_at IS NULL
+           )
+           OR EXISTS (
+             SELECT 1 FROM sponsored_session_proposals
+              WHERE created_by_person_id = ? AND event_id <> ?
+           )
+           OR EXISTS (
              SELECT 1 FROM organisation_contacts
               WHERE person_id = ? AND status = 'active'
            )
@@ -435,7 +456,7 @@ export abstract class ParticipantRetentionAnalysis extends ParticipantRetentionF
          ) AS immutableAuditRows`,
     )
       .bind(
-        ...Array.from({ length: 18 }, () => [
+        ...Array.from({ length: 20 }, () => [
           candidate.id,
           viewer.eventId,
         ]).flat(),

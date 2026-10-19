@@ -193,7 +193,11 @@ export default function Deliverables({
       {actionData && (
         <p role={actionData.ok ? "status" : "alert"}>{actionData.message}</p>
       )}
-      <Form method="get" className="card pad deliverables-filters">
+      <Form
+        key={JSON.stringify(d.filters)}
+        method="get"
+        className="card pad deliverables-filters"
+      >
         <label className="label">
           Speaker
           <input className="field" name="q" defaultValue={d.filters.q} />

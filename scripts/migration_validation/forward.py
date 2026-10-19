@@ -51,6 +51,7 @@ from .forward_schedule_review_links import (
 )
 from .forward_speaker_profile_depth import validate_speaker_profile_depth_forward_migration
 from .forward_speaker_workflow import validate_speaker_workflow_forward_migration
+from .forward_sponsor_retention import validate_sponsor_retention_forward_migration
 from .forward_task_instance_configuration_snapshot import (
     validate_task_instance_configuration_snapshot_forward_migration,
 )
@@ -82,3 +83,4 @@ def validate_forward_migrations(root: Path) -> None:
     validate_session_participation_decisions_forward_migration(root)
     validate_schedule_review_links_forward_migration(root)
     validate_participant_operations_depth_forward_migration(root)
+    validate_sponsor_retention_forward_migration(root)

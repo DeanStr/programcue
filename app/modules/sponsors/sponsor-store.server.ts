@@ -45,6 +45,7 @@ export class SponsorStore {
       JOIN events e ON e.id=s.event_id AND e.organisation_id=s.organisation_id
       JOIN sponsor_contacts c ON c.sponsor_id=s.id AND c.event_id=s.event_id
       WHERE s.id=? AND s.event_id=? AND s.status='active' AND e.activation_status='active'
+        AND e.participant_retention_completed_at IS NULL
         AND lower(c.email)=lower(?) AND c.revoked_at IS NULL
         AND (? IS NULL OR s.organisation_id=?)
         AND (?=1 OR c.accepted_at IS NOT NULL)`;
@@ -79,6 +80,16 @@ export class SponsorStore {
     statements: D1PreparedStatement[],
   ) {
     z.uuid().parse(key);
+    if (
+      await this.env.DB.prepare(
+        `SELECT 1 FROM participant_retention_locked_events WHERE event_id=? AND organisation_id=?`,
+      )
+        .bind(authority.eventId, authority.organisationId)
+        .first()
+    )
+      throw new SponsorStateError(
+        "Participant retention is complete for this event. Sponsor data can no longer be changed.",
+      );
     const bytes = await crypto.subtle.digest(
       "SHA-256",
       new TextEncoder().encode(JSON.stringify(payload)),
@@ -139,13 +150,20 @@ export class SponsorStore {
           scope,
           entityId,
           commandId,
-          JSON.stringify(payload),
+          JSON.stringify({ version: 1, entityId }),
         ),
         this.env.DB.prepare(
           `UPDATE idempotency_records SET status='completed',entity_type='sponsorship',entity_id=?,response_status=200,response_json=?,completed_at=unixepoch() WHERE id=?`,
         ).bind(entityId, JSON.stringify({ entityId }), commandId),
       ]);
     } catch (error) {
+      if (
+        error instanceof Error &&
+        /participant retention is complete/i.test(error.message)
+      )
+        throw new SponsorStateError(
+          "Participant retention is complete for this event. Sponsor data can no longer be changed.",
+        );
       const concurrent = await recover();
       if (concurrent) return concurrent;
       if (
