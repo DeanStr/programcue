@@ -1,6 +1,6 @@
 # Verified implementation status
 
-Evidence recorded through **18 October 2026**, including application/scanner releases, a controlled live invited-speaker journey and autonomous backup acceptance.
+Evidence recorded through **19 October 2026**, including application/scanner releases, a controlled live invited-speaker journey and autonomous backup acceptance.
 This is the current capability,
 requirements and acceptance index; consolidation does not constitute a new
 verification or deployment. The [product specification](../sessionboard-replacement-full-scope-implementation-specification-with-competition-ux.md)
@@ -27,6 +27,11 @@ Git history retains earlier committed work logs.
   Exact-revision production health passed. The earlier five-shard run hit a
   tablet accessibility timeout; the unchanged case passed in isolation, then
   the entire release gate passed with three browser shards.
+- Source `41420df2` was deployed on 19 October after the complete release gate
+  passed in 916.1 seconds. It restores publication-dialog focus after preview
+  refresh. Exact-revision health and live Cancel, Escape, keyboard reopening,
+  disclosure and reload checks passed. Published version 1 and the two existing
+  communications remained unchanged; no publication or evaluation was submitted.
 - Scanner source `38a5ad24` was released on 18 October. The live journey exposed
   TLS trust failures in signature updates from the aged September image. The fix
   passed the full release gate and exact-revision health; all four container
@@ -134,7 +139,27 @@ it in production, and the new local regression failed on the unchanged build.
 The follow-up now captures the initiating button before refresh and passes that
 stable target to the publication dialog, preserving its existing blocker links'
 focus overrides. The regression passes Cancel, keyboard reopening and Escape;
-generated TypeScript and Biome also pass. Its deployment is recorded separately.
+generated TypeScript and Biome also pass.
+
+Source `41420df2d1aa852f46942ab085af3b9504008943` was deployed on 19 October as
+Worker `19adc1db-3e8a-4b1f-b98b-63b08a0d5831`. The first release attempt stopped
+at the existing headshot workflow's five-second Worker-test timeout. That test
+passed unchanged in isolation (2.24 seconds), and the ordinary deployment retry
+with two Vitest workers passed the entire release gate in 916.1 seconds:
+666 unit tests, 1,974 Worker tests, one agent test, 15 scanner tests, all 238
+application browser checks, 12 local access checks and 16 website checks.
+The two opt-in performance skips and seven low dependency findings remain.
+Remote schema validation, all 58 already-applied migrations and exact-revision
+production health passed; no checks were exempted.
+
+At 00:18 UTC, the live browser verified both disclosures, reload, Cancel focus,
+keyboard reopening and Escape focus. The anonymous programme remained accessible
+with the existing session. The earlier disclosure check had prepared draft
+version 2 in this controlled event; the final check created no additional draft
+and submitted no publication. Before/after D1 reads retained published version 1,
+unpublished draft version 2 and exactly two communications. No shared fixture
+reset or independent evaluation run occurred. Receipts, screenshot and release
+logs are private under `.artifacts/publication-followup-20261018/`.
 
 A separate synthetic event, `invited-speaker-live-20261018`, exercises the
 invited-speaker path on application `00d47fb3` without resetting the shared
@@ -301,7 +326,7 @@ release gate; the successful 18 October release supersedes it.
 
 | Surface | Latest retained evidence | Boundary |
 | --- | --- | --- |
-| Application | `a54f37c168d64ab16aefc5a1fd959032643505a4`, Worker `6388fca7-0f93-4288-8367-5254f46fae15`, deployed 18 October; full release gate passed on retry and exact-revision health passed. | Corrected publication notification disclosure. The earlier controlled invited-speaker journey passed on `00d47fb3`; no shared fixture reset and mailbox inspection remains unverified. |
+| Application | `41420df2d1aa852f46942ab085af3b9504008943`, Worker `19adc1db-3e8a-4b1f-b98b-63b08a0d5831`, deployed 19 October; full release gate passed on retry (916.1 seconds) and exact-revision health passed. | Publication notification disclosure and Cancel/Escape focus passed live, including reload and keyboard reopening. The earlier controlled invited-speaker journey passed on `00d47fb3`; no shared fixture reset and mailbox inspection remains unverified. |
 | Public website | Bundle `67d5b4b4`, Worker `e9398ee9-5a85-4c73-b751-0de7468c0032`, deployed and exercised on 5 September. | Separate website release; includes the approved film and guide pages. |
 | Scanner | Source `38a5ad247b0c1199542a89348d2fbc7223b9abd6`, Worker `4dd9dc62-478b-422a-83c7-c23a766743a1`, deployed 18 October at 09:20 UTC; container rollout complete at 09:22 UTC. Full gate, exact-revision health and real headshot scan/release/exact-byte download passed. | FreshClam trusts the required interception CA; real TLS positive/negative regression passed. The live file retry used fresh baked signatures; a later isolated hosted canary verified aged-signature download, validation, daemon reload and restored readiness. Sustained burst capacity remains outstanding. |
 
