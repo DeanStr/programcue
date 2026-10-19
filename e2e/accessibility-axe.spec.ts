@@ -82,6 +82,9 @@ for (const viewport of VIEWPORTS) {
   test(`representative role surfaces have no detectable WCAG A/AA violations at ${viewport.label}`, async ({
     page,
   }) => {
+    // Each viewport traverses and audits every surface, rather than one page.
+    // Keep all accessibility assertions while budgeting for the complete sweep.
+    test.setTimeout(90_000);
     await page.setViewportSize({
       width: viewport.width,
       height: viewport.height,

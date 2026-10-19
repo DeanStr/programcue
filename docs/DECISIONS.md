@@ -4,6 +4,11 @@ This file records durable decisions. It does not imply that every decided capabi
 
 ## Sponsor access and speaker deliverables — 19 October 2026
 
+The release checks give the multipart headshot workflow 15 seconds and each
+19-page accessibility sweep 90 seconds. These are scoped test time budgets for
+multi-step workflows under CPU contention; assertions, retries and the global
+test defaults are unchanged.
+
 Sponsor contacts have company-scoped access through their authenticated email
 and an explicit acceptance step. They do not gain organiser, submitter or speaker
 membership. Organisers own tiers, allowances, deadlines and contact access;

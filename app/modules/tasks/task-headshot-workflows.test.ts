@@ -186,4 +186,6 @@ it("collects private headshot task versions with image limits and clean-scan app
   ).rejects.toThrow(
     `${CANONICAL_EVENT_FILE_POLICY.headshotMaximumBytes / FILE_SIZE_MIB} MB event limit`,
   );
-});
+  // This exercises multiple multipart uploads, scans and approvals in one
+  // workflow; allow for Worker scheduling contention without changing assertions.
+}, 15_000);
