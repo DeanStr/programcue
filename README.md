@@ -2,7 +2,7 @@
 
 Program Cue is a pre-release conference programme operations platform. It is one React Router/TypeScript modular monolith on Cloudflare Workers, with D1 for relational state, R2 for private files, Cloudflare Images for brand-image normalization, Queues for provider work and an event-scoped Durable Object for realtime invalidation.
 
-The repository contains connected server-backed slices for event setup, submissions, evaluation and decisions, automatic speaker onboarding, resources/files, FullCalendar scheduling and publication, a bounded public event-site editor, communications/calendars, Airtable and Accelevents integrations, operations, a permissioned AI assistant and a documented 33-path REST/webhook API. Published forms, event sites, resources, schedule content and communication templates keep immutable version snapshots; retryable provider work is recorded durably and claimed idempotently. Remaining boundaries are deployment of each new release candidate, unexercised live-provider paths and independent acceptance evidence rather than simulated success; see [implementation status](docs/IMPLEMENTATION_STATUS.md).
+The repository contains connected server-backed slices for event setup, submissions, evaluation and decisions, automatic speaker onboarding, a speaker deliverables matrix, sponsor portals and session review, resources/files, FullCalendar scheduling and publication, a bounded public event-site editor, communications/calendars, Airtable and Accelevents integrations, operations, a permissioned AI assistant and a documented 33-path REST/webhook API. Published forms, event sites, resources, schedule content and communication templates keep immutable version snapshots; retryable provider work is recorded durably and claimed idempotently. Remaining boundaries are deployment of each new release candidate, unexercised live-provider paths and independent acceptance evidence rather than simulated success; see [implementation status](docs/IMPLEMENTATION_STATUS.md).
 
 ## Local development
 
@@ -54,6 +54,8 @@ The populated showcase journeys and clean SBEK personas are described in the
 Other entry points:
 
 - [Command Centre](http://127.0.0.1:5173/admin/command)
+- [Sponsor administration](http://127.0.0.1:5173/admin/sponsors) and [company portal](http://127.0.0.1:5173/sponsor)
+- [Speaker deliverables matrix](http://127.0.0.1:5173/admin/tasks/deliverables)
 - [Participant workspace](http://127.0.0.1:5173/participant/dashboard)
 - [Public programme](http://127.0.0.1:5173/public/programme/future-of-events-2027)
 - [API reference](http://127.0.0.1:5173/api/docs)

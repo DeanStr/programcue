@@ -7,6 +7,8 @@ import {
 
 export default [
   index("routes/home.tsx"),
+  route("sponsor", "routes/sponsor-index.tsx"),
+  route("sponsor/:eventId/:sponsorId", "routes/sponsor-portal.tsx"),
   route("sign-in", "routes/sign-in.tsx"),
   route("sign-out", "routes/sign-out.ts"),
   route("evaluate", "routes/evaluation-guide.tsx"),
@@ -137,6 +139,7 @@ export default [
   route("admin/exports/:resource.csv", "routes/admin-data-export.ts"),
   route("admin", "routes/admin-index.ts"),
   layout("routes/admin-layout.tsx", [
+    route("admin/tasks/deliverables", "routes/admin-deliverables.tsx"),
     route("admin/command", "routes/command-centre.tsx"),
     route("admin/crm", "routes/admin-crm.tsx"),
     route("admin/crm/pipeline", "routes/admin-crm-pipeline.tsx"),
@@ -168,6 +171,7 @@ export default [
     route("admin/communications", "routes/communications-centre.tsx"),
     route("admin/review", "routes/evaluation-admin.tsx"),
     route("admin/review/results.csv", "routes/evaluation-results-export.ts"),
+    route("admin/sponsors", "routes/admin-sponsors.tsx"),
     route("admin/speakers", "routes/admin-speakers.tsx"),
     route("admin/people/search", "routes/admin-person-search.ts"),
     route(

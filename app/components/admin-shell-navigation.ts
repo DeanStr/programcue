@@ -2,6 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   Activity,
   BookOpen,
+  Building2,
   Cable,
   CalendarCog,
   CalendarDays,
@@ -58,6 +59,12 @@ export const NAV_ITEMS = [
     "Speaker directory",
     "Organisation-wide contacts and sourcing across events",
   ],
+  [
+    "sponsors",
+    Building2,
+    "Sponsors",
+    "Company contacts and sponsored sessions",
+  ],
   ["resources", BookOpen, "Speaker resources"],
   ["schedule", CalendarDays, "Schedule planner"],
   ["communications", Mail, "Communications"],
@@ -108,7 +115,7 @@ const NAV_GROUPS = [
 const NAV_CHILDREN: Record<string, ReadonlyArray<string>> = {
   command: ["assistant"],
   submissions: ["review"],
-  speakers: ["crm", "resources"],
+  speakers: ["crm", "resources", "sponsors"],
   schedule: ["content", "programme"],
   event: ["branding", "site"],
   operations: ["integrations", "settings"],
@@ -394,37 +401,40 @@ export function adminPageBreadcrumbs(
             ? "Create application record"
             : pathname === "/admin/sessions/new"
               ? "Add session"
-              : pathname === "/admin/tasks/bulk"
-                ? "Bulk task update"
-                : pathname === "/admin/sessions/bulk"
-                  ? "Bulk session update"
-                  : pathname === "/admin/files/retention"
-                    ? "Data retention"
-                    : section === "submissions"
-                      ? requiredRecordBreadcrumb(
-                          recordBreadcrumb,
-                          "Application",
-                        )
-                      : section === "crm" && parts[2] === "pipeline"
-                        ? "Sourcing pipeline"
-                        : section === "crm" && parts[2] === "outreach"
-                          ? "Speaker invitations"
-                          : section === "crm" && parts[2] === "contacts"
-                            ? requiredRecordBreadcrumb(
-                                recordBreadcrumb,
-                                "Contact",
-                              )
-                            : section === "speakers"
+              : pathname === "/admin/tasks/deliverables"
+                ? "Speaker deliverables"
+                : pathname === "/admin/tasks/bulk"
+                  ? "Bulk task update"
+                  : pathname === "/admin/sessions/bulk"
+                    ? "Bulk session update"
+                    : pathname === "/admin/files/retention"
+                      ? "Data retention"
+                      : section === "submissions"
+                        ? requiredRecordBreadcrumb(
+                            recordBreadcrumb,
+                            "Application",
+                          )
+                        : section === "crm" && parts[2] === "pipeline"
+                          ? "Sourcing pipeline"
+                          : section === "crm" && parts[2] === "outreach"
+                            ? "Speaker invitations"
+                            : section === "crm" && parts[2] === "contacts"
                               ? requiredRecordBreadcrumb(
                                   recordBreadcrumb,
-                                  "Speaker",
+                                  "Contact",
                                 )
-                              : section === "content" && parts[2] === "sessions"
+                              : section === "speakers"
                                 ? requiredRecordBreadcrumb(
                                     recordBreadcrumb,
-                                    "Session",
+                                    "Speaker",
                                   )
-                                : "Detail";
+                                : section === "content" &&
+                                    parts[2] === "sessions"
+                                  ? requiredRecordBreadcrumb(
+                                      recordBreadcrumb,
+                                      "Session",
+                                    )
+                                  : "Detail";
 
   return [
     { label: sectionLabel, href: sectionHref },

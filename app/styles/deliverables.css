@@ -1,0 +1,36 @@
+.deliverables-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 1rem;
+}
+.deliverables-matrix {
+  max-height: 70vh;
+  overflow: auto;
+}
+.deliverables-matrix th {
+  min-width: 12rem;
+}
+.deliverables-matrix thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface);
+}
+.deliverables-matrix tbody th {
+  position: sticky;
+  left: 0;
+  background: var(--surface);
+  z-index: 1;
+}
+.deliverable-cell {
+  display: grid;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  min-width: 12rem;
+}
+
+.deliverables-matrix tbody th,
+.deliverables-matrix tbody td {
+  vertical-align: top;
+}

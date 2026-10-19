@@ -7,6 +7,54 @@ verification or deployment. The [product specification](../sessionboard-replacem
 owns intended scope, [DECISIONS.md](DECISIONS.md) owns engineering decisions, and
 Git history retains earlier committed work logs.
 
+## Sponsor portal and deliverables candidate — 19 October 2026
+
+**Production slice, local candidate; not deployed.** `/admin/sponsors` manages
+company profiles, tiers, session allowances, event-local editing deadlines and
+contacts. `/sponsor` lists authenticated invitations and company workspaces;
+acceptance, profile editing, session drafts/submission/withdrawal and organiser
+approval persist in D1. Migration `0058_sponsor_portal.sql` adds three scoped
+tables. Approval reuses direct-session creation and leaves participation pending
+and the session unpublished. Contact restoration requires fresh acceptance.
+Invitation preparation creates an editable Communications draft, not a send.
+
+`/admin/tasks/deliverables` adds active-speaker rows, requirement columns,
+status/search/requirement filters, pagination, evidence links, deadline extensions
+and filtered reminder drafts across all matching pages. It uses the existing
+Task and Communications services. Source inspiration is Trackstage's sponsor
+portal and Conferencer's deliverables matrix; this is not a claim of complete
+feature parity with either repository.
+
+Focused Worker evidence covers company/event/organisation isolation, acceptance
+and revocation, concurrent allowance enforcement, idempotency, stale revisions,
+deadlines and atomic approval rollback. A production-mode test verifies durable
+speaker invitation creation and dispatch to a test queue, with no live email.
+Matrix and route tests cover historical assignments, unassigned cells, pagination
+audience, actionability, server-recomputed reminder recipients and filtering.
+Real-browser sponsor submission/approval/revocation and matrix deadline/reminder
+workflows passed, including WCAG A/AA checks. The affected mobile Tasks baseline
+was updated and reviewed; the focused desktop/laptop/mobile run passed all five
+cases.
+
+The core phase of `PROGRAM_CUE_E2E_SHARDS=3 npm run check` passed (898.7 seconds):
+666 unit tests, 1,989 Worker tests, one agent runtime test, generated TypeScript,
+production build, lint, design-system, migration, audit, recovery and API checks.
+The dependency audit also passed. The full browser run had 237 passes and three
+30-second timeouts in the existing multi-page accessibility sweeps. Those three
+sweeps also exceeded 30 seconds in isolation, then all passed with unchanged
+assertions and a command-line `--timeout=90000`; the repository's default timeout
+was not changed. This is qualified browser evidence, not a clean default-timing
+`npm run check` result. The subsequent local public-application browser suite
+passed all 12 cases and the public-site suite passed all 16 cases. The independent
+AI evaluation was not run.
+
+Boundaries: the matrix covers speaker-target tasks; session/event deliverables
+remain in Tasks & readiness. No new REST resources, sponsor file-upload flow,
+sponsor-side editing of accepted sessions or automatic public sponsor publishing.
+Programme publication
+still enforces existing consent/readiness/conflict gates. The independent AI
+evaluation remains stopped, and no production migration or deployment has run.
+
 ## Current position
 
 - The modular monolith has connected Worker/D1-backed product slices. Repository

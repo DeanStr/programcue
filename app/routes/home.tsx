@@ -1,7 +1,9 @@
 import { Form, redirect, useRouteLoaderData } from "react-router";
 import { BrandMark } from "~/components/brand-mark";
-import { Button } from "~/components/ui/button";
+import { Button, ButtonLink } from "~/components/ui/button";
+import { SponsorService } from "~/modules/sponsors/sponsor-service.server";
 import type { ViewerRole } from "~/platform/auth/authorize.server";
+import { requireAuthenticatedPerson } from "~/platform/auth/authorize.server";
 import {
   chooseInitialEvent,
   clearCurrentEventCookie,
@@ -24,7 +26,12 @@ const landingPage: Record<ViewerRole, string> = {
 export async function loader({ request, context }: Route.LoaderArgs) {
   const { env } = getCloudflareContext(context);
   const events = await listAuthorisedEvents(request, env);
-  if (events.length === 0) return { hasWorkspaceAccess: false as const };
+  if (events.length === 0) {
+    const person = await requireAuthenticatedPerson(request, env);
+    if ((await new SponsorService(env).listPortal(person)).length)
+      return redirect("/sponsor");
+    return { hasWorkspaceAccess: false as const };
+  }
   const selected = selectedEventId(request, env);
   const eventId = selected ?? chooseInitialEvent(events, env.DEFAULT_EVENT_ID);
   if (!eventId) throw redirect("/events/select?returnTo=%2F");
@@ -85,6 +92,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             ? "Return to the evaluation guide to switch persona. A published application link will not grant reviewer access."
             : "Open an event invitation or a published application link to join the relevant workspace. Signing up alone never grants private access."}
         </p>
+        <ButtonLink to="/sponsor">Sponsor invitations</ButtonLink>
         <Form method="post" action="/sign-out">
           {evaluation ? null : (
             <input type="hidden" name="returnTo" value="/" />

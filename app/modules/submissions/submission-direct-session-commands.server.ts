@@ -8,6 +8,10 @@ import {
   unavailableDirectSessionSpeakerEmails,
 } from "~/modules/speakers/speaker-invitation.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
+import {
+  atomicBatchGuardStatement,
+  isAtomicBatchGuardError,
+} from "~/platform/database/atomic-batch-guard.server";
 import { WebhookService } from "~/platform/operations/webhook-service.server";
 import { SubmissionAdministrationCommandFoundation } from "./submission-administration-command-foundation.server";
 import { SubmissionStateError } from "./submission-repository.server";
@@ -19,9 +23,20 @@ import {
   slugify,
 } from "./submission-service-foundation.server";
 
+export type SponsorProposalSource = {
+  id: string;
+  sponsorId: string;
+  revision: number;
+  detailsJson: string;
+};
+
 export class SubmissionDirectSessionCommands extends SubmissionAdministrationCommandFoundation {
-  async createDirectSession(viewer: Viewer, rawInput: unknown) {
-    return this.executeDirectSession(viewer, rawInput);
+  async createDirectSession(
+    viewer: Viewer,
+    rawInput: unknown,
+    sponsorSource?: SponsorProposalSource,
+  ) {
+    return this.executeDirectSession(viewer, rawInput, sponsorSource);
   }
 
   private async resumeDirectSessionSideEffects(
@@ -110,18 +125,20 @@ export class SubmissionDirectSessionCommands extends SubmissionAdministrationCom
   protected executeDirectSession(
     actor: SubmissionAdminActor,
     rawInput: unknown,
+    sponsorSource?: SponsorProposalSource,
   ) {
     return this.projectCommand(
       actor,
       "submission.direct_session.create",
-      rawInput,
-      () => this.createDirectSessionD1(actor, rawInput),
+      sponsorSource ? { rawInput, sponsorSource } : rawInput,
+      () => this.createDirectSessionD1(actor, rawInput, sponsorSource),
     );
   }
 
   protected async createDirectSessionD1(
     actor: SubmissionAdminActor,
     rawInput: unknown,
+    sponsorSource?: SponsorProposalSource,
   ) {
     const parsed = directSessionSchema.parse(rawInput);
     const { idempotencyKey, ...inputWithoutDuration } = parsed;
@@ -129,7 +146,9 @@ export class SubmissionDirectSessionCommands extends SubmissionAdministrationCom
       actor,
       "submission.admin.direct_session.create",
       idempotencyKey,
-      inputWithoutDuration,
+      sponsorSource
+        ? { ...inputWithoutDuration, sponsorSource }
+        : inputWithoutDuration,
     );
     if (prepared.replay) {
       return this.resumeDirectSessionSideEffects(
@@ -284,6 +303,37 @@ export class SubmissionDirectSessionCommands extends SubmissionAdministrationCom
         command.requestHash,
       ),
     );
+    if (sponsorSource) {
+      // Link acceptance in the same transaction as session, consent, audit and outbox creation.
+      statements.push(
+        atomicBatchGuardStatement(
+          this.env,
+          `NOT EXISTS (SELECT 1 FROM events event JOIN memberships membership ON membership.organisation_id=event.organisation_id AND (membership.event_id=event.id OR membership.event_id IS NULL) WHERE event.id=? AND event.organisation_id=? AND event.activation_status='active' AND membership.person_id=? AND membership.role IN ('owner','administrator') AND membership.accepted_at IS NOT NULL AND membership.revoked_at IS NULL)`,
+          [actor.eventId, actor.organisationId, actor.personId],
+        ),
+        this.env.DB.prepare(`UPDATE sponsored_session_proposals SET status='accepted',session_id=?,revision=revision+1,updated_at=unixepoch()
+          WHERE id=? AND sponsor_id=? AND event_id=? AND revision=? AND details_json=? AND status='submitted'
+            AND EXISTS (SELECT 1 FROM event_sponsorships WHERE id=? AND event_id=? AND organisation_id=? AND status='active')
+            AND EXISTS (SELECT 1 FROM sessions WHERE id=? AND event_id=?)`).bind(
+          sessionId,
+          sponsorSource.id,
+          sponsorSource.sponsorId,
+          actor.eventId,
+          sponsorSource.revision,
+          sponsorSource.detailsJson,
+          sponsorSource.sponsorId,
+          actor.eventId,
+          actor.organisationId,
+          sessionId,
+          actor.eventId,
+        ),
+        atomicBatchGuardStatement(
+          this.env,
+          `EXISTS (SELECT 1 FROM sessions WHERE id=? AND event_id=?) AND changes() <> 1`,
+          [sessionId, actor.eventId],
+        ),
+      );
+    }
     const proposedPersonIds = new Map(
       input.speakers.map((speaker) => [speaker.email, crypto.randomUUID()]),
     );
@@ -411,6 +461,12 @@ export class SubmissionDirectSessionCommands extends SubmissionAdministrationCom
         sessionId,
         command.recordId,
         JSON.stringify({
+          ...(sponsorSource
+            ? {
+                sponsorId: sponsorSource.sponsorId,
+                sponsorProposalId: sponsorSource.id,
+              }
+            : {}),
           title: input.title,
           trackId: track.id,
           trackName: track.name,
@@ -448,7 +504,16 @@ export class SubmissionDirectSessionCommands extends SubmissionAdministrationCom
       ...preparedWebhook.statements,
       ...invitationPlans.flatMap((plan) => plan.statements),
     );
-    const results = await this.env.DB.batch(statements);
+    let results: D1Result[];
+    try {
+      results = await this.env.DB.batch(statements);
+    } catch (error) {
+      if (sponsorSource && isAtomicBatchGuardError(error))
+        throw new SubmissionStateError(
+          "The sponsor session changed before approval. Refresh and review the latest proposal.",
+        );
+      throw error;
+    }
     if ((results[sessionInsertIndex]?.meta.changes ?? 0) !== 1) {
       const replay = await this.resolveAdminMutationRace(command);
       if (replay) {

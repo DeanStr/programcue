@@ -2,6 +2,36 @@
 
 This file records durable decisions. It does not imply that every decided capability is implemented; verified delivery status lives in `IMPLEMENTATION_STATUS.md`.
 
+## Sponsor access and speaker deliverables — 19 October 2026
+
+Sponsor contacts have company-scoped access through their authenticated email
+and an explicit acceptance step. They do not gain organiser, submitter or speaker
+membership. Organisers own tiers, allowances, deadlines and contact access;
+accepted contacts share their company's profile and proposals. Revocation takes
+effect on reads and writes; restoration requires acceptance again. Private
+company profiles are separate from the published event-site sponsor collection.
+Existing HTTPS logo URLs are supported; this feature does not upload logos.
+
+Draft, submitted and accepted proposals consume allowance; withdrawal releases
+it. Conditional D1 writes enforce allowance, deadlines and optimistic revisions,
+with audited, idempotent mutations. Organiser approval links the proposal to a
+normal direct session atomically with its speaker relationships, audit and durable
+invitation intent. Approval locks sponsor editing of that proposal. Speaker
+participation, canonical profile changes, onboarding and public publication keep
+their existing separate workflows. Source ideas: Trackstage sponsor company
+portals, contacts and session quotas.
+
+The deliverables matrix is a view of existing tasks, not another task store.
+Active roster speakers form rows and speaker-target requirements form columns;
+multiple assignments retain their individual evidence and status. Filters select
+speakers but do not conceal other cell statuses. Reminder drafts recompute the
+current matching audience across every page, deduplicate speakers and exclude
+completed/waived work, non-actionable tasks and submitted evidence awaiting
+organiser review. Only compatible published reminder templates are offered.
+Deadline extensions reuse the event-local, reasoned and audited task command.
+Invitations and reminders use Communications for exact-recipient preview and
+explicit sending confirmation. Source ideas: Conferencer's deliverables matrix.
+
 ## Scanner signature updates through HTTPS interception — 18 October 2026
 
 The production scanner requires Cloudflare's runtime-injected interception CA

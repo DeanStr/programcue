@@ -362,7 +362,7 @@ describe("administrator navigation context", () => {
     );
     expect(
       primaryNavigationChildren("speakers", NAV_ITEMS).map(([id]) => id),
-    ).toEqual(["crm", "resources"]);
+    ).toEqual(["crm", "resources", "sponsors"]);
     expect(
       primaryNavigationChildren("submissions", NAV_ITEMS).map(([id]) => id),
     ).toEqual(["review"]);
@@ -383,6 +383,6 @@ describe("administrator navigation context", () => {
       primaryNavigationChildren("speakers", withoutOrganisationAccess).map(
         ([id]) => id,
       ),
-    ).toEqual(["resources"]);
+    ).toEqual(["resources", "sponsors"]);
   });
 });

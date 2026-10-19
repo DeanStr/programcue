@@ -90,6 +90,9 @@ export function AdminTasksWorkspace({
           <h1>Tasks &amp; readiness</h1>
         </div>
         <div className="page-actions">
+          <ButtonLink to="/admin/tasks/deliverables">
+            Deliverables matrix
+          </ButtonLink>
           <ButtonLink variant="primary" to="/admin/tasks/bulk">
             Bulk actions
           </ButtonLink>

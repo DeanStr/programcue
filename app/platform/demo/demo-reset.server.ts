@@ -121,6 +121,9 @@ export class DemoResetStorageError extends Error {
 // history is deliberately absent: the baseline trigger makes it append-only,
 // and a demo reset must not weaken that production invariant.
 export const DEMO_RESET_EVENT_TABLES = [
+  "sponsored_session_proposals",
+  "sponsor_contacts",
+  "event_sponsorships",
   "assistant_proposal_executions",
   "ai_operation_feedback",
   "api_keys",
