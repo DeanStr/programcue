@@ -9,7 +9,7 @@ Git history retains earlier committed work logs.
 
 ## Sponsor assets and readiness — 19 October 2026
 
-**Production slice, local branch; not deployed.** `feat/sponsor-assets-readiness`
+**Production slice, local; not deployed.** This slice
 adds private named logo/document requests, accepted-contact multipart uploads,
 scan-gated downloads, version-specific organiser approval/change requests, and
 explicit selection of approved logos into the event website draft. Public logo
@@ -46,7 +46,7 @@ of the CLI's final comments were recorded as duplicates requiring no separate
 fix. Review transcripts, assessments and check logs are captured locally in
 `.artifacts/sponsor-assets-review-loop-NoBC7uuV/`.
 
-Final validation: `npm run check:core` passed in 722.1 seconds,
+Review-loop validation: `npm run check:core` passed in 722.1 seconds,
 including 666 unit tests, 2,016 Worker tests and one agent test, TypeScript,
 production build, Biome, migration validation, audit/API contracts and the backup
 recovery drill. All 50 focused upload/asset tests and 35 asset/retention tests
@@ -68,8 +68,15 @@ coverage uses explicitly seeded local clean-file and expired-upload fixtures;
 synthetic pending intents are cleaned up even when assertions fail. Worker tests
 exercise real local D1/R2 multipart
 completion with an explicitly simulated scanner callback. No live provider
-acceptance or production deployment is claimed. The full release/merge gate
-(`npm run check`) was not run for this local feature branch.
+acceptance or production deployment is claimed.
+
+The complete merge gate (`npm run check`) subsequently passed in 667.0 seconds
+against implementation commit `2c081adc`, including the core gate (384.2 seconds),
+dependency vulnerability policy, 241 application browser tests, 12 production-shaped
+evaluation browser tests and 16 public website browser tests. The two opt-in
+performance evidence cases were skipped as configured. Coverage includes
+Chromium desktop/mobile/laptop visuals, Firefox/WebKit smoke and accessibility.
+The complete log is `.artifacts/sponsor-assets-review-loop-NoBC7uuV/merge-check.log`.
 
 Boundaries: company-wide editing deadline, up to 20 requests per company, raster
 logos and supporting documents under existing file policies. No automatic
