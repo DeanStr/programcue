@@ -585,6 +585,16 @@ Return: (1) a concise neutral summary, (2) a criterion-by-criterion evidence map
     );
   }
 
+  async reviewTaskProposal(
+    viewer: Viewer,
+    proposalId: unknown,
+    input: Parameters<
+      import("./ai-proposal-lifecycle.server").AiProposalLifecycleService["reviewTaskProposal"]
+    >[2],
+  ) {
+    return this.proposalLifecycle.reviewTaskProposal(viewer, proposalId, input);
+  }
+
   async listRecentProposals(viewer: Viewer) {
     return this.proposalLifecycle.listRecentProposals(viewer);
   }

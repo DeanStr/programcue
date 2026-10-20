@@ -1,4 +1,5 @@
 import { CommunicationService } from "~/modules/communications/communication-service.server";
+import { ApiError } from "~/platform/api/api.server";
 import { ApiTaskService } from "~/platform/api/api-task-service.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { AiProposalStateError } from "./ai-assistant-errors";
@@ -15,8 +16,13 @@ import type {
   ReminderProposalMetadata,
   TaskProposalMetadata,
 } from "./ai-proposal-lifecycle.server";
+import {
+  AiReadinessChangedError,
+  revalidateReadinessTask,
+} from "./ai-readiness-task.server";
 
 export class AiClaimedProposalExecutor {
+  private readonly started = performance.now();
   constructor(
     private readonly env: CloudflareEnvironment,
     private readonly complete: (
@@ -201,23 +207,95 @@ export class AiClaimedProposalExecutor {
     });
   }
 
+  private async supersedeStaleTaskProposal(
+    viewer: Viewer,
+    input: ClaimedProposalInput<TaskProposalMetadata>,
+    reason: string,
+  ) {
+    await this.env.DB.prepare(`INSERT INTO audit_events (id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, actor_id, action, entity_type, entity_id, correlation_id, metadata_json, created_at)
+      SELECT ?, 'agent', 'admin_ui', 1, execution.organisation_id, execution.event_id, execution.actor_person_id, 'program_cue_agent', 'assistant.proposal.superseded', 'assistant_proposal', execution.proposal_id, ?, ?, unixepoch()
+      FROM assistant_proposal_executions execution WHERE execution.proposal_id = ? AND execution.organisation_id = ? AND execution.event_id = ? AND execution.actor_person_id = ? AND execution.status = 'processing' AND execution.claim_token = ? AND execution.claim_expires_at > unixepoch()
+        AND NOT EXISTS (SELECT 1 FROM audit_events prior WHERE prior.organisation_id = execution.organisation_id AND prior.event_id = execution.event_id AND prior.entity_id = execution.proposal_id AND prior.action = 'assistant.proposal.superseded')`)
+      .bind(
+        crypto.randomUUID(),
+        input.metadata.runId,
+        JSON.stringify({
+          proposalId: input.proposalId,
+          runId: input.metadata.runId,
+          decision: "stale",
+          reason,
+        }),
+        input.proposalId,
+        viewer.organisationId,
+        viewer.eventId,
+        viewer.personId,
+        input.claimToken,
+      )
+      .run();
+  }
+
   private async executeClaimedTaskProposal(
     viewer: Viewer,
     input: ClaimedProposalInput<TaskProposalMetadata>,
   ): Promise<AiProposalApprovalResult> {
     const { proposalId, metadata, correlationId, claimToken } = input;
+    let expectedEventCursor: number | undefined;
+    if (metadata.readinessContext) {
+      const alreadyCreated = await this.env.DB.prepare(
+        `SELECT 1 FROM idempotency_records WHERE organisation_id = ? AND event_id = ? AND actor_id = ? AND scope = 'task.create' AND idempotency_key = ? AND status = 'completed' AND expires_at > unixepoch()`,
+      )
+        .bind(
+          viewer.organisationId,
+          viewer.eventId,
+          `api_key:assistant:${viewer.personId}`,
+          `assistant:${proposalId}`,
+        )
+        .first();
+      if (!alreadyCreated) {
+        try {
+          expectedEventCursor = await revalidateReadinessTask(
+            this.env,
+            viewer,
+            metadata.readinessContext,
+          );
+        } catch (error) {
+          if (error instanceof AiReadinessChangedError)
+            await this.supersedeStaleTaskProposal(viewer, input, error.message);
+          throw error;
+        }
+      }
+    }
+    const { readinessBlockerKey: _readinessBlockerKey, ...taskArguments } =
+      metadata.arguments;
     await this.beforeMutation();
-    const result = await new ApiTaskService(this.env).create(
-      {
-        keyId: `assistant:${viewer.personId}`,
-        organisationId: viewer.organisationId,
-        eventId: viewer.eventId,
-        scopes: new Set(["tasks:write"]),
-      },
-      metadata.arguments,
-      correlationId,
-      `assistant:${proposalId}`,
-    );
+    const result = await (async () => {
+      try {
+        return await new ApiTaskService(this.env).create(
+          {
+            keyId: `assistant:${viewer.personId}`,
+            organisationId: viewer.organisationId,
+            eventId: viewer.eventId,
+            scopes: new Set(["tasks:write"]),
+          },
+          taskArguments,
+          correlationId,
+          `assistant:${proposalId}`,
+          expectedEventCursor === undefined
+            ? undefined
+            : { eventCursor: expectedEventCursor },
+        );
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 409) {
+          if (
+            metadata.readinessContext &&
+            error.code === "TASK_REFERENCE_CONFLICT"
+          )
+            await this.supersedeStaleTaskProposal(viewer, input, error.message);
+          throw new AiProposalStateError(error.message);
+        }
+        throw error;
+      }
+    })();
     const response: ProposalExecutionResult = {
       kind: "task",
       proposalId,
@@ -237,6 +315,7 @@ export class AiClaimedProposalExecutor {
       result: response,
       details: {
         changeSequence: result.changeSequence,
+        executionDurationMs: Math.round(performance.now() - this.started),
       },
     });
   }

@@ -259,3 +259,52 @@ the configured Worker and fails if the complete required secret inventory is
 missing. Production fixes `EMAIL_PROVIDER=resend`; runtime validation rejects
 Mailpit and never falls back to local capture, demo identity, stale data or
 simulated provider success.
+
+Assistant runs retain per-call timings, token categories, source evidence and
+proposal/action history. Optional `AI_INFERENCE_PRICING` is a JSON array in the
+deployment's non-secret variables. Each entry names an exact `provider`
+(`OpenAI`, `Workers AI` or `Anthropic`), `model`, official pricing `source` URL,
+`asOf` date (`YYYY-MM-DD`), and numeric `inputUsdPerMillion`,
+`outputUsdPerMillion`, `cachedInputUsdPerMillion` and, when applicable,
+`cacheWriteInputUsdPerMillion`. Use the rates agreed for that deployment;
+there is no built-in or automatically refreshed price list. The report retains
+the rates actually used. Missing prices or token categories needed for an estimate produce unknown
+cost, with any known subtotal reported separately. Cache reads/writes are
+subsets of input tokens; reasoning tokens are part of output tokens.
+If write and ordinary input rates are explicitly configured as equal, an
+unavailable write split does not affect the estimate; its usage count stays unknown.
+These are text-inference estimates, not invoices or total application costs.
+See the [OpenAI usage/caching contract](https://developers.openai.com/api/docs/guides/prompt-caching).
+Workers AI tool-loop requests explicitly use DeepSeek's `reasoning_effort: none`
+within the existing 4,000-token response budget. The model's current documented
+levels differ from the shared binding type; `medium` is a compatibility alias
+for `high`. See the [model contract and published rates](https://developers.cloudflare.com/workers-ai/models/deepseek-v4-flash-0731/).
+
+Run `npm run acceptance:assistant` for bounded real-model acceptance against
+isolated local Worker/D1 events. It defaults to the existing `workers_ai`
+integration and its configured DeepSeek model. Authenticate with
+`npx wrangler login` or an environment `CLOUDFLARE_API_TOKEN` with the required
+Workers AI and remote-development access. It uses the deployment's configured
+Cloudflare account; `CLOUDFLARE_ACCOUNT_ID` can explicitly select another account.
+Only the AI binding is remote; D1, files and event mutations stay local. This uses
+the application's normal provider adapter and tool loop, not a Codex CLI runtime.
+See [Cloudflare remote bindings](https://developers.cloudflare.com/changelog/post/2025-09-16-remote-bindings-ga/).
+
+To exercise an additional external adapter, explicitly set
+`PROGRAM_CUE_ACCEPTANCE_PROVIDER` to `openai` or `anthropic`,
+`PROGRAM_CUE_ACCEPTANCE_MODEL` to the exact model, and the corresponding existing
+provider secret in the environment or ignored `.dev.vars`.
+`PROGRAM_CUE_ACCEPTANCE_ENV_FILE` can name another private env file.
+The command never changes deployment settings or resets the shared
+evaluation fixture. It records success, insufficient information, no blockers,
+stale approval and a clearly injected provider failure after a real model call.
+Reports, source identifiers and test results are retained in a separate directory
+for each attempt under ignored `.artifacts/assistant-workflow/live/`;
+`latest.json` identifies the newest attempt. Earlier failures remain available.
+The acceptance test configuration requires the source revision recorded by this
+launcher and rejects missing or blank provenance before any model call.
+A failed preflight records every scenario
+as not attempted. This command makes billable calls when configured. Browser
+coverage in `e2e/assistant-readiness.spec.ts` uses an explicitly simulated model
+and retains separate demonstration reports, screenshots and recordings; it is not live-provider
+or deployment acceptance.

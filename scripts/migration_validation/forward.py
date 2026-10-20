@@ -1,6 +1,9 @@
 from pathlib import Path
 
 from .forward_audit_contract import validate_audit_contract_forward_migration
+from .forward_assistant_retained_reports import (
+    validate_assistant_retained_reports_forward_migration,
+)
 from .forward_decision_draft_preview_contract import (
     validate_decision_draft_preview_contract_forward_migration,
 )
@@ -84,3 +87,4 @@ def validate_forward_migrations(root: Path) -> None:
     validate_schedule_review_links_forward_migration(root)
     validate_participant_operations_depth_forward_migration(root)
     validate_sponsor_retention_forward_migration(root)
+    validate_assistant_retained_reports_forward_migration(root)

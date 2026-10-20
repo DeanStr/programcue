@@ -2,7 +2,7 @@ export const READINESS_SUGGESTED_REQUEST =
   "Call get_event_readiness exactly once, then answer without calling another tool. Cite only the returned records and rank at most three returned blockers by operational impact.";
 
 export const READINESS_TASK_SUGGESTED_REQUEST =
-  "Call get_event_readiness exactly once. If it returns a blocker, call propose_task exactly once for the current event to address the highest-impact blocker, using taskType administrator_only with no owner, due date or dependencies. Save only the preview, then answer without calling another tool. If there is no blocker, answer without proposing a task.";
+  "Call get_event_readiness exactly once. If recommendedAction has sufficient evidence, eligible owners and records with covered false, call propose_task exactly once for the current event to coordinate only those uncovered records, using the returned blockerKey and a named eligible organiser, taskType administrator_only, no invented due date and no dependencies. Link existingWork for covered records. Save only the preview, then answer without calling another tool. Otherwise answer without proposing a task, linking existing work or explaining missing evidence.";
 
 export type FixedAssistantToolPlan = {
   kind: "readiness" | "readiness_task";
@@ -47,7 +47,17 @@ export function fixedAssistantToolLimitAfterReadiness(
       "The authoritative readiness tool returned an invalid blocker collection.",
     );
   }
-  return blockers.length > 0 ? 2 : 1;
+  const action = Reflect.get(output as object, "recommendedAction");
+  return blockers.length > 0 &&
+    action &&
+    typeof action === "object" &&
+    Reflect.get(action, "sufficient") === true &&
+    Array.isArray(Reflect.get(action, "records")) &&
+    Reflect.get(action, "records").some(
+      (record: { covered: boolean }) => record.covered === false,
+    )
+    ? 2
+    : 1;
 }
 
 export function assistantSuggestedPrompts(eventName: string) {

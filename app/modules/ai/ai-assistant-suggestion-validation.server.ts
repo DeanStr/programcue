@@ -21,7 +21,8 @@ export function fixedAssistantToolArgumentsMatch(
     parsed.success &&
     parsed.data.targetType === "event" &&
     parsed.data.targetId === eventId &&
-    parsed.data.ownerPersonId === null &&
+    parsed.data.ownerPersonId !== null &&
+    Boolean(parsed.data.readinessBlockerKey) &&
     parsed.data.taskType === "administrator_only" &&
     parsed.data.dueAt === null &&
     parsed.data.dependencyIds.length === 0

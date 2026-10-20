@@ -3,6 +3,7 @@ export {};
 declare global {
   interface CloudflareEnvironment {
     AI?: Ai;
+    AI_INFERENCE_PRICING?: string;
     OPENAI_API_KEY?: string;
     OPENAI_RESPONSES_URL?: string;
     ANTHROPIC_API_KEY?: string;

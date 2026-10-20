@@ -2646,3 +2646,146 @@ Sponsor resource uploads have no file owner; retention therefore selects their
 uploaders through file-version creator attribution, including contacts with no
 event membership or other participant records. It remaps retained attribution
 to an event pseudonym while preserving canonical identities needed elsewhere.
+
+## Assistant readiness-to-task acceptance — 19 October 2026
+
+The assistant uses the existing Command Centre priority order to select the
+first readiness issue; the model explains and contextualises recorded impact,
+urgency and dependencies without redefining the readiness calculation. Its read
+tool returns a bounded set of exact supporting records and eligible named event
+organisers, plus explicit task-target fields for the model to copy. Incomplete
+evidence prevents task proposals. Task-backed blockers link to their existing
+tasks; prior assistant coordination work covers only its recorded source scope.
+No blockers is distinct from incomplete programme setup.
+
+A readiness coordination preview targets the current event, uses
+`administrator_only`, names an eligible organiser and retains the observed
+source fingerprint. The requester may explicitly reject it or edit its title,
+context and owner. Editing atomically supersedes the original with a new preview
+that needs approval; review cannot replace an approved or executing proposal.
+Source records, the highest-priority blocker and eligible owners are rechecked
+before creation. Stale previews are retired rather than left awaiting approval.
+Existing work is identified through persisted proposal/task and idempotency
+records. Coverage is tracked per source record. Active coordination tasks remain
+visible whenever their recorded scope overlaps the current blocker, and their
+combined scope suppresses new work only for the records they cover. A preview
+includes only uncovered records; each retained record explicitly records its
+coverage at preview time so the new task cannot later claim the older task's scope.
+Schedule conflicts use the schedule version and existing conflict fingerprint;
+their row IDs are regenerated during conflict rebuilds. Other sources use their
+durable record IDs. These keys stay in the retained context, while source cards
+and previews retain the actual current record IDs and links. A
+resolved conflict's open task cannot stand in for a new or additional conflict;
+resolving part of a task's recorded scope still leaves it covering the remainder.
+Existing task scope is never silently expanded. Delivery evidence uses
+`deliveryCommunication` and the `communications-health` anchor to open the
+selected communication's recipient deliveries.
+Internal correlation markers are not inserted into task descriptions. The normal D1 task command also compares the event-change
+cursor atomically to reject an intervening change. Already-created idempotent
+results remain recoverable after interrupted settlement. Creating a task never
+claims that the readiness blocker is resolved.
+
+Existing operation/audit records hold model-call attempts, available normalised
+token categories, elapsed generation time and explicitly dated inference-price
+snapshots. Unknown usage/pricing remains unknown, including after partial
+provider failure. Approval wait and task execution are separate from generation.
+Private requester-scoped reports join the request, source observations, immutable
+proposal revisions and action result. No new analytics store or public API is
+introduced. Reminder revisions retain the original assistant run ID; the edit
+request's correlation ID tracks the revision operation separately. The current
+answer, sources and pending approvals precede history.
+Stored report metadata is validated before display. Completed runs require their
+saved answer, evidence and measurements; incomplete and unsuccessful runs may
+lack a final result. Missing request labels or malformed provider/model values
+are errors, rather than placeholder report content. Task evidence uses the
+validated target label returned by proposal preparation, independently of the
+preview's display rows. Live acceptance configuration requires the launcher's
+recorded source revision before any model call; it never substitutes an
+unrecorded source marker.
+Reports explicitly redacted by completed participant retention are omitted;
+their removed content is never reconstructed from immutable audit records.
+The redaction marker without completed retention remains invalid report data.
+Forward migration `0061` marks deployed assistant operation summaries that
+predate retained reporting. They remain available in Operations but do not enter
+the retained-report reader. Missing fields on new reports remain errors; there
+is no runtime inference of a historical schema from missing report content.
+The migration first installs an insert guard that rejects the old assistant
+payload before inference. This closes the migration/Worker deployment window
+without silently classifying new malformed runs as historical.
+History entries lead with the organiser's request, event-local time and an
+operational outcome such as “Awaiting approval” or “Task created”. Expanding an
+entry shows the saved answer, source links and resulting task. Provider/model,
+timings, usage, cost and raw audit data remain under a separate disclosure.
+The initial suggested-request list shows four choices with the remainder under
+“More requests”. Inspected sources remain accessible through a labelled
+disclosure so they do not push the exact approval preview far down the page.
+Editing, rejecting or approving a proposal retains the current answer while
+refreshing its proposal controls from authoritative state, including failed or
+conflicting reviews after another tab replaced or rejected the preview.
+“Task created” records successful task creation, never resolution of its blocker.
+Explicit local simulated scenarios and real-model acceptance use
+separate evidence; missing credentials stop live acceptance before any call.
+Failed tool calls retain bounded argument text and its full hash for diagnosis.
+The primary live acceptance target is the existing Workers AI adapter and
+configured model. A remote AI binding exercises that adapter while D1 and task
+mutations remain isolated locally. Codex CLI is a development tool and does not
+become a separate application assistant runtime. OpenAI/Anthropic acceptance is
+an explicit additional provider run, not a prerequisite for the Workers AI workflow.
+
+The bounded Workers AI tool loop uses the model's explicit `none` reasoning level
+with the existing 4,000-token output limit. Live runs exposed premature requests
+for preview permission, completion-budget exhaustion and incorrect task arguments;
+the prompt now requires preparing the preview in the same run and copying the
+read tool's exact target and eligible-person fields. No domain validation is relaxed.
+Available usage survives a rejected provider response. Explicit equal input/write
+prices allow an estimate without inventing a missing write-token count. Each
+live acceptance attempt has its own retained directory, including unsuccessful
+attempts; a passing fixed set does not establish general model reliability.
+
+Readiness answers must copy inspected source hrefs exactly, preserving relative
+paths. The server validates generated HTTP/admin links and Markdown destinations
+against observed evidence, setup/workflow snapshots and existing work. It rejects
+an invented origin, prefix, filter or destination rather than rewriting it. A
+rejected answer retains the run measurements and inspected evidence. The source
+cards continue to render their authoritative links directly.
+
+Readiness prose refers to record labels and the authoritative source cards, which
+render the actual links. Raw URLs are included only when explicitly requested.
+Any response containing a draft/write tool must contain exactly that one call;
+read calls alone may be batched. The prompt states the same boundary enforced
+by the runtime, rather than permitting a read/write mixture implicitly.
+
+The explicit `readinessBlockerKey` selects readiness-specific task validation.
+A null key permits an unrelated ordinary task even when the same run previously
+read readiness; its later edits retain ordinary task validation. A named
+readiness key still requires an observed, sufficient, current source context.
+
+Interrupted Anthropic streams retain the attributed usage observed before the
+failure and mark it partial. Per-call observations remain inspectable; complete
+run token totals and cost remain unknown. A durable completed task command also
+takes precedence over an assistant result-recording failure in run reports.
+Reports link the saved task and explain that approval can be retried to finish
+recording the result, reusing the existing task.
+The readiness observation identifies the requesting organiser by person ID so
+the model can apply the stated preference among multiple eligible organisers.
+
+Readiness context is bounded to 8,000 characters as well as 100 source rows,
+leaving room for the surrounding snapshot within the deployed audit-row limit.
+The bounded context retains owner and existing-work information first, reports
+the original blocker count, and explicitly marks incomplete evidence insufficient
+for task proposals. The audit constraint is not relaxed. Existing coordination
+work is included in source cards, and unassigned-review evidence uses the
+registered `/admin/review?submission=...` destination.
+
+Accepted, non-revoked organisation-wide owners and administrators are eligible
+owners of event-targeted tasks, including readiness coordination work. The
+preview and atomic task command enforce the same organisation scope and
+membership state. Session tasks still require active session participation.
+
+Readiness task creation passes an explicit internal boundary to the existing task
+command. Its atomic guard checks both the inspected event cursor and the selected
+person's accepted, non-revoked organiser grant. Remaining speaker participation
+does not satisfy this readiness-only check after organiser access is revoked,
+including a global revocation performed from another event. Ordinary task-owner
+rules remain available to ordinary task commands. A refused readiness approval
+retires the stale preview rather than substituting a different owner.

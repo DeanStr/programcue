@@ -9,7 +9,13 @@
 
 .pc-assist {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-5);
+}
+
+.pc-assist > *,
+.pc-assist-recent > * {
+  min-width: 0;
 }
 
 .pc-assist > .pc-page-header {
@@ -115,7 +121,63 @@
 
 .pc-assist-recent {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-3);
+}
+
+.pc-assist-history {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.pc-assist-history h2 {
+  margin: 0;
+  font-size: var(--text-sm);
+}
+
+.pc-assist-history-entry {
+  border-top: 1px solid var(--line);
+  padding: var(--space-3) 0;
+}
+
+.pc-assist-history-entry > summary,
+.pc-assist-recent > summary {
+  cursor: pointer;
+}
+
+.pc-assist-history-entry > summary > strong {
+  overflow-wrap: anywhere;
+}
+
+.pc-assist-history-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin-top: var(--space-1);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+
+.pc-assist-history-entry[open] > summary,
+.pc-assist-recent[open] > summary {
+  margin-bottom: var(--space-3);
+}
+
+.pc-assist-history-action {
+  border-left: 2px solid var(--line);
+  padding-left: var(--space-3);
+}
+
+.pc-assist-answer,
+.pc-assist-audit {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.pc-assist-audit {
+  max-height: 28rem;
+  overflow: auto;
+  font-size: var(--text-xs);
 }
 
 @media (max-width: 900px) {

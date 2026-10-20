@@ -36,6 +36,23 @@ const proposalBaseSchema = z.object({
 });
 const taskProposalSchema = proposalBaseSchema.extend({
   toolName: z.literal("propose_task"),
+  task: z
+    .object({
+      title: z.string(),
+      description: z.string().nullable(),
+      ownerPersonId: z.string().nullable(),
+    })
+    .passthrough()
+    .optional(),
+  eligibleOwners: z
+    .array(
+      z.object({
+        personId: z.string(),
+        name: z.string(),
+        responsibility: z.string(),
+      }),
+    )
+    .optional(),
 });
 const recipientSchema = z.object({
   personId: z.string().nullable(),

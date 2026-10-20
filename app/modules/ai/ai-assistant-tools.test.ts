@@ -17,6 +17,7 @@ import {
   startAiOperationLease,
 } from "./ai-operation-lease.server";
 import { stageReminderSendProposal } from "./ai-proposal-executor-foundation.server";
+import { listAssistantRunReports } from "./ai-run-report.server";
 import { AiToolValidationError } from "./ai-tool-execution";
 import {
   AiToolPermissionError,
@@ -343,6 +344,15 @@ describe("agent tool permissions and approval", () => {
       approvalRequired: true,
       title,
     });
+    const event = await env.DB.prepare("SELECT name FROM events WHERE id = ?")
+      .bind(admin.eventId)
+      .first<{ name: string }>();
+    expect(result.evidence).toContainEqual(
+      expect.objectContaining({
+        id: `event:${admin.eventId}`,
+        label: event?.name,
+      }),
+    );
     const before = await env.DB.prepare(
       "SELECT COUNT(*) AS count FROM task_instances WHERE event_id = ? AND title = ?",
     )
@@ -1051,6 +1061,21 @@ describe("agent tool permissions and approval", () => {
       toolName: "propose_reminder_send",
       title: revisedSubject,
     });
+    const editedReport = (await listAssistantRunReports(testEnv, admin)).find(
+      (run) => run.runId === result.runId,
+    );
+    expect(editedReport).toMatchObject({
+      outcome: "Awaiting approval",
+      answer: result.answer,
+      proposals: expect.arrayContaining([
+        expect.objectContaining({ id: proposal.id, outcome: "Replaced" }),
+        expect.objectContaining({
+          id: revised.id,
+          title: revisedSubject,
+          outcome: "Awaiting approval",
+        }),
+      ]),
+    });
     const revisionOperation = await testEnv.DB.prepare(
       `SELECT operation.id
          FROM operation_jobs operation
@@ -1075,6 +1100,32 @@ describe("agent tool permissions and approval", () => {
       href: expect.stringContaining("/admin/operations?operation="),
     });
     expect(queued).toHaveLength(1);
+    const approvedReport = (await listAssistantRunReports(testEnv, admin)).find(
+      (run) => run.runId === result.runId,
+    );
+    expect(approvedReport).toMatchObject({
+      outcome: "Action recorded",
+      proposals: expect.arrayContaining([
+        expect.objectContaining({
+          id: revised.id,
+          outcome: "Action recorded",
+          execution: "completed",
+          settlement: "completed",
+        }),
+      ]),
+      history: expect.arrayContaining([
+        expect.objectContaining({
+          action: "assistant.action.executed",
+          details: expect.objectContaining({
+            proposalId: revised.id,
+            result: expect.objectContaining({
+              communicationId: approved.communicationId,
+              operationId: approved.operationId,
+            }),
+          }),
+        }),
+      ]),
+    });
     const communication = await testEnv.DB.prepare(
       `SELECT content_snapshot_json AS contentSnapshotJson,
               recipient_count AS recipientCount, created_by_person_id AS createdBy

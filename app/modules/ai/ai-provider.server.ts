@@ -150,6 +150,27 @@ function anthropicInput(input: string | unknown[]) {
   return messages;
 }
 
+function normalizeAnthropicUsage(usage: unknown) {
+  return usage && typeof usage === "object"
+    ? {
+        input_tokens:
+          typeof Reflect.get(usage, "input_tokens") === "number" &&
+          typeof Reflect.get(usage, "cache_read_input_tokens") === "number" &&
+          typeof Reflect.get(usage, "cache_creation_input_tokens") === "number"
+            ? Number(Reflect.get(usage, "input_tokens")) +
+              Number(Reflect.get(usage, "cache_read_input_tokens")) +
+              Number(Reflect.get(usage, "cache_creation_input_tokens"))
+            : undefined,
+        output_tokens: Reflect.get(usage, "output_tokens"),
+        input_tokens_details: {
+          uncached_tokens: Reflect.get(usage, "input_tokens"),
+          cache_write_tokens: Reflect.get(usage, "cache_creation_input_tokens"),
+          cached_tokens: Reflect.get(usage, "cache_read_input_tokens"),
+        },
+      }
+    : undefined;
+}
+
 function normalizeAnthropicMessage(
   message: z.infer<typeof anthropicResponseSchema>,
 ) {
@@ -174,6 +195,7 @@ function normalizeAnthropicMessage(
   return aiProviderResponseSchema.parse({
     id: message.id,
     model: message.model,
+    usage: normalizeAnthropicUsage(message.usage),
     status: "completed",
     output: [
       ...(text
@@ -223,6 +245,7 @@ async function readAnthropicStream(
   let receivedBytes = 0;
   let id: string | null = null;
   let model: string | null = null;
+  let usage: Record<string, unknown> | undefined;
   let stopped = false;
   let accepted = false;
   const blocks = new Map<number, AnthropicBlock>();
@@ -259,6 +282,8 @@ async function readAnthropicStream(
       const message = event.message as Record<string, unknown> | undefined;
       id = typeof message?.id === "string" ? message.id : null;
       model = typeof message?.model === "string" ? message.model : null;
+      if (message?.usage && typeof message.usage === "object")
+        usage = { ...(message.usage as Record<string, unknown>) };
     } else if (
       event.type === "content_block_start" &&
       typeof event.index === "number"
@@ -321,6 +346,9 @@ async function readAnthropicStream(
           );
         }
       }
+    } else if (event.type === "message_delta") {
+      if (event.usage && typeof event.usage === "object")
+        usage = { ...usage, ...(event.usage as Record<string, unknown>) };
     } else if (event.type === "message_stop") {
       stopped = true;
     }
@@ -356,9 +384,33 @@ async function readAnthropicStream(
       content: [...blocks.entries()]
         .sort(([left], [right]) => left - right)
         .map(([, block]) => block),
+      usage,
     });
     accepted = true;
     return result;
+  } catch (error) {
+    const partial = aiProviderResponseSchema.safeParse({
+      id,
+      model,
+      status: "failed",
+      output: [],
+      usage: normalizeAnthropicUsage(usage),
+      usage_is_partial: true,
+    });
+    if (!partial.success) throw error;
+    throw new AiProviderError(
+      error instanceof AiProviderError
+        ? error.message
+        : "Anthropic streaming request was interrupted.",
+      error instanceof AiProviderError ? error.status : response.status,
+      providerRequestId,
+      {
+        cause: error,
+        response: partial.data,
+        failureKind:
+          error instanceof AiProviderError ? error.failureKind : "transient",
+      },
+    );
   } finally {
     if (!accepted) {
       await reader.cancel("AI provider stream rejected").catch(() => {});

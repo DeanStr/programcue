@@ -74,6 +74,7 @@ Follow [AGENTS.md](AGENTS.md) for the required scope of validation.
 | `npm run test:e2e:serial -- e2e/example.spec.ts` | Build and run a focused browser workflow. |
 | `npm run check:core` | Cross-cutting changes: quality, types, runtime tests, build and configuration/schema/recovery/API contracts. |
 | `npm run check` | Complete merge/release gate, including dependency audit, Chromium behavior/visual/accessibility coverage and Firefox/WebKit smoke tests. |
+| `npm run acceptance:assistant` | Real-model readiness/task scenarios using the existing Workers AI binding and isolated local D1; requires Cloudflare authentication. See [Deployment](docs/DEPLOYMENT.md#provider-selection) for other providers. |
 
 See [package.json](package.json) for all commands. `npm run quality` checks
 formatting and lint; `npm run quality:fix` applies safe fixes. `npm run format`

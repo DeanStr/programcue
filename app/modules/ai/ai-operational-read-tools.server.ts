@@ -6,6 +6,7 @@ import {
   parseArguments,
   parseJson,
 } from "./ai-read-tool-shared.server";
+import { loadReadinessTaskContext } from "./ai-readiness-task.server";
 import {
   boundedLimitSchema,
   emptyArgumentsSchema,
@@ -50,7 +51,12 @@ export class AiOperationalReadTools {
     const snapshot = await new ReadinessService(this.env).getCommandCentre(
       this.viewer,
     );
-    const evidence: AiEvidence[] = [
+    const recommendedAction = await loadReadinessTaskContext(
+      this.env,
+      this.viewer,
+      snapshot,
+    );
+    const evidence: AiEvidence[] = distinctEvidence([
       {
         id: "event-readiness",
         label: "Event readiness",
@@ -58,6 +64,14 @@ export class AiOperationalReadTools {
         href: "/admin/command",
         source: "Program Cue D1",
       },
+      ...(recommendedAction?.records.map((record) => ({
+        ...record,
+        source: "Program Cue D1" as const,
+      })) ?? []),
+      ...(recommendedAction?.existingWork.map((record) => ({
+        ...record,
+        source: "Program Cue D1" as const,
+      })) ?? []),
       ...snapshot.blockers.map((blocker) => ({
         id: `readiness-blocker:${blocker.key}`,
         label: blocker.label,
@@ -65,14 +79,17 @@ export class AiOperationalReadTools {
         href: blocker.href,
         source: "Program Cue D1" as const,
       })),
-    ];
+    ]);
     return {
       output: {
         source: "authoritative_command_centre_snapshot",
+        requestingOrganiserPersonId: this.viewer.personId,
         generatedAt: new Date(snapshot.generatedAt * 1_000).toISOString(),
         readiness: snapshot.readiness,
         workflows: snapshot.workflows,
         blockers: snapshot.blockers,
+        setupGuide: snapshot.setupGuide,
+        recommendedAction,
       },
       evidence,
       proposals: [],

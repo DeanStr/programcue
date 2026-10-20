@@ -65,7 +65,7 @@ function Attribution({
   );
 }
 
-function EvidenceList({
+export function EvidenceList({
   evidence,
   compact = false,
 }: {
@@ -345,6 +345,79 @@ export function ProposalApproval({
           </div>
         </details>
       ) : null}
+      {proposal.toolName === "propose_task" &&
+      proposal.task &&
+      !executed &&
+      !expired ? (
+        <details className="pc-disclosure">
+          <summary>Edit task preview</summary>
+          <Form method="post" action="/admin/assistant" className="stack">
+            <input type="hidden" name="intent" value="edit_task" />
+            <input type="hidden" name="proposalId" value={proposal.id} />
+            <label className="label">
+              Task title
+              <input
+                className="field"
+                name="title"
+                minLength={3}
+                maxLength={200}
+                required
+                defaultValue={proposal.task.title}
+              />
+            </label>
+            <label className="label">
+              Task context
+              <textarea
+                className="textarea"
+                name="description"
+                rows={4}
+                maxLength={2000}
+                defaultValue={proposal.task.description ?? ""}
+              />
+            </label>
+            {proposal.eligibleOwners ? (
+              <label className="label">
+                Task owner
+                <select
+                  className="select"
+                  name="ownerPersonId"
+                  required
+                  defaultValue={proposal.task.ownerPersonId ?? ""}
+                >
+                  <option value="" disabled>
+                    Select an organiser
+                  </option>
+                  {proposal.eligibleOwners.map((owner) => (
+                    <option value={owner.personId} key={owner.personId}>
+                      {owner.name} · {owner.responsibility}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : (
+              <input
+                type="hidden"
+                name="ownerPersonId"
+                value={proposal.task.ownerPersonId ?? ""}
+              />
+            )}
+            <p className="help">
+              Saving replaces this proposal with a new preview. It does not
+              create a task.
+            </p>
+            <Button type="submit">Save edited task preview</Button>
+          </Form>
+        </details>
+      ) : null}
+      {proposal.toolName === "propose_task" && !executed && !expired ? (
+        <Form method="post" action="/admin/assistant">
+          <input type="hidden" name="intent" value="reject_task" />
+          <input type="hidden" name="proposalId" value={proposal.id} />
+          <Button type="submit" name="confirmed" value="yes">
+            Reject task proposal
+          </Button>
+        </Form>
+      ) : null}
       {reminder ? (
         <div className="stack">
           <section className="card pad">
@@ -549,13 +622,16 @@ export function AssistantResultPanel({
           <span className="status info">Advisory</span>
         </div>
         <div style={{ whiteSpace: "pre-wrap" }}>{result.answer}</div>
-        <Attribution attribution={result.attribution} />
-        <ButtonLink
-          size="small"
-          to={`/admin/operations?operation=${encodeURIComponent(result.operationId)}`}
-        >
-          Open assistant operation
-        </ButtonLink>
+        <details className="pc-disclosure">
+          <summary>AI response details</summary>
+          <Attribution attribution={result.attribution} />
+          <ButtonLink
+            size="small"
+            to={`/admin/operations?operation=${encodeURIComponent(result.operationId)}`}
+          >
+            Open assistant operation
+          </ButtonLink>
+        </details>
         <AiFeedbackControl operationId={result.operationId} />
       </section>
       {showProposals
@@ -563,7 +639,7 @@ export function AssistantResultPanel({
             <ProposalApproval proposal={proposal} key={proposal.id} />
           ))
         : null}
-      <EvidenceList evidence={result.evidence} />
+      <EvidenceList evidence={result.evidence} compact />
     </div>
   );
 }

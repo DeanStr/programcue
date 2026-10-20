@@ -3,12 +3,14 @@ import {
   hashJson,
   parseArguments,
   persistDomainProposal,
-  validateTaskReferences,
 } from "./ai-proposal-executor-foundation.server";
 import { AiScheduleProposalWorkflows } from "./ai-schedule-proposal-workflows.server";
 import {
+  prepareTaskProposal,
+  taskProposalStatement,
+} from "./ai-task-proposal.server";
+import {
   acceleventsRunProposalArgumentsSchema,
-  assistantProposalMetadataSchema,
   taskProposalArgumentsSchema,
 } from "./ai-tool-contracts.server";
 import type { AiToolExecution } from "./ai-tool-execution";
@@ -117,60 +119,18 @@ export abstract class AiOperationsProposalWorkflows extends AiScheduleProposalWo
       encodedArguments,
       taskProposalArgumentsSchema,
     );
-    const targetLabel = await validateTaskReferences(
+    const { metadata, targetLabel } = await prepareTaskProposal(
       this.env,
       this.viewer,
-      args,
+      {
+        runId: this.runId,
+        model: this.model,
+        arguments: args,
+      },
     );
-    const proposalId = crypto.randomUUID();
-    const preview: AiProposalPreview = {
-      id: proposalId,
-      toolName: "propose_task",
-      title: args.title,
-      summary: `Create one ${args.impact} ${args.taskType.replaceAll("_", " ")} task for ${targetLabel}.`,
-      consequence:
-        "Approval creates one durable task in this event. It does not send a message, publish data or create additional tasks.",
-      changes: [
-        { field: "Task", before: null, after: args.title },
-        {
-          field: "Target",
-          before: null,
-          after: `${args.targetType}: ${targetLabel}`,
-        },
-        { field: "Impact", before: null, after: args.impact },
-        {
-          field: "Due date",
-          before: null,
-          after: args.dueAt ?? "No due date",
-        },
-      ],
-      approvalRequired: true,
-    };
-    const metadata = assistantProposalMetadataSchema.parse({
-      version: 1,
-      toolName: "propose_task",
-      runId: this.runId,
-      model: this.model,
-      arguments: args,
-      preview,
-    });
-    await this.env.DB.prepare(
-      `INSERT INTO audit_events (
-        id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, actor_id, action,
-        entity_type, entity_id, correlation_id, metadata_json, created_at
-      ) VALUES (?, 'agent', 'admin_ui', 1, ?, ?, ?, 'program_cue_agent', 'assistant.proposal.previewed',
-                'assistant_proposal', ?, ?, ?, unixepoch())`,
-    )
-      .bind(
-        crypto.randomUUID(),
-        this.viewer.organisationId,
-        this.viewer.eventId,
-        this.viewer.personId,
-        proposalId,
-        this.runId,
-        JSON.stringify(metadata),
-      )
-      .run();
+    const preview = metadata.preview;
+    const proposalId = preview.id;
+    await taskProposalStatement(this.env, this.viewer, metadata).run();
     const evidence: AiEvidence[] = [
       {
         id: `${args.targetType}:${args.targetId}`,

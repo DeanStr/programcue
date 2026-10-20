@@ -14,6 +14,7 @@ import {
 } from "~/modules/schedule/schedule-schema";
 import { saveFormSchema } from "~/modules/submissions/submission-schema";
 import type { Viewer } from "~/platform/auth/authorize.server";
+import { readinessTaskContextSchema } from "./ai-readiness-task.server";
 import type { OpenAiFunctionTool } from "./openai-responses-provider.server";
 
 export const adminRoles = new Set<Viewer["role"]>(["owner", "administrator"]);
@@ -62,6 +63,13 @@ export const reminderDraftArgumentsSchema = z
 
 export const taskProposalArgumentsSchema = z
   .object({
+    readinessBlockerKey: z
+      .string()
+      .trim()
+      .min(1)
+      .max(100)
+      .nullable()
+      .optional(),
     title: z.string().trim().min(3).max(200),
     description: z.string().trim().max(2_000).nullable(),
     targetType: z.enum(["speaker", "session", "event"]),
@@ -205,6 +213,7 @@ const taskProposalMetadataSchema = z
     runId: z.string().uuid(),
     model: z.string().min(1).max(100),
     arguments: taskProposalArgumentsSchema,
+    readinessContext: readinessTaskContextSchema.optional(),
     preview: z
       .object({
         id: z.string().uuid(),
@@ -213,6 +222,17 @@ const taskProposalMetadataSchema = z
         summary: z.string(),
         consequence: z.string(),
         changes: z.array(proposalChangeSchema),
+        affectedRecords: z.array(affectedRecordSchema).optional(),
+        task: taskProposalArgumentsSchema.optional(),
+        eligibleOwners: z
+          .array(
+            z.object({
+              personId: z.string(),
+              name: z.string(),
+              responsibility: z.string(),
+            }),
+          )
+          .optional(),
         approvalRequired: z.literal(true),
       })
       .strict(),
@@ -549,7 +569,7 @@ export const AI_TOOLS: AiToolDefinition[] = [
   defineAiTool(
     "get_event_readiness",
     "read",
-    "Read the authoritative event readiness score, workflow progress and exact blockers with links.",
+    "Read the authoritative event readiness score, workflow progress and exact blockers with links. For a readiness question, when recommendedAction is sufficient and has records with covered false, save one propose_task preview in the same run before answering, unless the user requested an answer only. Preparing this preview requires no additional confirmation; task creation still requires human approval of the preview.",
     emptyArgumentsSchema,
   ),
   defineAiTool(
@@ -675,7 +695,7 @@ export const AI_TOOLS: AiToolDefinition[] = [
   defineAiTool(
     "propose_task",
     "write",
-    "Prepare and save a preview for creating one task. Calling this tool never creates the task; a signed-in administrator must explicitly approve the saved preview in Program Cue.",
+    "Prepare and save a preview for creating one task. For readiness follow-up, first read get_event_readiness. Copy targetType, targetId and taskType exactly from recommendedAction.taskTarget. Set readinessBlockerKey to recommendedAction.blockerKey. Set ownerPersonId to an exact recommendedAction.eligibleOwners[].personId value, never the person's name. Explain the distinct coordination purpose for records with covered false only. Link existingWork for covered records without duplicating their scope. Set readinessBlockerKey to null for unrelated tasks. Calling this tool never creates the task; a signed-in administrator must explicitly approve the saved preview in Program Cue.",
     taskProposalArgumentsSchema,
   ),
 ];

@@ -27,6 +27,24 @@ info:
     contacts without event membership.
     Sponsor readiness reminders create ordinary communication drafts and do not
     send email until the existing preview/confirmation workflow is completed.
+    The event assistant also uses authenticated HTML loader/action routes.
+    Readiness-derived task proposals retain source evidence, require a named
+    eligible organiser and explicit approval, and revalidate the evidence before
+    idempotent task creation. Active coordination work covers its recorded source
+    records; further previews include only uncovered records. Readiness task creation atomically rechecks the
+    selected owner's organiser membership as well as the event cursor, including
+    when the owner also has participant access. Editing creates a replacement preview; rejection
+    creates no task. Private requester-scoped run reports separate generation,
+    review and execution, including failed model calls and unknown usage/cost.
+    Reports retain the request label, readable answer, source links and action
+    outcome; task creation does not imply resolution of the readiness blocker.
+    Edited reminder previews retain their original request association through approval and execution.
+    Completed run reports require valid retained answers, evidence and measurements; malformed stored reports fail explicitly instead of displaying placeholder success. Reports deliberately redacted by completed participant retention are omitted.
+    Migration 0061 marks earlier operation summaries as predating retained reports; they remain available in Operations and are excluded from retained-report history.
+    During migration/Worker cutover, old-format assistant writes fail explicitly before inference. Failed proposal reviews reconcile streamed controls with authoritative server state.
+    Partial streaming usage does not establish complete token totals or cost.
+    A task committed before interrupted assistant result recording remains
+    visible in reports; approval retries reuse that task and finish recording.
 servers:
   - url: /
     description: Current Program Cue deployment
@@ -3079,6 +3097,7 @@ components:
         ownerPersonId:
           {
             type: [string, "null"],
+            description: "Must be available in the authorised event. Event-targeted tasks also accept an accepted, non-revoked organisation-wide owner or administrator. Session-targeted tasks still require an active session participant.",
             minLength: 1,
             maxLength: 200,
             default: null,

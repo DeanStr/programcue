@@ -201,6 +201,25 @@ export class ProgramCueEventAgent extends Agent<
     return result;
   }
 
+  async reviewTaskProposal(
+    viewer: Viewer,
+    proposalId: unknown,
+    input: Parameters<AiAssistantService["reviewTaskProposal"]>[2],
+  ) {
+    await this.assertScope(viewer);
+    const result = await new AiAssistantService(
+      this.env as unknown as CloudflareEnvironment,
+    ).reviewTaskProposal(viewer, proposalId, input);
+    this.setState({
+      ...this.state,
+      pendingProposalIds: [
+        ...this.state.pendingProposalIds.filter((id) => id !== proposalId),
+        ...(result.replacementProposalId ? [result.replacementProposalId] : []),
+      ].slice(-20),
+    });
+    return result;
+  }
+
   async reviseReminderProposal(
     viewer: Viewer,
     proposalId: unknown,

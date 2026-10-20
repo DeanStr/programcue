@@ -3,15 +3,18 @@ import {
   data,
   type LoaderFunctionArgs,
 } from "react-router";
+import { AiAssistantService } from "~/modules/ai/ai-assistant-service.server";
 import { AiProviderSettingsService } from "~/modules/ai/ai-provider.server";
-import {
-  assistantProposalMetadataSchema,
-  prepareReminderSendProposal,
-} from "~/modules/ai/ai-tools.server";
+import { assistantProposalMetadataSchema } from "~/modules/ai/ai-tools.server";
 import { CommunicationService } from "~/modules/communications/communication-service.server";
 import { requireEmailProviderConfiguration } from "~/modules/communications/email-provider.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
+import {
+  type ReadinessFixtureScenario,
+  runDemonstrationReadinessScenario,
+  seedReadinessAcceptanceEvent,
+} from "~/platform/demo/assistant-readiness-fixture.server";
 import {
   DEMO_ASSISTANT_FIXTURE_MODEL,
   DEMO_IDENTITIES,
@@ -90,6 +93,101 @@ export async function action({ request, context }: ActionFunctionArgs) {
     throw new Response("Explicit demo fixture confirmation is required", {
       status: 400,
     });
+  }
+  if (
+    form.get("intent") === "seed_readiness_event" ||
+    form.get("intent") === "run_readiness_workflow" ||
+    form.get("intent") === "interrupt_task_settlement"
+  ) {
+    requireE2eFixtures(env);
+    await ensureDemoData(env);
+    const scenario = String(form.get("scenario"));
+    if (
+      ![
+        "success",
+        "insufficient_information",
+        "no_blockers",
+        "delivery_failures",
+        "provider_failure",
+        "stale_before_approval",
+      ].includes(scenario)
+    )
+      throw new Response("Unknown readiness scenario", { status: 400 });
+    if (form.get("intent") === "seed_readiness_event") {
+      const fixture = await seedReadinessAcceptanceEvent(
+        env,
+        DEMO_ADMIN,
+        scenario as ReadinessFixtureScenario,
+      );
+      return data(
+        {
+          demonstrationOnly: true,
+          providerCalled: false,
+          ...fixture,
+          result: null,
+          error: null,
+        },
+        { headers: { "cache-control": "private, no-store" } },
+      );
+    }
+    const eventId = form.get("eventId");
+    const prompt = form.get("prompt");
+    if (typeof eventId !== "string" || typeof prompt !== "string")
+      throw new Response("A fixture event and original request are required", {
+        status: 400,
+      });
+    const existing = await env.DB.prepare(
+      `SELECT event.id, conflict.id AS conflictId FROM events event LEFT JOIN schedule_conflicts conflict ON conflict.event_id = event.id WHERE event.id = ? AND event.organisation_id = ? AND event.id LIKE 'assistant-acceptance-%' AND event.slug = event.id AND event.name = 'Assistant acceptance event' AND EXISTS (SELECT 1 FROM memberships membership WHERE membership.event_id = event.id AND membership.organisation_id = event.organisation_id AND membership.person_id = ? AND membership.role = 'administrator' AND membership.accepted_at IS NOT NULL AND membership.revoked_at IS NULL) ORDER BY conflict.id LIMIT 1`,
+    )
+      .bind(eventId, ORGANISATION_ID, ADMIN_ID)
+      .first<{ id: string; conflictId: string | null }>();
+    if (
+      !existing ||
+      (!["no_blockers", "delivery_failures"].includes(scenario) &&
+        !existing.conflictId)
+    )
+      throw new Response("The isolated assistant fixture is unavailable", {
+        status: 409,
+      });
+    if (form.get("intent") === "interrupt_task_settlement") {
+      if (form.get("confirmed") !== "yes")
+        throw new Response("Explicit fixture task approval is required", {
+          status: 400,
+        });
+      const message = "Explicitly injected interruption after task creation";
+      try {
+        await new AiAssistantService(env, {
+          beforeProposalExecutionCommit: () => {
+            throw new Error(message);
+          },
+        }).approveProposal(
+          { ...DEMO_ADMIN, eventId },
+          form.get("proposalId"),
+          true,
+        );
+      } catch (error) {
+        if (!(error instanceof Error) || error.message !== message) throw error;
+        return data(
+          { demonstrationOnly: true, providerCalled: false, error: message },
+          { status: 500 },
+        );
+      }
+      throw new Error(
+        "Expected the fixture to interrupt task result settlement",
+      );
+    }
+    const fixture = await runDemonstrationReadinessScenario(
+      env,
+      DEMO_ADMIN,
+      scenario as ReadinessFixtureScenario,
+      prompt,
+      {
+        viewer: { ...DEMO_ADMIN, eventId },
+        eventId,
+        conflictId: existing.conflictId,
+      },
+    );
+    return data(fixture, { headers: { "cache-control": "private, no-store" } });
   }
   if (form.get("intent") === "configure_stream_test") {
     requireE2eFixtures(env);
@@ -224,23 +322,61 @@ export async function action({ request, context }: ActionFunctionArgs) {
       },
     });
     await communications.publishTemplate(DEMO_ADMIN, base.versionId);
-    const prepared = await prepareReminderSendProposal(env, DEMO_ADMIN, {
-      runId: crypto.randomUUID(),
-      model: DEMO_ASSISTANT_FIXTURE_MODEL,
-      arguments: {
-        baseTemplateVersionId: base.versionId,
-        audienceType: "incomplete_speakers",
-        kind: "optional",
-        subject: REMINDER_SUBJECT,
-        body: "Hello {{recipient.firstName}}, please complete {{task.title}} in your speaker workspace.",
+    const requestLabel =
+      "Prepare an exact incomplete-speaker reminder preview. Do not send it.";
+    let modelCall = 0;
+    const prepared = await new AiAssistantService(env, {
+      providerConfiguration: {
+        apiKey: "explicit-demo-reminder-key-not-a-provider-credential",
+        model: DEMO_ASSISTANT_FIXTURE_MODEL,
       },
-    });
+      // Explicit simulated model; the normal assistant loop retains the request.
+      fetcher: async () =>
+        Response.json({
+          id: crypto.randomUUID(),
+          model: DEMO_ASSISTANT_FIXTURE_MODEL,
+          status: "completed",
+          output:
+            modelCall++ === 0
+              ? [
+                  {
+                    type: "function_call",
+                    call_id: crypto.randomUUID(),
+                    name: "propose_reminder_send",
+                    arguments: JSON.stringify({
+                      baseTemplateVersionId: base.versionId,
+                      audienceType: "incomplete_speakers",
+                      kind: "optional",
+                      subject: REMINDER_SUBJECT,
+                      body: "Hello {{recipient.firstName}}, please complete {{task.title}} in your speaker workspace.",
+                    }),
+                  },
+                ]
+              : [
+                  {
+                    type: "message",
+                    role: "assistant",
+                    content: [
+                      {
+                        type: "output_text",
+                        text: "The exact reminder preview is ready for review. Nothing has been queued or sent.",
+                      },
+                    ],
+                  },
+                ],
+        }),
+    }).ask(DEMO_ADMIN, requestLabel);
+    const proposal = prepared.proposals[0];
+    if (proposal?.toolName !== "propose_reminder_send")
+      throw new Error("The simulated reminder fixture did not save a preview.");
     return data(
       {
         ok: true,
         demonstrationOnly: true,
         providerCalled: false,
-        proposalId: prepared.preview.id,
+        proposalId: proposal.id,
+        runId: prepared.runId,
+        requestLabel,
         subject: REMINDER_SUBJECT,
         deliverableAddress,
         suppressedAddress,

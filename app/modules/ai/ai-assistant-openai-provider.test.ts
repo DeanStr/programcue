@@ -12,6 +12,7 @@ import {
   READINESS_SUGGESTED_REQUEST,
   READINESS_TASK_SUGGESTED_REQUEST,
 } from "./ai-assistant-suggestions";
+import { listAssistantRunReports } from "./ai-run-report.server";
 import {
   AI_PROVIDER_RESPONSE_MAX_BYTES,
   OpenAiResponsesProvider,
@@ -122,7 +123,7 @@ beforeEach(async () => {
 });
 
 describe("OpenAI Responses provider boundary", () => {
-  it("closes the fixed task branch when readiness has no blockers", () => {
+  it("opens the fixed task branch only for uncovered readiness records", () => {
     const plan = fixedAssistantToolPlan(READINESS_TASK_SUGGESTED_REQUEST);
     if (!plan) throw new Error("The fixed readiness-task plan is unavailable.");
     expect(fixedAssistantToolLimitAfterReadiness(plan, { blockers: [] })).toBe(
@@ -131,8 +132,19 @@ describe("OpenAI Responses provider boundary", () => {
     expect(
       fixedAssistantToolLimitAfterReadiness(plan, {
         blockers: [{ key: "schedule" }],
+        recommendedAction: {
+          sufficient: true,
+          existingWork: [{ id: "task-for-first-record" }],
+          records: [{ covered: true }, { covered: false }],
+        },
       }),
     ).toBe(2);
+    expect(
+      fixedAssistantToolLimitAfterReadiness(plan, {
+        blockers: [{ key: "schedule" }],
+        recommendedAction: { sufficient: true, records: [{ covered: true }] },
+      }),
+    ).toBe(1);
   });
 
   it("does not start an evaluation assistant request during a fixture reset", async () => {
@@ -347,6 +359,15 @@ describe("OpenAI Responses provider boundary", () => {
     ).ask(admin, READINESS_SUGGESTED_REQUEST);
 
     expect(result.answer).toContain("Program Cue records");
+    const reports = await listAssistantRunReports(
+      env as unknown as CloudflareEnvironment,
+      admin,
+    );
+    expect(reports.find((run) => run.runId === result.runId)).toMatchObject({
+      requestLabel: "What is blocking event readiness?",
+      outcome: "Answered",
+      answer: result.answer,
+    });
     expect(result.evidence.map((item) => item.id)).toContain("event-readiness");
     expect(result.attribution).toMatchObject({
       provider: "OpenAI",

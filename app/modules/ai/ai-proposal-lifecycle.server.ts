@@ -26,12 +26,16 @@ import {
   startAiOperationLease,
 } from "./ai-operation-lease.server";
 import { stageReminderSendProposal } from "./ai-proposal-executor-foundation.server";
+import {
+  prepareTaskProposal,
+  taskProposalStatement,
+} from "./ai-task-proposal.server";
 import { assistantProposalMetadataSchema } from "./ai-tools.server";
 
 const PROPOSAL_LIFETIME_SECONDS = 24 * 60 * 60;
 const PROPOSAL_EXECUTION_LEASE_SECONDS = 5 * 60;
 const identifierSchema = z.string().uuid();
-const proposalExecutionResultSchema = z.discriminatedUnion("kind", [
+export const proposalExecutionResultSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("communication"),
     proposalId: identifierSchema,
@@ -783,7 +787,7 @@ export class AiProposalLifecycleService {
       }
       await renewAiOperationLease(this.env, revisionLease);
       const revised = await stageReminderSendProposal(this.env, viewer, {
-        runId: correlationId,
+        runId: metadata.data.runId,
         model: metadata.data.model,
         templateId: metadata.data.preview.reminder.template.templateId,
         arguments: {
@@ -838,6 +842,156 @@ export class AiProposalLifecycleService {
           ...errorMetadata,
           operationId: revisionOperationId,
         },
+      });
+      throw error;
+    }
+  }
+
+  async reviewTaskProposal(
+    viewer: Viewer,
+    rawProposalId: unknown,
+    input:
+      | {
+          decision: "edit";
+          title: unknown;
+          description: unknown;
+          ownerPersonId: unknown;
+        }
+      | { decision: "reject"; confirmed: boolean },
+  ) {
+    this.assertAdmin(viewer);
+    const proposalId = identifierSchema.parse(rawProposalId);
+    if (input.decision === "reject" && !input.confirmed)
+      throw new AiProposalStateError("Explicit rejection is required.");
+    const row = await this.env.DB.prepare(
+      `SELECT metadata_json AS metadataJson, created_at AS createdAt FROM audit_events WHERE organisation_id = ? AND event_id = ? AND actor_person_id = ? AND entity_id = ? AND action = 'assistant.proposal.previewed' ORDER BY created_at DESC, id DESC LIMIT 1`,
+    )
+      .bind(viewer.organisationId, viewer.eventId, viewer.personId, proposalId)
+      .first<{ metadataJson: string; createdAt: number }>();
+    if (!row) throw new AiProposalNotFoundError();
+    if (
+      row.createdAt <
+      Math.floor(this.now().getTime() / 1000) - PROPOSAL_LIFETIME_SECONDS
+    )
+      throw new AiProposalStateError(
+        "This assistant proposal expired. Generate a fresh preview.",
+      );
+    const metadata = assistantProposalMetadataSchema.parse(
+      JSON.parse(row.metadataJson),
+    );
+    if (metadata.toolName !== "propose_task")
+      throw new AiProposalStateError(
+        "This review action requires a task proposal.",
+      );
+    const leaseId = crypto.randomUUID();
+    const lease = await startAiOperationLease(this.env, viewer, {
+      id: leaseId,
+      type: "ai.proposal.revision",
+      payload: { proposalId, decision: input.decision },
+      audit: {
+        actorKind: "person",
+        action: "assistant.proposal.revision.requested",
+        entityType: "assistant_proposal",
+        entityId: proposalId,
+        correlationId: metadata.runId,
+        metadata: { proposalId, decision: input.decision },
+      },
+    });
+    try {
+      const preparedReplacement =
+        input.decision === "edit"
+          ? await prepareTaskProposal(this.env, viewer, {
+              runId: metadata.runId,
+              model: metadata.model,
+              readinessContext: metadata.readinessContext,
+              arguments: {
+                ...metadata.arguments,
+                title: z.string().parse(input.title),
+                description: z.string().nullable().parse(input.description),
+                ownerPersonId: z.string().nullable().parse(input.ownerPersonId),
+              },
+            })
+          : null;
+      const replacement = preparedReplacement?.metadata ?? null;
+      const terminalId = crypto.randomUUID();
+      const details = {
+        proposalId,
+        runId: metadata.runId,
+        decision: input.decision,
+        replacementProposalId: replacement?.preview.id ?? null,
+      };
+      await completeAiOperationLease(
+        this.env,
+        viewer,
+        lease,
+        details,
+        {
+          actorKind: "person",
+          action: "assistant.proposal.review.completed",
+          entityType: "assistant_proposal",
+          entityId: proposalId,
+          correlationId: metadata.runId,
+          metadata: details,
+        },
+        {
+          statements: [
+            ...(replacement
+              ? [taskProposalStatement(this.env, viewer, replacement)]
+              : []),
+            this.env.DB.prepare(
+              `INSERT INTO audit_events (id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action, entity_type, entity_id, correlation_id, metadata_json, created_at) VALUES (?, 'person', 'admin_ui', 1, ?, ?, ?, 'assistant.proposal.superseded', 'assistant_proposal', ?, ?, ?, unixepoch())`,
+            ).bind(
+              terminalId,
+              viewer.organisationId,
+              viewer.eventId,
+              viewer.personId,
+              proposalId,
+              metadata.runId,
+              JSON.stringify(details),
+            ),
+          ],
+          failurePredicateSql: `EXISTS (SELECT 1 FROM assistant_proposal_executions WHERE proposal_id = ?) OR EXISTS (SELECT 1 FROM audit_events WHERE organisation_id = ? AND event_id = ? AND entity_id = ? AND action = 'assistant.proposal.superseded' AND id <> ?)`,
+          bindings: [
+            proposalId,
+            viewer.organisationId,
+            viewer.eventId,
+            proposalId,
+            terminalId,
+          ],
+          conflict: {
+            predicateSql: `EXISTS (SELECT 1 FROM assistant_proposal_executions WHERE proposal_id = ?) OR EXISTS (SELECT 1 FROM audit_events WHERE organisation_id = ? AND event_id = ? AND entity_id = ? AND action = 'assistant.proposal.superseded' AND id <> ?)`,
+            bindings: [
+              proposalId,
+              viewer.organisationId,
+              viewer.eventId,
+              proposalId,
+              terminalId,
+            ],
+            createError: () =>
+              new AiProposalStateError(
+                "This preview was already approved, replaced or rejected. Reload its current result.",
+              ),
+          },
+        },
+      );
+      return {
+        decision: input.decision,
+        replacementProposalId: replacement?.preview.id ?? null,
+      };
+    } catch (error) {
+      if (error instanceof AiOperationSettlementIndeterminateError) throw error;
+      const cancelled =
+        isExpectedAiOperationCancellation(error) || error instanceof z.ZodError;
+      const settle = cancelled ? cancelAiOperationLease : failAiOperationLease;
+      await settle(this.env, viewer, lease, safeAiErrorMetadata(error), {
+        actorKind: "agent",
+        action: cancelled
+          ? "assistant.proposal.revision.cancelled"
+          : "assistant.proposal.revision.failed",
+        entityType: "assistant_proposal",
+        entityId: proposalId,
+        correlationId: metadata.runId,
+        metadata: { proposalId, ...safeAiErrorMetadata(error) },
       });
       throw error;
     }

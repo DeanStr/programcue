@@ -1,9 +1,9 @@
 import { z } from "zod";
-
 import {
   ResponseBodyTooLargeError,
   readBoundedResponseJson,
 } from "~/platform/http/read-response";
+import { providerUsageSchema } from "./ai-run-measurements.server";
 
 export const AI_PROVIDER_REQUEST_TIMEOUT_MS = 120_000;
 export const AI_PROVIDER_RESPONSE_MAX_BYTES = 8 * 1024 * 1024;
@@ -32,6 +32,8 @@ export const aiProviderResponseSchema = z
       .passthrough()
       .nullable()
       .optional(),
+    usage: providerUsageSchema.nullable().optional(),
+    usage_is_partial: z.boolean().optional(),
     output: z.array(z.unknown()).max(100),
     output_text: z.string().max(512_000).optional(),
   })
@@ -109,10 +111,12 @@ export type AiProviderFailureKind =
 
 type AiProviderErrorOptions = ErrorOptions & {
   failureKind?: AiProviderFailureKind;
+  response?: OpenAiResponse;
 };
 
 export class AiProviderError extends Error {
   readonly failureKind: AiProviderFailureKind;
+  readonly response?: OpenAiResponse;
 
   constructor(
     message: string,
@@ -122,6 +126,7 @@ export class AiProviderError extends Error {
   ) {
     super(message, options);
     this.name = "AiProviderError";
+    this.response = options?.response;
     this.failureKind =
       options?.failureKind ??
       (status === null || (status >= 200 && status < 400)
@@ -166,6 +171,7 @@ export function requireCompletedResponsesApiResult(
     `${providerName} response status was ${response.status}${detail}; no result was accepted.`,
     httpStatus,
     providerRequestId ?? response.id,
+    { response },
   );
 }
 
@@ -251,12 +257,16 @@ export async function readResponsesApiStream(
       const detail = safeProviderMessage(
         event.data.response ?? { error: event.data.error },
       );
+      const failedResponse = aiProviderResponseSchema.safeParse(
+        event.data.response,
+      );
       throw new AiProviderError(
         detail
           ? `${providerName} streaming request failed: ${detail}`
           : `${providerName} streaming request ended with ${event.data.type}.`,
         response.status,
         providerRequestId,
+        { response: failedResponse.success ? failedResponse.data : undefined },
       );
     }
   };

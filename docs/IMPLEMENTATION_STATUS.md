@@ -1,11 +1,251 @@
 # Verified implementation status
 
-Evidence recorded through **19 October 2026**, including the sponsor/deliverables release, application/scanner releases, a controlled live invited-speaker journey and autonomous backup acceptance.
+Evidence recorded through **20 October 2026**, including assistant request presentation and partial task coverage, readiness source links, the sponsor/deliverables release, application/scanner releases, a controlled live invited-speaker journey and autonomous backup acceptance.
 This is the current capability,
 requirements and acceptance index; consolidation does not constitute a new
 verification or deployment. The [product specification](../sessionboard-replacement-full-scope-implementation-specification-with-competition-ux.md)
 owns intended scope, [DECISIONS.md](DECISIONS.md) owns engineering decisions, and
 Git history retains earlier committed work logs.
+
+## Assistant request presentation and partial task coverage — 20 October 2026
+
+**Production slice, local; not deployed.** Follow-up review exposed a remaining
+partial-coverage gap: adding a new conflict while an earlier conflict remained
+active hid the earlier coordination task and proposed both conflicts again.
+Coverage now applies per source record across active tasks. Existing work stays
+visible, and new previews contain only uncovered records. Retained preview
+context distinguishes those records from the scope already owned by earlier
+tasks, including when an earlier task is subsequently waived.
+
+The assistant now places its current answer, source disclosure and pending
+approvals before request history. History summaries show the organiser's request,
+event-local timestamp and action outcome. Expanded entries show the retained
+answer, sources and resulting task; provider/model, timing, usage, cost and raw
+audit data sit behind a separate disclosure. “Task created” explicitly does not
+mean the blocker is resolved. Editing, rejecting and approving retain the current
+answer while refreshing proposal controls. Four suggested requests remain visible
+with the rest under “More requests”; evidence disclosures keep exact previews
+near the answer. Narrow layouts constrain the approval table to its own scrollable
+area.
+
+Browser validation passed all 20 checks in `assistant-readiness.spec.ts` and
+`assistant.spec.ts`, including request/time/outcome labels, readable retained
+answers, secondary diagnostics, approval ordering, keyboard disclosure access,
+rejection/stale/failure recovery and saved task links. The success workflow also
+checks a 390-pixel viewport; its first attempt exposed page-wide table overflow,
+which was corrected before the passing run. Desktop, mobile, pending-approval
+and expanded-history screenshots were inspected. The model in these browser
+fixtures is explicitly simulated; no additional live-provider or deployment
+acceptance is claimed. Screenshots and run reports remain under
+`.artifacts/assistant-workflow/`.
+
+`npm run check:core` passed in 374.7 seconds: 666 unit tests, 2,047 Worker tests,
+one agent test, regenerated types, build, lint and repository/schema/recovery/API
+contracts. Coverage includes partial existing work, combined task scope, removal
+of earlier coverage, saved request labels and distinct review/execution outcomes.
+Logs are retained as `.artifacts/assistant-workflow/core.log` and
+`.artifacts/assistant-workflow/browser.log`. The full release gate and live-model
+acceptance were not repeated for this local revision.
+
+Reminder edits now retain the original assistant run ID, keeping the replacement
+preview and its approved action in the originating request's history after reload.
+The edit request keeps its separate correlation ID. The focused regression failed
+before the correction; 67 focused Worker tests and all 20 assistant Chromium
+checks passed afterward, alongside generated TypeScript validation, lint, build
+and OpenAPI synchronization. The browser fixture uses an explicitly simulated
+model. Its first run passed the history checks but exposed a test locator that
+expected a transient success-banner link after reload; the corrected test follows
+the persisted operation link. Receipts are in
+`.artifacts/assistant-reminder-history/`. The complete repository gate and live
+provider acceptance were not repeated for this focused correction; it is not deployed.
+
+Report loading now validates required stored data instead of substituting missing
+answers, evidence, measurements or provider metadata for completed runs. Running,
+failed, cancelled and interrupted runs may still lack a final response. Reports
+deliberately redacted by completed participant retention are omitted without
+recovering removed content from immutable audit records; an unsubstantiated
+redaction marker remains an error. Task evidence receives the validated target
+label directly from proposal preparation. Live acceptance configuration rejects
+missing or blank source provenance before a provider call.
+Forward migration `0061` marks the deployed assistant's earlier operation
+summaries as predating retained reports, preserving them in Operations without
+inventing answers or measurements. Only that explicit historical disposition
+is excluded; missing required fields in new reports still fail validation.
+An insert guard closes the migration/Worker cutover window by rejecting old
+assistant payloads before inference. Failed proposal reviews also reconcile
+streamed controls with reloaded server state while preserving the current answer.
+
+Validation passed: `npm run check:core` in 423.7 seconds (666 unit tests, 2,066
+Worker tests, one agent test, regenerated types, lint, build and
+schema/configuration/recovery/API contracts), 100 focused Worker tests, two
+acceptance-provenance tests, the historical-data/cutover migration upgrade test
+and all 22 assistant Chromium checks. The browser cases include conflicting
+edits and rejections from another tab. The initial conflict-test attempts
+exposed test-context and response-URL issues; the corrected full run passed.
+The retention regression failed before its correction. Four requested Codex
+review rounds are captured with findings and per-finding rationale; the final
+review reported no actionable regressions. Receipts are under
+`.artifacts/assistant-fail-fast/`, including `triage.json`, `core-complete.log`,
+`browser-complete.log` and `review-4.findings.txt`. Only this audit receipt changed
+after the reviewed and tested source. The complete release gate and live-model
+acceptance were not repeated, and migration `0061` has not been deployed.
+
+## Assistant readiness task scope and delivery links — 20 October 2026
+
+The subsequent presentation/partial-coverage revision above supersedes the
+initial all-record coverage rule described in this receipt.
+
+**Production slice, local; not deployed.** Both follow-up review findings were
+reproduced and fixed. Existing coordination tasks now suppress a new preview only
+when their recorded source keys cover every currently affected record in the same
+blocker category. An open task for a resolved room conflict no longer suppresses
+work for a new speaker conflict, nor does an existing task hide an additional
+uncovered conflict. Resolving part of a task's scope still leaves it covering the
+remaining records; task scope is never silently expanded. Durable execution and
+idempotency records still identify existing tasks, including interrupted result
+settlement. Schedule conflicts use their version and domain fingerprint as the
+source key, retaining task coverage when an unchanged conflict is rebuilt with
+new row IDs. Other sources use their durable record IDs; previews and evidence
+cards still link the actual current records.
+
+Delivery source cards now use `deliveryCommunication` and the
+`communications-health` anchor. The real browser opens the selected communication's
+recipient deliveries, excludes another communication's recipient, and retains the
+selection after reload. The new browser scenario uses isolated local D1 and an
+explicit simulated model; it does not claim another live-provider acceptance.
+
+Validation passed: 35 focused Worker tests, generated TypeScript checks,
+formatting/lint, and all 20 Chromium checks across `assistant-readiness.spec.ts`
+and `assistant.spec.ts`. The initial regression run demonstrated three failures
+before the fixes. An additional regression exercises unchanged conflict rebuilds
+through the real Schedule service. An ambiguous existing-work browser locator was
+scoped to the answer panel before the passing rerun. The repeated requested Codex
+review reported no actionable findings. `npm run check:core` also passed in 437.4
+seconds: 666 unit tests, 2,047 Worker tests, one agent test, types, build and
+repository/configuration contracts. Findings, rationale and logs are retained
+under `.artifacts/assistant-findings-2026-10-20/`, including `core.log`,
+`browser-scope.log` and `review-2.findings.txt`. Only this audit receipt changed
+after the reviewed and tested source. The full release gate and live-model
+acceptance were not repeated; the 19 October live-provider evidence below
+predates these corrections. No deployment is claimed.
+
+## Assistant readiness-to-task workflow — 19 October 2026
+
+**Production slice, local. Live Workers AI acceptance passed; not deployed.**
+The existing assistant loop records each model-call attempt, requested and returned
+models, response IDs, durations, available normalised token categories, configuration
+hashes, reasoning setting and optional dated inference-price snapshots. Missing
+usage remains unknown, including after rejected or partially completed provider
+responses. Explicit equal input/write rates permit a cost estimate without
+inventing an unavailable write-token count. Private requester-scoped reports survive
+reloads and connect the request/hash, source records, immutable proposal revisions,
+review decisions, approval wait and persisted action result.
+
+Readiness follows the Command Centre's existing highest-priority action. Its read
+tool supplies exact supporting records (bounded to 100 and an 8,000-character context), explicit task-target fields
+and eligible named organisers. Insufficient evidence prevents a preview. Task-backed
+blockers and existing assistant coordination work link to existing tasks instead of
+creating another. A new readiness task requires a named organiser and a current-event,
+administrator-only preview. The organiser can edit the title/context/owner or reject
+it. Editing atomically replaces the preview and requires new approval. Approval
+rechecks source evidence and owner availability; the task command checks the event
+change cursor atomically. Stale previews are retired. Idempotent recovery returns an
+already-created task after interrupted result settlement. Creating a task never
+claims that the motivating blocker has been resolved.
+
+The fixed five-scenario set passed against the real configured Workers AI DeepSeek
+model: useful proposal/edit/approval/task reload, insufficient information, no
+blockers with incomplete setup, changed evidence before approval, and an explicitly
+injected failure after one real provider call. Only the AI binding was remote;
+scenario records and actions remained in isolated local D1. Earlier unsuccessful
+attempts remain in separate directories. They exposed premature requests for preview
+permission, completion-budget exhaustion and incorrect task arguments. The final
+path prepares the preview in the same run, uses the model's explicit `none` reasoning
+setting within the existing 4,000-token limit, and copies authoritative target/owner
+fields. Domain validation remains in force. A passing fixed set does not establish
+general model reliability.
+
+A separate real browser run exercised the built application's normal streaming
+endpoint, Program Cue Agent, Workers AI binding, evidence review, task editing,
+explicit approval and persisted-task reload. It used no substituted model response.
+A later answer review exposed an invented URL prefix despite correct source-card
+links. The final server rejects generated readiness links unless they match an
+inspected source; the prose refers to authoritative source cards rather than generating link
+destinations. Explicitly requested URLs must copy hrefs exactly. Valid links from the
+returned setup/workflow snapshots and existing work remain available. The retained
+report includes exact response IDs, available usage, dated inference estimates and
+execution timing; the defective earlier answer remains separately recorded. Real recordings and joined evidence live in
+`.artifacts/assistant-workflow/live-browser/`; fixed-set attempts live under
+`.artifacts/assistant-workflow/live/`, with `latest.json` identifying the newest.
+The compact report is `.artifacts/assistant-workflow/report.html` / `report.json`.
+
+The initial uncommitted-change review fixed four additional gaps. An explicit null
+readiness key permits unrelated ordinary tasks after a readiness read, including
+later edits. Readiness observations identify the requester among eligible organisers.
+Interrupted Anthropic streams retain observed usage marked partial; complete totals
+and cost stay unknown. Reports recognise a durably created task even when assistant
+result recording was interrupted, link that task and explain the idempotent retry.
+The fresh five-scenario Workers AI set passed, including requester selection from
+two eligible organisers before editing, approval and persisted-task verification.
+
+The requested Codex CLI review/fix loop then identified four actionable gaps:
+readiness audit rows could exceed the deployed size limit, organisation-wide
+organisers were excluded, review evidence used an unregistered route, and existing
+coordination tasks were missing from source cards. The fixes bound retained context
+without relaxing the audit invariant, explicitly block proposals when evidence is
+limited, recognise accepted organisation-wide organisers in both preview and atomic
+event-task validation, and render the correct review/existing-work links. Findings,
+fix analysis, review transcripts and check receipts are retained under
+`.artifacts/assistant-review-loop/`, with per-finding decisions in `triage.json`.
+A second CLI round reproduced a test-isolation failure: organisation-wide grants
+leaked between parameterized cases and the simulated model chose a random first
+owner. Those grants are now removed in `finally`; the explicit fixture selects the
+eligible requester and fails if that invariant is missing. The two-organiser case
+also verifies selection when the requester is not first in the returned list.
+All 200 AI/task-API regression tests across 21 files, generated TypeScript checks
+and formatting/lint passed after this test-fixture correction.
+A third CLI round reproduced an owner-revocation race: a global administrator
+revoked from another event could still qualify through speaker participation,
+without advancing the inspected event's cursor. Readiness task commands now carry
+an explicit internal boundary and atomically require the selected owner to retain
+an accepted organiser grant. The regression verifies unchanged cursor, retained
+speaker participation, zero created tasks and retirement of the stale preview.
+
+Focused Worker coverage includes 26 scenarios in `ai-readiness-workflow.test.ts`,
+alongside existing provider/tool coverage: evidence-linked creation/reload,
+edits/rejection, atomic review rollback, stale approval and retirement, intervening
+event changes, scope denial, crash recovery, provider failure, unknown/partial usage,
+cache-write pricing, exact source-link validation and streaming usage normalisation.
+The earlier AI regression set passed 177 tests across 20 files. All 19 Chromium checks across
+`assistant-readiness.spec.ts` and `assistant.spec.ts` passed; eight retain explicitly
+simulated-model recordings, screenshots and reports separately from real acceptance.
+The added browser case reloads after task creation with interrupted result recording,
+inspects the persisted task link and retries approval to finish recording the same task.
+The latest browser case asks readiness again and verifies the existing task source
+card without another approval preview. Two initial browser runs exposed ambiguous
+report/alert test locators; the full rerun passed after scoping them appropriately.
+After the runtime fixes, `npm run check:core` passed in 398.2 seconds: formatting, regenerated
+types/TypeScript, 666 unit tests, 2,042 Worker tests, one agent test, the production
+build and repository/configuration contracts, including recovery and OpenAPI.
+Receipts are `.artifacts/assistant-review-loop/round-3.core.log` and
+`round-3.browser.log`. A fresh five-scenario Workers AI run passed after all
+CLI-loop fixes, using the exact source fingerprint that cleared the fourth review:
+`29f605e052d0c0eddb18370c7f99911d2cc9e49cc53bc5dea31cb363b7719a29`.
+Receipts are `.artifacts/assistant-workflow/live/2026-10-19T16-51-23-919Z-bcd9c631/`
+(`scenarios.json`, `test-results.json` and `run.log`). The success used three real
+model calls in 16.367 seconds, selected the requester from two eligible organisers,
+and verified the edited, approved task through a fresh service read. All five
+scenarios passed; the provider-failure case deliberately injected its second-call
+failure after one real model call. This run predates the 20 October record-scope
+and delivery-link corrections above.
+Both core and browser gates were repeated after the organiser-revocation race fix,
+including the corrected test fixtures.
+The full release gate was not run for this uncommitted review; deployment remains
+a separate step.
+
+Deployed acceptance of this new source, assessments and additional OpenAI/Anthropic
+provider runs remain outstanding. No deployment, shared evaluation reset or
+continuation of the stopped independent evaluation is claimed.
 
 ## Sponsor assets and readiness — 19 October 2026
 
@@ -839,7 +1079,7 @@ provider paths.
 | Calendars | Google/Microsoft connections and invitation create/update/cancel lifecycles. | Fresh provider-error exercise and any provider-requested verification; historical flagged callback follow-up. |
 | Participant operations | Live preview, structured task validation/completion and draft discard/replacement under `6c811a3`; multi-role acceptance under `1ba0531` on 2 September. | Newer task/reminder behavior and positive co-participant presentation where the canonical fixture lacks such a session. |
 | Files/scanner | Historical Uppy/R2 upload, clean release, EICAR quarantine, error/retry and erasure evidence; `ae6133c` exercised shutdown. Scanner `38a5ad24` passed real multipart upload, clean scan/callback/release, exact-byte authenticated download and anonymous denial on 18 October after correcting FreshClam trust. | Sustained capacity and broader erasure; aged-signature refresh passed in the later hosted canary. The earlier September failed instance's root cause remains unverified. |
-| AI | DeepSeek structured readiness through Workers AI; malformed/over-budget output failed explicitly. | Full agent tool-loop, assessments and external model providers. |
+| AI | DeepSeek structured readiness through Workers AI; malformed/over-budget output failed explicitly. | Deployed acceptance of the full agent workflow (local live-model evidence above), assessments and external model providers. |
 | Operations | Retained structured logs, empty Queue/DLQ inspection, scoped alert firing, one delayed owner alert email and exact private-R2 backup restore. The 18 October autonomous backup and paired monitor passed; the downloaded SQL matched its manifest and restored into isolated SQLite with integrity and foreign-key checks passing. | Timely repeatable alerts, trace continuity and measured incident RPO/RTO. |
 
 ### Public website

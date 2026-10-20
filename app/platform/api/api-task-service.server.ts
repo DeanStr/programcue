@@ -312,8 +312,21 @@ export class ApiTaskService {
     rawInput: unknown,
     correlationId: string,
     idempotencyKey: string,
+    readinessBoundary?: { eventCursor: number },
   ): Promise<ApiTaskMutation> {
     const input = apiTaskCreateSchema.parse(rawInput);
+    if (
+      readinessBoundary &&
+      (input.targetType !== "event" ||
+        input.targetId !== principal.eventId ||
+        input.taskType !== "administrator_only" ||
+        !input.ownerPersonId)
+    )
+      throw new ApiError(
+        422,
+        "INVALID_READINESS_TASK",
+        "Readiness coordination requires an administrator-only task for the current event with a named organiser.",
+      );
     const requestHash = await apiRequestHash(input);
     return this.airtable.executeIdempotent(
       {
@@ -333,6 +346,7 @@ export class ApiTaskService {
           correlationId,
           idempotencyKey,
           requestHash,
+          readinessBoundary,
         ),
     );
   }
@@ -343,6 +357,7 @@ export class ApiTaskService {
     correlationId: string,
     idempotencyKey: string,
     requestHash: string,
+    readinessBoundary?: { eventCursor: number },
   ): Promise<ApiTaskMutation> {
     const replay = await this.replayTaskCreation(
       principal,
@@ -446,8 +461,9 @@ export class ApiTaskService {
         : `AND (
              EXISTS (
                SELECT 1 FROM memberships current_owner_membership
-                WHERE current_owner_membership.event_id = ?
+                WHERE current_owner_membership.organisation_id = ?
                   AND current_owner_membership.person_id = ?
+                  AND (current_owner_membership.event_id = ? OR (? = 'event' AND current_owner_membership.event_id IS NULL AND current_owner_membership.role IN ('owner','administrator')))
                   AND current_owner_membership.accepted_at IS NOT NULL
                   AND current_owner_membership.revoked_at IS NULL
              )
@@ -463,13 +479,35 @@ export class ApiTaskService {
       ? input.targetType === "session"
         ? [principal.eventId, input.targetId, input.ownerPersonId]
         : [
-            principal.eventId,
+            principal.organisationId,
             input.ownerPersonId,
+            principal.eventId,
+            input.targetType,
             principal.eventId,
             input.ownerPersonId,
           ]
       : [];
     const statements = [
+      ...(readinessBoundary === undefined
+        ? []
+        : [
+            atomicBatchGuardStatement(
+              this.env,
+              `(SELECT COALESCE(MAX(sequence), 0) FROM event_changes WHERE event_id = ?) <> ?
+               OR NOT EXISTS (SELECT 1 FROM memberships organiser
+                 WHERE organiser.organisation_id = ?
+                   AND (organiser.event_id = ? OR organiser.event_id IS NULL)
+                   AND organiser.person_id = ? AND organiser.role IN ('owner','administrator')
+                   AND organiser.accepted_at IS NOT NULL AND organiser.revoked_at IS NULL)`,
+              [
+                principal.eventId,
+                readinessBoundary.eventCursor,
+                principal.organisationId,
+                principal.eventId,
+                input.ownerPersonId,
+              ],
+            ),
+          ]),
       this.env.DB.prepare(
         `
         DELETE FROM idempotency_records
@@ -718,7 +756,7 @@ export class ApiTaskService {
         throw new ApiError(
           409,
           "TASK_REFERENCE_CONFLICT",
-          "The task target or owner changed while the task was being created. Refresh and try again.",
+          "The task target, owner or inspected event state changed while the task was being created. Refresh and review a new preview.",
         );
       }
       throw error;
@@ -808,7 +846,8 @@ export class ApiTaskService {
             .first()
         : await this.env.DB.prepare(
             `SELECT 1 FROM memberships
-              WHERE event_id = ? AND person_id = ?
+              WHERE organisation_id = ? AND person_id = ?
+                AND (event_id = ? OR (? = 'event' AND event_id IS NULL AND role IN ('owner','administrator')))
                 AND accepted_at IS NOT NULL AND revoked_at IS NULL
              UNION
              SELECT 1 FROM session_speakers
@@ -817,8 +856,10 @@ export class ApiTaskService {
              LIMIT 1`,
           )
             .bind(
-              principal.eventId,
+              principal.organisationId,
               input.ownerPersonId,
+              principal.eventId,
+              input.targetType,
               principal.eventId,
               input.ownerPersonId,
             )

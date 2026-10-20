@@ -227,11 +227,34 @@ function normalizeChatCompletion(
       gatewayRequestId,
     );
   }
+  const failedResponse = aiProviderResponseSchema.parse({
+    id: parsed.data.id,
+    model: parsed.data.model,
+    status: "failed",
+    output: [],
+    usage:
+      parsed.data.usage && typeof parsed.data.usage === "object"
+        ? {
+            input_tokens: Reflect.get(parsed.data.usage, "prompt_tokens"),
+            output_tokens: Reflect.get(parsed.data.usage, "completion_tokens"),
+            total_tokens: Reflect.get(parsed.data.usage, "total_tokens"),
+            input_tokens_details: Reflect.get(
+              parsed.data.usage,
+              "prompt_tokens_details",
+            ),
+            output_tokens_details: Reflect.get(
+              parsed.data.usage,
+              "completion_tokens_details",
+            ),
+          }
+        : undefined,
+  });
   if (parsed.data.model !== model) {
     throw new AiProviderError(
       `Workers AI returned model ${parsed.data.model} after ${model} was requested; no result was accepted.`,
       null,
       parsed.data.id,
+      { response: failedResponse },
     );
   }
   const choice = parsed.data.choices[0];
@@ -242,6 +265,7 @@ function normalizeChatCompletion(
       "Workers AI exhausted the DeepSeek completion-token budget; no result was accepted.",
       null,
       providerRequestId,
+      { response: failedResponse },
     );
   }
   if (choice.finish_reason === "tool_calls" && toolCalls.length === 0) {
@@ -249,6 +273,7 @@ function normalizeChatCompletion(
       "Workers AI ended for tool calls without returning a valid tool call.",
       null,
       providerRequestId,
+      { response: failedResponse },
     );
   }
   if (choice.finish_reason === "stop" && toolCalls.length > 0) {
@@ -256,6 +281,7 @@ function normalizeChatCompletion(
       "Workers AI returned tool calls with an inconsistent stop reason; no result was accepted.",
       null,
       providerRequestId,
+      { response: failedResponse },
     );
   }
   if (
@@ -266,6 +292,7 @@ function normalizeChatCompletion(
       `Workers AI response ended with ${choice.finish_reason ?? "no finish reason"}; no result was accepted.`,
       null,
       providerRequestId,
+      { response: failedResponse },
     );
   }
   if (choice.message.refusal) {
@@ -273,6 +300,7 @@ function normalizeChatCompletion(
       `Workers AI declined the request: ${choice.message.refusal}`,
       null,
       providerRequestId,
+      { response: failedResponse },
     );
   }
 
@@ -282,11 +310,11 @@ function normalizeChatCompletion(
       "Workers AI returned neither assistant text nor a tool call.",
       null,
       providerRequestId,
+      { response: failedResponse },
     );
   }
   return aiProviderResponseSchema.parse({
-    id: providerRequestId,
-    model: parsed.data.model,
+    ...failedResponse,
     status: "completed",
     output: [
       ...(content
@@ -328,7 +356,11 @@ export class WorkersAiProvider implements AiModelProvider {
       messages: chatMessages(request),
       user: request.safetyIdentifier,
       n: 1,
-      reasoning_effort: request.textFormat ? null : "medium",
+      reasoning_effort: request.textFormat
+        ? null
+        : request.tools?.length
+          ? "none"
+          : "high",
       max_completion_tokens: request.maxOutputTokens ?? 1_600,
       ...(request.textFormat
         ? {
@@ -358,7 +390,10 @@ export class WorkersAiProvider implements AiModelProvider {
             parallel_tool_calls: false,
           }
         : {}),
-    } satisfies ChatCompletionsMessagesInput;
+    } satisfies Omit<ChatCompletionsMessagesInput, "reasoning_effort"> & {
+      // The model's documented levels are newer than the shared binding type.
+      reasoning_effort: "none" | "high" | null;
+    };
     let raw: Record<string, unknown> | ReadableStream<Uint8Array>;
     try {
       raw = await this.binding.run(this.model, payload);

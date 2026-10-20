@@ -523,10 +523,11 @@ export function failAiOperationLease(
   lease: AiOperationLease,
   error: SafeAiErrorMetadata,
   audit: AiOperationAudit,
+  details: Record<string, unknown> = {},
 ) {
   return settleAiOperationLease(env, viewer, lease, {
     status: "failed",
-    result: { phase: "failed", ...error },
+    result: { phase: "failed", ...error, ...details },
     lastError: error.message,
     audit,
   });

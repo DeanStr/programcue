@@ -267,7 +267,7 @@ test("assistant reconciles a streamed proposal after approval", async ({
     await expect(proposal).toHaveCount(1);
     await expect(proposal.getByText("Executed", { exact: true })).toBeVisible();
     await expect(
-      page.getByText("0 awaiting approval", { exact: true }),
+      page.getByRole("heading", { name: "No proposals awaiting approval" }),
     ).toBeVisible();
     await expect(
       proposal.getByRole("button", { name: "Approve and create task" }),
@@ -356,6 +356,7 @@ test("assistant reminder preview can be edited and queues exactly once only afte
     demonstrationOnly: boolean;
     providerCalled: boolean;
     subject: string;
+    requestLabel: string;
     deliverableAddress: string;
     suppressedAddress: string;
   };
@@ -366,6 +367,13 @@ test("assistant reminder preview can be edited and queues exactly once only afte
 
   await page.goto("/admin/assistant");
   await page.locator("body[data-hydrated='true']").waitFor();
+  const history = page
+    .getByRole("region", { name: "Previous assistant requests" })
+    .locator(".pc-assist-history-entry")
+    .filter({ hasText: fixtureData.requestLabel });
+  await expect(history.locator("summary").first()).toContainText(
+    "Awaiting approval",
+  );
   let proposal = page
     .locator("section.card")
     .filter({ hasText: fixtureData.subject })
@@ -393,6 +401,18 @@ test("assistant reminder preview can be edited and queues exactly once only afte
   await expect(
     page.getByText(/saved as a new immutable template version/i),
   ).toBeVisible();
+  await page.reload();
+  await page.locator("body[data-hydrated='true']").waitFor();
+  await expect(history.locator("summary").first()).toContainText(
+    "Awaiting approval",
+  );
+  await history.locator("summary").first().click();
+  await expect(
+    history.getByText(revisedSubject, { exact: true }),
+  ).toBeVisible();
+  await expect(
+    history.getByRole("link", { name: "Review proposal" }),
+  ).toBeVisible();
   proposal = page
     .locator("section.card")
     .filter({ hasText: revisedSubject })
@@ -415,7 +435,25 @@ test("assistant reminder preview can be edited and queues exactly once only afte
       exact: true,
     }),
   ).toBeVisible();
-  const operationLink = page.getByRole("link", { name: "Open operation" });
+  await page.reload();
+  await page.locator("body[data-hydrated='true']").waitFor();
+  await expect(history.locator("summary").first()).toContainText(
+    "Action recorded",
+  );
+  await history.locator("summary").first().click();
+  await expect(
+    history.getByText(revisedSubject, { exact: true }),
+  ).toBeVisible();
+  await expect(
+    history.getByText("Action recorded", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    history.getByRole("link", { name: "Review proposal" }),
+  ).toHaveCount(0);
+  await page.getByText(/Previous action previews \(/).click();
+  const operationLink = proposal.getByRole("link", {
+    name: "Open communication operation",
+  });
   await expect(operationLink).toBeVisible();
   await operationLink.click();
   await expect(page).toHaveURL(/\/admin\/operations\?operation=/);

@@ -6,6 +6,7 @@ import {
   Form,
   type LoaderFunctionArgs,
   type MetaFunction,
+  type ShouldRevalidateFunctionArgs,
   useActionData,
   useLoaderData,
   useLocation,
@@ -21,6 +22,7 @@ import { StatusNotice } from "~/components/ui/status-notice";
 import type { AiAssistantService } from "~/modules/ai/ai-assistant-service.server";
 import { assistantSuggestedPrompts } from "~/modules/ai/ai-assistant-suggestions";
 import { WORKERS_AI_MODEL } from "~/modules/ai/ai-provider.server";
+import { listAssistantRunReports } from "~/modules/ai/ai-run-report.server";
 import {
   AI_ASSISTANT_PROMPT_MAX_LENGTH,
   type AiAssistantResult,
@@ -30,6 +32,7 @@ import {
   AssistantResultPanel,
   ProposalApproval,
 } from "~/modules/ai/assistant-result-panel";
+import { AssistantRunHistory } from "~/modules/ai/assistant-run-history";
 import { getProgramCueEventAgent } from "~/modules/ai/program-cue-agent-client.server";
 import { correlationId } from "~/platform/api/api.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
@@ -63,7 +66,17 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
     workersAiModel: WORKERS_AI_MODEL,
     canConfigureProvider: workspace.canConfigureProvider,
     proposals: await agent.listRecentProposals(viewer),
+    runs: await listAssistantRunReports(env, viewer),
   };
+}
+
+// Rejected approvals can retire a preview and failed runs still retain evidence.
+// Reload D1 state after POST responses, including validation/conflict responses.
+export function shouldRevalidate({
+  formMethod,
+  defaultShouldRevalidate,
+}: ShouldRevalidateFunctionArgs) {
+  return formMethod?.toUpperCase() === "POST" || defaultShouldRevalidate;
 }
 
 type ActionResult =
@@ -88,13 +101,20 @@ type ActionResult =
     }
   | {
       ok: true;
-      intent: "revise";
+      intent: "revise" | "edit_task" | "reject_task";
       message: string;
       approval: null;
     }
   | {
       ok: false;
-      intent: "ask" | "approve" | "revise" | "configure" | "unknown";
+      intent:
+        | "ask"
+        | "approve"
+        | "revise"
+        | "edit_task"
+        | "reject_task"
+        | "configure"
+        | "unknown";
       message: string;
       approval: null;
     };
@@ -127,7 +147,13 @@ export function providerFailureMessage(error: unknown) {
 
 function knownErrorResponse(
   error: unknown,
-  intent: "ask" | "approve" | "revise" | "configure",
+  intent:
+    | "ask"
+    | "approve"
+    | "revise"
+    | "edit_task"
+    | "reject_task"
+    | "configure",
 ) {
   let status: number | null = null;
   const errorName = error instanceof Error ? error.name : "";
@@ -188,6 +214,8 @@ export async function action({ request, context }: ActionFunctionArgs) {
     rawIntent !== "ask" &&
     rawIntent !== "approve" &&
     rawIntent !== "revise" &&
+    rawIntent !== "edit_task" &&
+    rawIntent !== "reject_task" &&
     rawIntent !== "configure"
   ) {
     return data<ActionResult>(
@@ -240,6 +268,29 @@ export async function action({ request, context }: ActionFunctionArgs) {
         approval,
       });
     }
+    if (intent === "edit_task" || intent === "reject_task") {
+      await agent.reviewTaskProposal(
+        viewer,
+        form.get("proposalId"),
+        intent === "reject_task"
+          ? { decision: "reject", confirmed: form.get("confirmed") === "yes" }
+          : {
+              decision: "edit",
+              title: form.get("title"),
+              description: form.get("description"),
+              ownerPersonId: form.get("ownerPersonId") || null,
+            },
+      );
+      return data<ActionResult>({
+        ok: true,
+        intent,
+        message:
+          intent === "reject_task"
+            ? "The task proposal was rejected. No task was created."
+            : "The edited task was saved as a new preview. Review it before approval.",
+        approval: null,
+      });
+    }
     if (intent === "revise") {
       await agent.reviseReminderProposal(
         viewer,
@@ -280,17 +331,15 @@ function StreamingAssistantWorkspace({
   setDraftPrompt,
   disabled,
   eventName,
-  result,
   setResult,
-  onAcceptedResult,
+  onRunSettled,
 }: {
   draftPrompt: string;
   setDraftPrompt: (prompt: string) => void;
   disabled: boolean;
   eventName: string;
-  result: AiAssistantResult | null;
   setResult: (result: AiAssistantResult | null) => void;
-  onAcceptedResult: () => Promise<void>;
+  onRunSettled: () => Promise<void>;
 }) {
   const [pending, setPending] = useState(false);
   const [partial, setPartial] = useState("");
@@ -393,7 +442,6 @@ function StreamingAssistantWorkspace({
           );
         }
         accepted = true;
-        await onAcceptedResult();
       } finally {
         if (!accepted) {
           await reader.cancel("Assistant stream rejected").catch(() => {});
@@ -410,10 +458,26 @@ function StreamingAssistantWorkspace({
       );
     } finally {
       setPending(false);
+      await onRunSettled();
     }
   }
 
-  const suggestedPrompts = assistantSuggestedPrompts(eventName);
+  const suggestedPrompts = assistantSuggestedPrompts(eventName).map(
+    (prompt) => (
+      <button
+        className="pc-assist-prompt"
+        type="submit"
+        form="assistant-stream-form"
+        formNoValidate
+        name="suggestedPrompt"
+        value={prompt.request}
+        disabled={pending || disabled}
+        key={prompt.label}
+      >
+        <strong>{prompt.label}</strong>
+      </button>
+    ),
+  );
 
   return (
     <div className="pc-assist-workspace">
@@ -469,28 +533,18 @@ function StreamingAssistantWorkspace({
               {error}
             </p>
           ) : null}
-          {result ? (
-            <AssistantResultPanel result={result} showProposals={false} />
-          ) : null}
         </div>
       </section>
 
       <aside className="pc-assist-prompts">
         <h2>Useful requests</h2>
-        {suggestedPrompts.map((prompt) => (
-          <button
-            className="pc-assist-prompt"
-            type="submit"
-            form="assistant-stream-form"
-            formNoValidate
-            name="suggestedPrompt"
-            value={prompt.request}
-            disabled={pending || disabled}
-            key={prompt.label}
-          >
-            <strong>{prompt.label}</strong>
-          </button>
-        ))}
+        {suggestedPrompts.slice(0, 4)}
+        <details className="pc-disclosure">
+          <summary>More requests</summary>
+          <div className="pc-assist-prompts mt">
+            {suggestedPrompts.slice(4)}
+          </div>
+        </details>
       </aside>
     </div>
   );
@@ -526,17 +580,18 @@ export default function AssistantRoute() {
   const recentProposals = loaderData.proposals.filter(
     (proposal) => !streamedProposalIds.has(proposal.id),
   );
+  const pendingProposals = recentProposals.filter(
+    (proposal) =>
+      !proposal.executedTaskId &&
+      !proposal.executedCommunicationId &&
+      !proposal.executedDomainEntityId &&
+      !proposal.expired,
+  );
+  const pastProposals = recentProposals.filter(
+    (proposal) => !pendingProposals.includes(proposal),
+  );
   const pendingProposalCount =
-    streamedProposals.length +
-    recentProposals.filter(
-      (proposal) =>
-        !proposal.executedTaskId &&
-        !proposal.executedCommunicationId &&
-        !proposal.executedDomainEntityId &&
-        !proposal.expired,
-    ).length;
-  const hasProposalHistory =
-    streamedProposals.length > 0 || recentProposals.length > 0;
+    streamedProposals.length + pendingProposals.length;
 
   useEffect(() => {
     const draft = adminAssistantDraftFromNavigationState(location.state);
@@ -568,10 +623,15 @@ export default function AssistantRoute() {
     if (actionData?.ok && actionData.intent === "ask") {
       setStreamedResult(actionData.result);
     } else if (
-      actionData?.ok &&
-      (actionData.intent === "approve" || actionData.intent === "revise")
+      actionData &&
+      (actionData.intent === "approve" ||
+        actionData.intent === "revise" ||
+        actionData.intent === "edit_task" ||
+        actionData.intent === "reject_task")
     ) {
-      setStreamedResult(null);
+      setStreamedResult((result) =>
+        result ? { ...result, proposals: [] } : null,
+      );
     }
   }, [actionData]);
   return (
@@ -698,23 +758,54 @@ export default function AssistantRoute() {
         setDraftPrompt={setDraftPrompt}
         disabled={busy || !loaderData.provider.configured}
         eventName={loaderData.eventName}
-        result={streamedResult}
         setResult={setStreamedResult}
-        onAcceptedResult={() => revalidator.revalidate()}
+        onRunSettled={() => revalidator.revalidate()}
       />
 
-      {hasProposalHistory ? (
-        <section className="pc-assist-recent">
-          <div className="card-title">
-            <h2>Write previews</h2>
-            <span className="status warning">
-              {pendingProposalCount} awaiting approval
-            </span>
+      {streamedResult ? (
+        <AssistantResultPanel result={streamedResult} showProposals={false} />
+      ) : null}
+
+      <section
+        className="pc-assist-recent"
+        id="assistant-approvals"
+        aria-label="Pending assistant approvals"
+      >
+        {pendingProposalCount ? (
+          <>
+            <div className="card-title">
+              <h2>Needs your approval</h2>
+              <span className="status warning">
+                {pendingProposalCount} awaiting approval
+              </span>
+            </div>
+            {streamedProposals.map((proposal) => (
+              <ProposalApproval proposal={proposal} key={proposal.id} />
+            ))}
+            {pendingProposals.map((proposal) => (
+              <ProposalApproval proposal={proposal} key={proposal.id} />
+            ))}
+          </>
+        ) : (
+          <div className="pc-assist-empty">
+            <CheckCircle2 aria-hidden size={18} />
+            <h2>No proposals awaiting approval</h2>
+            <p className="subtle">
+              Your previous requests and action results are available below.
+            </p>
           </div>
-          {streamedProposals.map((proposal) => (
-            <ProposalApproval proposal={proposal} key={proposal.id} />
-          ))}
-          {recentProposals.map((proposal) => (
+        )}
+      </section>
+
+      <AssistantRunHistory runs={loaderData.runs} />
+
+      {pastProposals.length ? (
+        <details
+          className="pc-assist-recent"
+          open={Boolean(actionData?.ok && actionData.intent === "approve")}
+        >
+          <summary>Previous action previews ({pastProposals.length})</summary>
+          {pastProposals.map((proposal) => (
             <ProposalApproval
               proposal={proposal}
               executedTaskId={proposal.executedTaskId}
@@ -726,18 +817,8 @@ export default function AssistantRoute() {
               key={proposal.id}
             />
           ))}
-        </section>
-      ) : (
-        <section className="pc-assist-empty">
-          <CheckCircle2 aria-hidden size={18} />
-          <h2>No pending assistant writes</h2>
-          <p className="subtle">
-            Read and draft actions do not mutate event records. Any proposed
-            task or reminder send will appear here with an exact preview and
-            confirmation.
-          </p>
-        </section>
-      )}
+        </details>
+      ) : null}
     </div>
   );
 }

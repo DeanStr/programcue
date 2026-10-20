@@ -160,13 +160,15 @@ export async function validateTaskReferences(
   viewer: Viewer,
   input: z.infer<typeof taskProposalArgumentsSchema>,
 ) {
-  apiTaskCreateSchema.parse(input);
+  const { readinessBlockerKey: _readinessBlockerKey, ...taskInput } = input;
+  apiTaskCreateSchema.parse(taskInput);
   const targetLabel = await requireTargetLabel(
     env,
     viewer,
     input.targetType,
     input.targetId,
   );
+  let ownerLabel: string | null = null;
   if (input.ownerPersonId) {
     const owner =
       input.targetType === "session"
@@ -191,19 +193,26 @@ export async function validateTaskReferences(
               JOIN events event ON event.id = ? AND event.organisation_id = ?
              WHERE p.id = ? AND (
                EXISTS (SELECT 1 FROM memberships m
-                        WHERE m.person_id = p.id AND m.event_id = event.id
+                        WHERE m.person_id = p.id AND m.organisation_id = event.organisation_id
+                          AND (m.event_id = event.id OR (? = 'event' AND m.event_id IS NULL AND m.role IN ('owner','administrator')))
                           AND m.accepted_at IS NOT NULL AND m.revoked_at IS NULL)
                OR EXISTS (SELECT 1 FROM session_speakers ss
                            WHERE ss.person_id = p.id AND ss.event_id = event.id
                              AND ss.participation_status IN ('pending','confirmed'))
              )`,
           )
-            .bind(viewer.eventId, viewer.organisationId, input.ownerPersonId)
+            .bind(
+              viewer.eventId,
+              viewer.organisationId,
+              input.ownerPersonId,
+              input.targetType,
+            )
             .first<{ name: string }>();
     if (!owner)
       throw new AiToolValidationError(
         "The proposed task owner is not available in this event.",
       );
+    ownerLabel = owner.name;
   }
   if (input.dependencyIds.length) {
     const dependencies = await env.DB.prepare(
@@ -224,7 +233,7 @@ export async function validateTaskReferences(
       );
     }
   }
-  return targetLabel;
+  return { targetLabel, ownerLabel };
 }
 
 export function assertReminderDeliveryReady(preview: CommunicationPreview) {

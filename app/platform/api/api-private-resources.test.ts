@@ -57,6 +57,57 @@ beforeEach(async () => {
 });
 
 describe("typed task API service", () => {
+  it("rechecks organisation-wide task ownership at the atomic insert", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    const personId = `org-owner-race-${crypto.randomUUID()}`;
+    const membershipId = crypto.randomUUID();
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO people (id, email, display_name) VALUES (?, ?, 'Organisation owner')",
+      ).bind(personId, `${personId}@example.com`),
+      env.DB.prepare(
+        "INSERT INTO memberships (id, organisation_id, person_id, role, accepted_at) VALUES (?, ?, ?, 'owner', unixepoch())",
+      ).bind(membershipId, organisationId, personId),
+    ]);
+    const racingEnv = withBatchRace(testEnv, async () => {
+      await env.DB.prepare(
+        "UPDATE memberships SET revoked_at = unixepoch() WHERE id = ?",
+      )
+        .bind(membershipId)
+        .run();
+    });
+    const input = {
+      title: "Organisation owner race",
+      targetType: "event",
+      targetId: eventId,
+      ownerPersonId: personId,
+      taskType: "administrator_only",
+      impact: "high",
+    };
+    await expect(
+      new ApiTaskService(racingEnv).create(
+        principal,
+        input,
+        crypto.randomUUID(),
+        crypto.randomUUID(),
+      ),
+    ).rejects.toMatchObject({ status: 409, code: "TASK_REFERENCE_CONFLICT" });
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) AS count FROM task_instances WHERE event_id = ? AND owner_person_id = ?",
+      )
+        .bind(eventId, personId)
+        .first(),
+    ).toMatchObject({ count: 0 });
+    await expect(
+      new ApiTaskService(testEnv).create(
+        principal,
+        input,
+        crypto.randomUUID(),
+        crypto.randomUUID(),
+      ),
+    ).rejects.toMatchObject({ status: 422, code: "INVALID_TASK_OWNER" });
+  });
   it.each(["session-owner", "speaker-target"] as const)(
     "rejects a %s task when participation declines before the atomic insert",
     async (scenario) => {
