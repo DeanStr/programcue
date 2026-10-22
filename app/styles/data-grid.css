@@ -316,6 +316,14 @@
   color: var(--text-inverse);
   font-weight: var(--weight-semibold);
 }
+.submissions-filter-actions .btn.primary:hover {
+  background: var(--brand-700);
+  color: var(--text-inverse);
+}
+.submissions-filter-actions .btn.primary:active {
+  background: var(--brand-900);
+  color: var(--text-inverse);
+}
 .submissions-pager {
   display: flex;
   align-items: center;

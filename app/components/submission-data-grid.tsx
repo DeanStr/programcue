@@ -186,14 +186,22 @@ export function SubmissionDataGrid({
   const [searchParams, setSearchParams] = useSearchParams();
   const [clipboardFeedback, setClipboardFeedback] =
     useState<ClipboardFeedback | null>(null);
-  const [columnVisibility, setColumnVisibility] = useState(() =>
-    Object.fromEntries(
-      ADMIN_SUBMISSION_OPTIONAL_COLUMNS.map((column) => [
-        column,
-        visibleOptionalColumns.includes(column),
-      ]),
-    ),
+  const loadedColumnVisibility = useMemo(
+    () =>
+      Object.fromEntries(
+        ADMIN_SUBMISSION_OPTIONAL_COLUMNS.map((column) => [
+          column,
+          visibleOptionalColumns.includes(column),
+        ]),
+      ),
+    [visibleOptionalColumns],
   );
+  const [columnVisibility, setColumnVisibility] = useState(
+    loadedColumnVisibility,
+  );
+  useEffect(() => {
+    setColumnVisibility(loadedColumnVisibility);
+  }, [loadedColumnVisibility]);
   const columns = useMemo(
     () => submissionColumns(detailSearchParams),
     [detailSearchParams],

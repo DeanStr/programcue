@@ -1,8 +1,91 @@
+import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 import { expectLongTrackFilterContained } from "./support/application-grid";
 import { openRecordPanel } from "./support/open-record-panel";
 import { prepareVisualBaseline } from "./support/prepare-visual-baseline";
 import { resetDemoEvent } from "./support/reset-demo-event";
+
+test("column changes preserve unapplied application filters", async ({
+  page,
+}) => {
+  await page.goto("/admin/review");
+  await page.locator("body[data-hydrated='true']").waitFor();
+  await page.goto("/admin/submissions");
+  await page.locator("body[data-hydrated='true']").waitFor();
+  const filters = page.getByRole("search");
+  await filters.getByLabel("Search", { exact: true }).fill("inclusive");
+  await filters
+    .getByRole("combobox", { name: "Status", exact: true })
+    .selectOption("assigned");
+  await filters
+    .getByRole("combobox", { name: "Sort", exact: true })
+    .selectOption("title-asc");
+  await page.getByText("Columns", { exact: true }).click();
+  const submitter = page
+    .getByRole("group", { name: "Visible columns" })
+    .getByLabel("Submitter");
+  await submitter.uncheck();
+  await expect(page).toHaveURL(/columns=/);
+  const header = page.getByRole("columnheader", { name: "Submitter" });
+  await expect(header).toHaveCount(0);
+  await expect(filters.getByLabel("Search", { exact: true })).toHaveValue(
+    "inclusive",
+  );
+  await expect(
+    filters.getByRole("combobox", { name: "Status", exact: true }),
+  ).toHaveValue("assigned");
+  await expect(
+    filters.getByRole("combobox", { name: "Sort", exact: true }),
+  ).toHaveValue("title-asc");
+  expect(new URL(page.url()).searchParams.get("query")).toBeNull();
+  await expect(submitter).toBeFocused();
+  await page.goBack();
+  await expect(header).toBeVisible();
+  await page.goForward();
+  await expect(header).toHaveCount(0);
+  await expect(filters.getByLabel("Search", { exact: true })).toHaveValue(
+    "inclusive",
+  );
+  await page.getByRole("button", { name: "Apply", exact: true }).click();
+  await expect(page).toHaveURL(/query=inclusive/);
+  await expect(page.getByRole("table").locator("tbody tr")).toHaveCount(1);
+  await page.reload();
+  await expect(filters.getByLabel("Search", { exact: true })).toHaveValue(
+    "inclusive",
+  );
+  await expect(
+    filters.getByRole("combobox", { name: "Status", exact: true }),
+  ).toHaveValue("assigned");
+  await expect(
+    filters.getByRole("combobox", { name: "Sort", exact: true }),
+  ).toHaveValue("title-asc");
+  await expect(header).toHaveCount(0);
+});
+
+test("application Apply remains readable during keyboard activation", async ({
+  page,
+}) => {
+  await page.goto("/admin/submissions");
+  await page.locator("body[data-hydrated='true']").waitFor();
+  await page
+    .getByRole("search")
+    .getByLabel("Search", { exact: true })
+    .fill("inclusive");
+  await page.mouse.move(0, 0);
+  const apply = page.getByRole("button", { name: "Apply", exact: true });
+  await apply.focus();
+  await page.keyboard.down("Space");
+  try {
+    const scan = await new AxeBuilder({ page })
+      .include(".submissions-filter-actions")
+      .withRules(["color-contrast"])
+      .analyze();
+    expect(scan.violations).toEqual([]);
+  } finally {
+    await page.keyboard.up("Space");
+  }
+  await expect(page).toHaveURL(/query=inclusive/);
+});
 
 test("the submissions grid keeps server filters authoritative while managing the visible page", async ({
   context,

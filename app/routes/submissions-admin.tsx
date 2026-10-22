@@ -269,7 +269,7 @@ export default function SubmissionsAdmin({ loaderData }: Route.ComponentProps) {
       </p>
       <section className="submissions-board">
         <SubmissionDataGrid
-          key={`${page}:${filters.status}:${filters.category}:${filters.query}:${filters.routing}:${filters.sort}:${view.columns.join(",")}`}
+          key={`${page}:${filters.status}:${filters.category}:${filters.query}:${filters.routing}:${filters.sort}`}
           filters={
             <Form method="get" className="submissions-toolbar" role="search">
               <input

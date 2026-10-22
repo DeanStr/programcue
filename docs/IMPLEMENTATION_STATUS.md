@@ -1,11 +1,31 @@
 # Verified implementation status
 
-Evidence recorded through **20 October 2026**, including assistant request presentation and partial task coverage, readiness source links, the sponsor/deliverables release, application/scanner releases, a controlled live invited-speaker journey and autonomous backup acceptance.
+Evidence recorded through **22 October 2026**, including application filter-state and keyboard-contrast corrections, assistant request presentation and partial task coverage, readiness source links, the sponsor/deliverables release, application/scanner releases, a controlled live invited-speaker journey and autonomous backup acceptance.
 This is the current capability,
 requirements and acceptance index; consolidation does not constitute a new
 verification or deployment. The [product specification](../sessionboard-replacement-full-scope-implementation-specification-with-competition-ux.md)
 owns intended scope, [DECISIONS.md](DECISIONS.md) owns engineering decisions, and
 Git history retains earlier committed work logs.
+
+## Application filter state and keyboard contrast — 22 October 2026
+
+**Production slice, local; not deployed.** Review against `origin/main`
+reproduced two regressions: changing visible columns discarded unapplied
+application filters, and holding Space on Apply rendered white text on a pale
+background. Column changes now preserve the mounted filter form and keyboard
+focus, while visibility follows the loaded URL on Back/Forward navigation.
+Checkboxes retain immediate feedback during navigation. Apply retains contrasting
+primary colours on hover and keyboard press.
+
+Nine Applications Chromium behavior checks and both desktop/mobile application
+visual checks passed, including pending search/status/sort edits, applying and
+reloading those filters, column history navigation and an active-state contrast
+scan. Two component tests, generated TypeScript checks, build, formatting/lint
+and design-system checks also passed. Initial checks exposed a test-selector
+issue and delayed checkbox feedback; both were corrected before the passing run.
+Evidence and the refreshed comparison gallery are under
+`.artifacts/main-review-20261022/`. The full release and cross-browser gates were
+not repeated for these focused corrections.
 
 ## Assistant request presentation and partial task coverage — 20 October 2026
 
