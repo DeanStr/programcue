@@ -60,7 +60,12 @@ test("coordinator validates before provisioning, rebuilds current source and sel
   const preload = path.join(directory, "preload.mjs");
   fs.writeFileSync(
     preload,
-    String.raw`import fs from 'node:fs'; globalThis.fetch=async(url)=>{if(url!=='http://127.0.0.1:8025/api/v1/messages?limit=1')throw new TypeError('fetch failed',{cause:{code:'ECONNREFUSED'}});fs.appendFileSync(process.env.PLAN_TEST_MARKER,'mail\n');return Response.json({total:0});};`,
+    // This orchestration test provisions no listeners. Keep it independent of a
+    // real evaluation that may already own the coordinator's fixed ports.
+    String.raw`import fs from 'node:fs'; import net from 'node:net';
+    net.Server.prototype.listen=function(port,host,callback){queueMicrotask(callback);return this;};
+    net.Server.prototype.close=function(callback){queueMicrotask(callback);return this;};
+    globalThis.fetch=async(url)=>{if(url!=='http://127.0.0.1:8025/api/v1/messages?limit=1')throw new TypeError('fetch failed',{cause:{code:'ECONNREFUSED'}});fs.appendFileSync(process.env.PLAN_TEST_MARKER,'mail\n');return Response.json({total:0});};`,
   );
   fs.writeFileSync(
     path.join(directory, "bin/docker"),

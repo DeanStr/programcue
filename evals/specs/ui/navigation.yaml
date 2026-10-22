@@ -1,0 +1,45 @@
+id: navigation-visual
+title: Navigation visual craft
+weight: 100
+description: A provisional component-level reference using Linear's published 2026 refresh. Not a whole-product benchmark or UX assessment.
+scenarios:
+  - id: UI-NAV
+    name: Inspect a verified Program Cue capture
+    kind: command
+    instructions: Retain the original screenshot and its capture provenance. No application or provider behavior is established by this collection.
+    collect:
+      command: node evals/scripts/ui-collect.mjs
+      methodFiles: [evals/scripts/ui-collect.mjs]
+      sources:
+        candidate: evals/.agent-eval/ui-input/candidate.png
+        provenance: evals/.agent-eval/ui-input/capture.json
+        reference: evals/.agent-eval/ui-references/linear-20260312/sidebar.png
+      images: [candidate]
+rubric:
+  - id: UI-NAV-CRAFT
+    criterion: >-
+      Compare only navigation visual design craft: the relationship between type
+      sizes and weights, spacing rhythm, icon scale and stroke consistency,
+      label/icon alignment, active and inactive visual treatments, and surface
+      and border restraint. Which has the more coherent and refined visual system?
+      Ignore brand identity, exact colours, feature/menu counts, task efficiency,
+      missing workflows and whether a theme is light or dark. Ignore panel
+      letterboxing. Do not reward literal resemblance. Explain concrete visual
+      differences; abstain if these crops cannot support a fair comparison.
+    weight: 1
+    scenarios: [UI-NAV]
+    grader:
+      type: pairwise
+      candidate: candidate
+      policy: non_regression
+      references:
+        - file: evals/.agent-eval/ui-references/linear-20260312/sidebar.png
+          # Updated right-hand sidebar only; exclude desktop chrome, the old
+          # left sidebar, editorial callouts and the lower editorial fade.
+          # Compare the brand row and upper links; do not upscale the 1× capture.
+          crop: { x: 0.3880635246, y: 0.1838235294, width: 0.2202868852, height: 0.2205882353 }
+          candidateCrop: { x: 0, y: 0, width: 0.1555555556, height: 0.225 }
+      panel: { width: 224, height: 225, fit: contain, background: '#ffffff' }
+      voting: { minimumVotes: 5, maximumVotes: 5, agreement: 1 }
+    gate: true
+    passCriteria: The candidate is visually equivalent or preferred for the stated component properties. This provisional reference is not human-approved design acceptance.

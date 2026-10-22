@@ -1,0 +1,22 @@
+version: 1
+project:
+  name: Program Cue — visual UI navigation reference
+  root: ..
+target:
+  kind: command
+  # Only declared exported images are executed/graded here. Local Worker state,
+  # build output and historical review artifacts are not inputs to this pilot.
+  fingerprint:
+    exclude: [.wrangler, .artifacts, build]
+agent:
+  provider: mock
+judge:
+  provider: codex
+  model: gpt-6.1-sol
+  effort: high
+  timeoutSeconds: 900
+paths:
+  specs: evals/specs/ui
+  runs: evals/.agent-eval/ui-reference-runs
+scoring:
+  minimumCoverage: 100

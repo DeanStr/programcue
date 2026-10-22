@@ -15,10 +15,20 @@
     "smoke:product": "node scripts/local.mjs --smoke-product",
     "smoke:files": "node scripts/local.mjs --smoke-files",
     "regression:files": "node scripts/local.mjs --files-regression",
-    "regression:all": "node scripts/local.mjs --regression"
+    "regression:all": "node scripts/local.mjs --regression",
+    "ux:capture": "node scripts/ux-capture.mjs",
+    "ux:review": "node scripts/ux-review.mjs",
+    "ux:report": "node scripts/ux-report.mjs",
+    "ui:benchmark": "aek run --config evalkit.ui.yaml",
+    "ui:saas:prepare": "node scripts/saas-prepare.mjs",
+    "ui:consistency": "node scripts/ui-consistency.mjs",
+    "ui:saas:report": "node scripts/saas-report.mjs",
+    "ui:tables:prepare": "node scripts/table-prepare.mjs",
+    "ui:tables:report": "node scripts/table-report.mjs",
+    "ui:tables:compare": "aek image batch"
   },
   "dependencies": {
-    "agent-eval-kit": "file:.agent-eval/vendor/agent-eval-kit.tgz",
+    "agent-eval-kit": "file:.agent-eval/vendor/v0.7.0/agent-eval-kit-0.7.0.tgz",
     "playwright": "1.62.1",
     "yaml": "^2.9.0"
   },

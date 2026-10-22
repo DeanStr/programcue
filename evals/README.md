@@ -110,18 +110,23 @@ changes require a fresh run; they do not repair or regrade earlier sealed eviden
 Use Node 24.11+ and the installed subscription CLIs. Local execution requires
 a POSIX host with process groups and `ps` available for cleanup. From this checkout:
 
+Install the published archive matching this lockfile:
+
 ```sh
-npm run setup -- /absolute/path/to/agent-eval-kit
-npm run validate
-npm test
-npm run plan
+mkdir -p .agent-eval/vendor
+gh release download v0.7.0 --repo DeanStr/agent-eval-kit \
+  --pattern 'agent-eval-kit-0.7.0.tgz*' --dir .agent-eval/vendor/v0.7.0
+(cd .agent-eval/vendor/v0.7.0 && sha256sum --check agent-eval-kit-0.7.0.tgz.sha256)
+npm install --save-exact ./.agent-eval/vendor/v0.7.0/agent-eval-kit-0.7.0.tgz
 ```
 
-Setup builds and packs the specified AEK checkout into an ignored local archive,
-then installs it using npm. The kit can be anywhere on disk; no sibling checkout,
-package symlink or private-module import is required. Rerun setup after changing
-AEK. `package-lock.json` records the installed archive's integrity. Ordinary
-`npm install` requires the archive produced by setup.
+For intentional AEK source development, use
+`npm run setup -- /absolute/path/to/agent-eval-kit` instead. Setup builds and packs
+that checkout into the ignored local archive and updates the installed archive
+integrity in `package-lock.json`. A dirty source build is distinct from the
+checksum-verified release above. The kit can be anywhere on disk; no sibling
+checkout, package symlink or private-module import is required. Ordinary
+`npm install` requires the ignored archive to exist first.
 
 The upstream configs use Codex collection and Claude judging; override with
 `--agent codex --judge codex` when using one subscription. Preparation uses the
@@ -133,131 +138,327 @@ resolved model snapshot in its current JSON stream; the requested ID is not
 proof of an immutable provider implementation. Explicit overrides use
 `--agent-model <id>` and `--judge-model <id>`.
 
-## Local execution
+## Design evaluation and improvement
 
-Start the existing local mail capture service once:
+**Current focus: reference-informed visual UI improvement.** The earlier `visual-ui-v3-unanimous` method assesses visual
+craft; the earlier workflow-oriented pilot remains historical evidence. Its
+results must not be treated as visual-quality verdicts or compared numerically
+with this changed method. Browser and accessibility checks remain constraints.
 
-```sh
-docker compose -f ../compose.mailpit.yaml up -d
-npm run local -- --smoke
-```
+The design loop uses **AEK 0.7.0**, pinned by the versioned archive and integrity
+in `package-lock.json`. The published checksum is
+`f742f728434c58b4ba31c5d7da3c073de3074c6a269e0d39076e1d1eda172614`.
+See the [release](https://github.com/DeanStr/agent-eval-kit/releases/tag/v0.7.0).
+Older evaluator reports remain historical; generate fresh runs before making
+numeric comparisons or replacing promoted baselines.
 
-The coordinator checks ports 5188/15188 and rebuilds Programcue even when
-`PROGRAM_CUE_E2E_SKIP_BUILD=1` is inherited. It starts a Worker in a
-new `.wrangler/e2e-state-aek-<uuid>` directory, resets that fixture through the
-real demo UI and captures organizer Morgan Chen for upstream runs (Jordan Alvarez for regression
-and bounded smokes), speaker Priya Raman,
-showcase speaker Priya Shah and reviewer Sam Whitfield. Anonymous browsing has no persona cookie. The smoke
-retains screenshots and results in `.agent-eval/local-smoke`; it invokes no model
-and claims no signup, provider or delivery acceptance. The coordinator stops its
-Worker and evaluator process groups, waits for surviving descendants to stop,
-and removes only its own state directory on exit. An unexpected Worker exit
-cancels the evaluator. Docker cleanup errors still release the coordinator lock.
-Configured scanner failures stop the isolated runtime even when a blocked
-browser outcome skips its collectors. Failed or forced isolated-Worker shutdown
-makes the coordinator fail after cleaning up its owned resources.
-It never
-resets the ordinary development database or production, deletes Mailpit messages,
-or imports production secrets.
+`ux:review` prepares one native image-batch manifest, retaining the existing
+visual criteria, Sol 6.1/high model and five unanimous votes for both preference
+and independent quality. It delegates all judging, queueing, retries, exact
+reuse, sealing and per-pair reporting to `aek image batch`. The project adapter
+only checks captures, identifies unchanged guards and joins browser results.
 
-```sh
-# Fresh full upstream evaluation, including the CRM bonus:
-npm run local
+If an execution error stops a matrix, repeat the original project command with
+`--resume` and its original captures/settings. Native AEK preserves completed
+votes. A split design verdict is final for those pixels and is not resampled.
+Native resume retains the original concurrency; capacity retries are bounded.
 
-# Publication-only pilot (does not exercise anonymous form interaction):
-npm run local -- --areas call-for-papers --scenarios CFP-S1 --max-turns 45
+`--reuse PREVIOUS_REVIEW` accepts one prior native review. AEK matches exact image
+bytes and the full judging contract, including negative or inconclusive results.
+Different settings or pixels receive new judgments. Unsealed project metadata
+cannot substitute native evidence. The native batch report records live progress;
+the project `review.json` and optional forty-view overview join results when the
+native invocation returns.
 
-# Publication plus anonymous checks:
-npm run local -- --areas call-for-papers --scenarios CFP-S1,CFP-S1-PUBLIC
+`--ignore-paint-noise` only identifies unchanged before/after guards: at most 64
+pixels differing by at most four RGBA levels with identical geometry. It records
+the measured difference and never relaxes quality gates. It does not approximate
+cross-run AEK reuse. References equivalent under this explicit guard remain
+unchanged, never improvements. The raster checks require installed Chromium.
 
-# Separate Programcue requirements:
-npm run regression:all -- --fail-under-score 100 --fail-under-coverage 100
-npm run local -- --regression --areas publication
-npm run local -- --regression --areas local-mail --agent codex --judge codex
-```
+This project-owned loop is separate from SBEK and provider acceptance. It captures
+twenty administrator, reviewer, participant and public surfaces at 1440×1000
+and 390×844 (forty views), using a fresh isolated D1 fixture and production build. Captures
+reserve local ports 5196/15196 and never use the development database or production.
+Mailpit and external credentials are unnecessary: these workflows send nothing.
+Source revision, dirty diff, untracked source hashes, toolchain/method hashes,
+image hashes and browser results are retained in each `capture.json`. Output
+directories must be new; captures are never overwritten. Keep source unchanged
+while capturing, and use the same capture toolchain for both designs.
 
-Regression commands validate their complete selection through AEK's
-`run --dry-run --json` before building, starting services or resetting fixtures.
-They share an isolated Worker; only selections containing file-integrity
-scenarios start the signed storage adapter and real ClamAV container. Mail and
-publication selections need no scanner. The outbound allowlist permits the
-enabled file services and only POST to `http://127.0.0.1:8025/api/v1/send`. Mailpit responses
-and transport failures are preserved; redirects are rejected. `regression:all`
-selects the three project areas (nine criteria), not the upstream suite.
-
-Every invocation prepares fresh state. To preserve a target while investigating
-or resuming, use a separate terminal:
+From `evals/`, capture the candidate:
 
 ```sh
-npm run local -- --prepare-only
-# Leave that terminal running. In a second terminal:
-./node_modules/.bin/aek collect --config evalkit.local.yaml --include-optional
-./node_modules/.bin/aek judge --evidence .agent-eval/runs/<collection-id>
-./node_modules/.bin/aek run --config evalkit.local.yaml --resume .agent-eval/runs/<run-id>
+npm run ux:capture -- --output .agent-eval/ux/iteration-1
 ```
 
-Resume requires the original mode, config, selection and evidence. The example
-`run --resume` is for an unfinished combined run; use `collect --resume` for an
-unfinished collection. Do not restart/reset the target before resume. Ctrl+C
-ends the prepared local target. `.agent-eval/local-worker.log` contains startup
-diagnostics. A lock prevents concurrent local coordinators. After an uncatchable
-process kill, inspect the PID in `.agent-eval/local.lock` and stop any surviving
-owned Worker before removing the stale lock; never remove a live run's lock.
-
-`--areas` must include declared prerequisite areas. `--scenarios` must explicitly
-include prerequisites or dependent execution will be blocked. All five saved
-personas are captured even for public scenarios, because their declared allowed
-persona sets require them.
-
-## Bounded product smokes
-
-From `evals/`, run `npm run smoke:product`. This prepares one isolated local
-Worker and runs three Playwright checks without model calls or sending email:
-
-- The merged email iframe renders its actual recipient greeting and body in
-  desktop/mobile sizes while retaining its opaque sandbox.
-- A saved session-title edit remains absent from anonymous public browsing;
-  unapproved publication is blocked; explicit approval/publication exposes it.
-- The populated showcase speaker attempts two distinct PDF uploads and a
-  latest-version ZIP export. A specific unavailable upload/scanner response or
-  retained pending scan is reported as **blocked/skipped**, not passed. Unknown
-  errors fail. This narrower smoke does not establish clean-persona onboarding.
-
-Screenshots, failures and blocked annotations are retained in
-`.agent-eval/product-smoke/`. The configured AEK read-only frame policy permits
-text and image evidence from the representative merged email preview only on
-`/admin/communications/` pages of the application origin. It requires a direct
-`srcdoc` iframe whose sandbox was empty at attachment and has not changed.
-State-preserving iframe moves revoke eligibility. No interactive references are
-granted inside it. Other opaque frames remain excluded; the product sandbox is unchanged.
-For preview images, scroll the content into view and request `fullPage: false`;
-capture additional scroll positions for a tall preview. Chromium can leave an
-offscreen opaque iframe blank in full-page images even when its text is readable.
-AEK rejects that framing without saving an image, and permits a viewport retry.
-
-Production explicitly allows `https://challenges.cloudflare.com` so the collector
-can inspect and interact with the genuine verification frame. A read-only deployed
-probe with that allowance still showed Security check in progress; no token or
-application submission was observed. [Cloudflare does not support automated
-browsers for production challenges](https://developers.cloudflare.com/cloudflare-challenges/reference/supported-browsers/).
-Keep genuine verification as manual acceptance; local mocked verification is not
-live proof. The allowance does not bypass the challenge or award coverage.
-
-Production instructions carry the operator-authorized ABS-S2-AI disclosure: the
-synthetic CI proposal content and Initial Review rubric from this run's evaluation
-event, sent through the configured Cloudflare Workers AI binding for one assessment,
-followed by the specified human override. Inspect the displayed provider/model,
-confirm in the product and preserve approval decisions. This scope excludes real
-customer data, other providers/endpoints and provider-setting changes.
-
-The complementary Worker test runs from the application root:
+For the initial comparison, create a detached worktree at the last commit from
+the application root, install its dependencies, then capture it with the same
+helper. `--checkout` chooses that worktree; it never accepts a remote target:
 
 ```sh
-npm run test:worker:runtime -- app/modules/content/content-management-service.test.ts
+npm run ux:capture -- --checkout /absolute/path/to/reference-worktree \
+  --output .agent-eval/ux/reference
 ```
 
-It verifies a single-entry latest-version ZIP against distinct local R2 bytes.
-Its explicitly released fixtures prove export behavior, not external scanning.
+The last commit is a comparison reference, not automatically an approved design.
+The browser gate checks document containment, WCAG A/AA rules through axe,
+mobile navigation with keyboard activation/Escape/focus return, and keyboard
+application-row selection/clear. Captures use unscaled viewport PNGs, with
+hydration, fonts and the form canvas ready. This is initial-viewport coverage,
+not a complete audit of lower-page content, dialogs, persistence or every route.
+Retain existing Playwright behavior, visual and cross-browser coverage for those
+contracts. Exit 2 retains observed browser failures; errors fail with exit 1.
+
+Preview the model budget and inputs, then run a bounded pilot:
+
+```sh
+npm run ux:review -- --reference .agent-eval/ux/reference \
+  --candidate .agent-eval/ux/iteration-1 --output .agent-eval/ux/review-1 \
+  --views command-desktop,applications-mobile --dry-run
+# Repeat without --dry-run to judge. Omit --views for all forty views.
+```
+
+Generate an interactive before/after matrix, including links to retained AEK
+votes and original PNGs, at any point during or after a review:
+
+```sh
+npm run ux:report -- .agent-eval/ux/review-1
+```
+
+The default judge is **gpt-6.1-sol, high effort**. Each changed view receives separate
+blind relative-comparison and absolute visual-quality gates, with five votes per
+gate and unanimous agreement. That is ten subscription calls per changed view,
+up to 400 for the full matrix. Byte-identical views are recorded as unchanged,
+not claimed as improvements. Dry runs still validate every selected pair and
+show the nominal budget. `--concurrency 1..2` controls native batch view processing
+(default two). `--model` and `--effort` are explicit overrides; when using another
+provider through `--judge`, supply its supported model/effort. Mock judges
+abstain and cannot pass the visual gates. AEK retains anonymous panels, source
+images, votes, findings and HTML reports under each view's directory. The parent
+`review.json` retains selection, source provenance and browser failures. Any
+candidate browser failure blocks the overall result, including outside a pilot's
+selected views. Failed/inconclusive gates exit 2; provider errors exit 1.
+
+The visual rubric assesses type scale/weight/line height, spacing rhythm,
+alignment, colour harmony, canvas/panel contrast, borders/shadows/radii, control
+geometry and icon consistency. It excludes task completion, workflow efficiency,
+feature count and records above the fold. Choose `--aspect overall` (default),
+`typography`, `spacing`, `surfaces` or `components` to test one visual concern.
+Each review records its aspect and method. Brand familiarity, exact palette,
+light/dark theme, smaller type and more empty space do not earn points by themselves.
+Do not infer unseen interaction states from these screenshots. Current primary
+guidance includes [Atlassian typography](https://atlassian.design/foundations/typography/),
+[spacing](https://atlassian.design/foundations/spacing/) and
+[Linear's 2026 visual refresh](https://linear.app/now/behind-the-latest-design-refresh).
+
+The default policy is strict `preference`; every vote must prefer the candidate.
+`--policy non_regression` is an explicit diagnostic option and does not satisfy
+the unanimous improvement target. Inspect localized
+findings, change one coherent concern, recapture and rerun against the retained
+reference. Reject behavior/accessibility regressions and unavailable evidence.
+Do not refresh Playwright baselines or replace the reference merely to obtain a
+passing result. Require improvement in the targeted concern and review the
+remaining views for regressions before accepting a candidate.
+
+Before treating model results as an acceptance gate, review known-good examples
+and known defects independently. `ux:capture --variant unreadable` creates an
+explicit injected contrast/type-size defect for a negative control; its failures
+must remain visible. Judge it against a normal reference. This tests one defect
+family, not general judge accuracy. Retain disagreement for review and add held-out
+examples of accepted and defective UI through AEK's `judge validate` tooling. Model
+agreement measures consistency, not user preference or independent human approval.
+
+### External visual reference pilot
+
+`evalkit.ui.yaml` adds a separate component-level comparison against the updated
+right-hand navigation in Linear's published 12 March 2026 refresh. This is a
+provisional external reference, not a whole-product or human-approved benchmark.
+The rubric compares typography, spacing, icon treatment, alignment and surface
+restraint. It excludes the old left-hand sidebar, desktop chrome, editorial
+callouts and lower fade. AEK applies the declared crops and seals the source
+pixels, normalized comparison panels, votes and findings. Different content,
+menu counts and brand colours do not count as quality differences.
+
+From `evals/`, prepare the explicit inputs, substituting your captured directory:
+
+```sh
+mkdir -p .agent-eval/ui-input .agent-eval/ui-references/linear-20260312
+cp .agent-eval/ux/iteration-1/command-desktop.png .agent-eval/ui-input/candidate.png
+cp .agent-eval/ux/iteration-1/capture.json .agent-eval/ui-input/capture.json
+curl --fail --location 'https://webassets.linear.app/images/ornj730p/production/b6d6be14c96978b10553cfb9205be1065087e793-3904x2720.png' \
+  -o .agent-eval/ui-references/linear-20260312/sidebar.png
+npm run ui:benchmark -- --dry-run
+npm run ui:benchmark
+```
+
+The collector requires the candidate bytes to match a healthy 1440×1000
+`command-desktop` entry in the supplied capture manifest and the reference bytes
+to match SHA-256 `e8455151bee6433e6add7fd3407d09319612eb900fc02bc35d8bb0960b21e782`.
+Missing or changed inputs fail; no reference is silently substituted. Validate
+prepared inputs with `aek validate --config evalkit.ui.yaml`. The normal three-suite
+validator does not require these optional downloaded artifacts. Reports are under
+`.agent-eval/ui-reference-runs`. Run one benchmark at a time while these input
+aliases are in use. AEK rejects changed source bytes during execution.
+
+Inspect the actual cropped panels before interpreting votes. This image is an
+editorial publication rather than a native 1× product screenshot; typography and
+scale comparability need review. This pilot covers navigation styling only.
+Whole-page visual composition, tables, forms and other components need separately
+curated references. Keep the original Program Cue reference for same-product
+before/after comparisons and use external examples to assess a visual standard.
+
+### Published SaaS component references
+
+The `saas-craft-v1` experiment pins four official image assets and compares five
+matched components: Linear navigation, Attio application/contact tables, Notion
+Forms and Notion Calendar. `scripts/saas-references.mjs` records publication URLs,
+image SHA-256 values, source-date limitations, fixed crops and normalized panel
+geometry. These are published references, not certified latest-live-product
+captures. Match visual relationships rather than copying brand styling or
+rewarding feature counts. External equivalence is not evidence of improvement
+over our previous UI.
+
+From `evals/`, prepare a new experiment from a healthy forty-view capture:
+
+```sh
+npm run ui:saas:prepare -- --capture .agent-eval/ui-external/candidate-08 \
+  --output .agent-eval/ui-external/next-round
+node node_modules/agent-eval-kit/dist/cli.js run \
+  --config .agent-eval/ui-external/next-round/evalkit.yaml
+```
+
+Preparation verifies every browser result and image hash, fetches missing
+reference images and verifies their pinned bytes. Native AEK command collection
+copies verified PNGs; its deterministic collector uses `agent: mock`, while
+all quality and preference judgments use real Codex `gpt-6.1-sol`/high calls.
+Five absolute votes assess the selected candidate views, followed by five blind
+pairwise votes per component, with unanimous agreement and concurrency two.
+The external gate uses non-regression; any split remains inconclusive. For a
+later candidate, use `--scenarios APPLICATIONS,DIRECTORY` when only those
+components changed. Resume execution errors in the same run. Never resample
+unchanged pairs to erase dissent.
+Partial native runs retain unavailable coverage for omitted scenarios and can
+leave the cross-scenario absolute gate unavailable. Their aggregate score is
+not full-suite acceptance. Read each retained comparison and use the separate
+completed before/after quality review; missing evidence never becomes a pass.
+
+Check shared title roles as a cohort, including all twelve ordinary admin pages
+at both sizes; individual page preferences do not prove system consistency:
+
+```sh
+npm run ui:consistency -- --capture .agent-eval/ui-external/candidate-08 \
+  --output .agent-eval/ui-external/next-headers
+```
+
+This retains exact heading metrics, source hashes, native-size title collections
+and page-action diagnostics. Exit 2 records differing title signatures. Compact
+workbenches, display headings and participant/public roles are explicitly outside
+this ordinary-title cohort. Control geometry is a diagnostic, not a universal
+same-size requirement. Before/after acceptance additionally requires strict
+candidate preference and absolute quality; use native AEK pairwise configuration
+or `image compare --policy preference` with five votes and agreement 1. Keep
+component and cohort results distinct from the historical forty-view matrix.
+
+Generate the HTML report, retaining every executed round and linking its votes:
+
+```sh
+npm run ui:saas:report -- \
+  --iteration .agent-eval/ui-external/iteration-01 \
+  --iteration .agent-eval/ui-external/iteration-02 \
+  --iteration .agent-eval/ui-external/iteration-03 \
+  --iteration .agent-eval/ui-external/iteration-04 \
+  --output .agent-eval/ui-external/report \
+  --consistency .agent-eval/ui-external/headers-final \
+  --capture .agent-eval/ui-external/candidate-09 \
+  --baseline .agent-eval/ui-external/baseline
+python3 -m http.server 5241 --bind 127.0.0.1 \
+  --directory .agent-eval/ui-external
+```
+
+Open `http://127.0.0.1:5241/report/index.html`. Add repeated `--improvements
+/absolute/path/to/native-aek-run` arguments for before/after histories. Verify
+each native run with `aek verify --run PATH` before claiming sealed evidence.
+Earlier votes remain visible when a later round omits an unchanged component.
+With `--capture`, a retained verdict applies only when the decoded crop pixels
+match the current capture exactly. `--baseline` additionally identifies withdrawn
+experiments whose component pixels were restored. The title collection uses its
+sealed original PNG; AEK's lossless PNG re-encoding is verified separately.
+
+### Native-batch table refinement
+
+AEK **0.7.0** is the checksum-verified published prerelease. Its archive SHA-256
+is `f742f728434c58b4ba31c5d7da3c073de3074c6a269e0d39076e1d1eda172614`.
+`saas-tables-v3-native-batch` preserves the v2 native-pixel rendering and judging
+criteria while starting a fresh evaluator identity. Earlier 0.6.4 reports remain
+historical; their votes are not imported or combined with 0.7.0 outcomes.
+
+Program Cue crops remain at scale 1 on a 1229×430 canvas. The official 2458px
+Attio export is rendered at scale 0.5 under the explicitly unverified 2x-density
+assumption. Neither input is enlarged. References are dated published images,
+not a claim about the current live product.
+
+From `evals/`, prepare a peer comparison, then run the native pairwise batch:
+
+```sh
+npm run ui:tables:prepare -- --capture .agent-eval/ui-native-batch-20261021/baseline \
+  --output .agent-eval/ui-native-batch-20261021/reference-baseline
+npm run ui:tables:compare -- \
+  --manifest .agent-eval/ui-native-batch-20261021/reference-baseline/comparisons.json \
+  --output .agent-eval/ui-native-batch-20261021/reference-baseline/comparison \
+  --concurrency 2
+```
+
+Preparation also writes a native **quality-only** suite. It preserves the
+independent gate over the original desktop, mobile and normalized component
+images. A crop-only batch absolute check would narrow this gate, so it is not
+substituted for those three images:
+
+```sh
+node node_modules/agent-eval-kit/dist/cli.js run \
+  --config .agent-eval/ui-native-batch-20261021/reference-baseline/evalkit.yaml
+```
+
+Use `--reference BEFORE_CAPTURE` when preparing a candidate to require strict
+same-product preference; omit it for advisory peer non-regression. Use
+`--cases DIRECTORY` for a directory-only revision. Each changed component needs
+five strict preferences and five current desktop/mobile quality passes before
+retention. Five real Sol 6.1/high contexts judge each gate; equivalence is not
+improvement. Do not run separate real-model commands above a combined concurrency
+of two. Sequential batch/quality phases are the simplest default.
+
+Native AEK owns queueing, bounded capacity retries, vote journals, sealing,
+combined pairwise reports and exact reuse. Resume with `aek image batch --resume
+BATCH_DIRECTORY`; reuse with `--reuse PRIOR_NATIVE_BATCH` on a new native batch.
+Retain every failed or split verdict. AEK 0.7.0 uses exact bytes and the full
+judging contract; the old wrapper's approximate cross-run paint reuse is not
+transferred. Project capture guards may separately record at most 64 differing
+pixels and a maximum channel delta of four for unchanged viewport paint.
+
+The project report only joins experiments and the independent quality evidence:
+
+```sh
+npm run ui:tables:report -- \
+  --iteration .agent-eval/ui-native-batch-20261021/reference-baseline \
+  --iteration .agent-eval/ui-native-batch-20261021/improvement-01 \
+  --review .agent-eval/ui-native-batch-20261021/review-01 \
+  --review .agent-eval/ui-native-batch-20261021/review-02 \
+  --consistency .agent-eval/ui-native-batch-20261021/titles-02 \
+  --current .agent-eval/ui-native-batch-20261021/accepted \
+  --output .agent-eval/ui-native-batch-20261021/report
+python3 -m http.server 5256 --bind 127.0.0.1 \
+  --directory .agent-eval/ui-native-batch-20261021
+```
+
+Open `http://127.0.0.1:5256/report/index.html`. Every loaded native batch and
+quality run must verify before reporting. Repeated `--review` arguments join the
+whole-page matrices; both current desktop and mobile need five preferences and
+five quality passes before the report labels a changed component retained. Preferences apply only to identical
+component frames. Quality additionally requires identical desktop and mobile
+originals, so changing mobile invalidates old quality even if the crop is the
+same. The report preserves unsuccessful rounds, indicates withdrawals and links
+the native batch HTML and full quality reports. Capture health and the twelve-page
+title audit remain independent constraints.
 
 ### Real local file smoke
 

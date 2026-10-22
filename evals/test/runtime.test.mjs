@@ -159,6 +159,10 @@ test("coordinator rejects failed Worker shutdown and still removes all owned res
     preload,
     `
     import fs from 'node:fs';
+    import net from 'node:net';
+    // The Worker and health service below are synthetic; this test owns no ports.
+    net.Server.prototype.listen=function(port,host,callback){queueMicrotask(callback);return this;};
+    net.Server.prototype.close=function(callback){queueMicrotask(callback);return this;};
     globalThis.fetch = async (url) => {
       if (url === 'http://127.0.0.1:8025/api/v1/messages?limit=1') return Response.json({total:0});
       if (url !== 'http://127.0.0.1:5188/demo') throw new Error('Unexpected fixture request');
