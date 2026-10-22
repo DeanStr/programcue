@@ -233,6 +233,19 @@ test("retention requires five preferences and fresh desktop/mobile quality witho
     retainedTableVerdict(current, baseline, history, { viewportPassed: true }).accepted,
     false,
   );
+  history.push({
+    name: "revision-02",
+    mode: "improvement",
+    input: current,
+    quality: { pass: 5 },
+    data: { decision: { counts: { win: 5 } } },
+  });
+  assert.equal(
+    retainedTableVerdict(current, baseline, history, { viewportPassed: true }).accepted,
+    false,
+    "a later unanimous round must not erase an earlier split for the same pixels",
+  );
+  history.pop();
   history[0].data.decision.counts = { win: 5 };
   history[0].quality = { pass: 4, cannot_judge: 1 };
   assert.equal(

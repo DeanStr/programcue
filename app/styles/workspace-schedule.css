@@ -1428,15 +1428,21 @@
     width: 100%;
     gap: var(--space-2);
   }
-  .schedule-page-actions > .btn {
+  .schedule-page-actions > .btn,
+  .schedule-page-actions > form > .btn {
     justify-content: center;
     min-width: 0;
     min-height: 36px;
     padding-inline: var(--space-2);
     font-size: var(--text-xs);
   }
-  .schedule-page-actions > .btn.primary {
+  /* Create schedule is wrapped in its form; span the row like other primaries. */
+  .schedule-page-actions > .btn.primary,
+  .schedule-page-actions > form:has(> .btn.primary) {
     grid-column: 1 / -1;
+  }
+  .schedule-page-actions > form > .btn {
+    width: 100%;
   }
   .schedule-page-actions > .schedule-page-version {
     align-self: center;

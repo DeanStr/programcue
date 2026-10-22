@@ -723,7 +723,8 @@ a {
   font-weight: var(--weight-bold);
 }
 @media (max-width: 760px) {
-  .app-admin {
+  .app-admin,
+  .speaker-shell {
     --page-title-size: 30px;
   }
 }

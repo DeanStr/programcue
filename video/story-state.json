@@ -96,11 +96,11 @@
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/speaker-dashboard-mobile-chromium-linux.png",
-      "sha256": "27669f137b510adbe599faac46d07fbec62415ae1067385e5718e115b3b79601"
+      "sha256": "bb25cab853f47543259ca2edc99d098afd924f211a738f8f98fabb5aaa68280e"
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/speaker-profile-mobile-chromium-linux.png",
-      "sha256": "6ac90f50eb93c1f4afaa4277716fcc83c4c92f21c65ba41a8f3ce94d3be71a71"
+      "sha256": "6f88c09311aef55dad0fbcdbd71b450f106c3b8f5f2bc92f7960866524fc161c"
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/tasks-readiness-laptop-chromium-linux.png",

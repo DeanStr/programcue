@@ -941,9 +941,9 @@ in the implementation audit.
 | Command record search | The permission-aware palette searches speakers, submissions, sessions, tasks, rooms, tracks, resource pages and the unified background-operation record. Domain aliases are parsed server-side and narrow the authorised record query; rooms and tracks open exact focused Event Setup records, while provider-specific communication and integration job kinds remain unified as operations. |
 | Resource embed trust | External resources use the [typed provider registry](#external-resource-embeds), replacing the earlier configurable-origin and empty-sandbox policy. |
 | Programme embed configuration | Stateless URLs and managed records share a strict presentation allowlist over published data; [managed embeds](#managed-programme-embed-decision) own persisted lifecycle/configuration. Generated cross-origin customer frames retain `allow-scripts allow-same-origin` because an opaque origin breaks framework modules and origin-backed APIs. Trusted same-origin admin previews omit the ineffective sandbox. Only public `/embed/*` responses allow wildcard inbound framing; private responses remain self-only. Resizing uses the exact-origin handshake described in [security boundaries](#privileged-and-provider-credential-security-boundaries). |
-| Admin visual shell | Dark navigation rail with a light work canvas. The context bar stays on the canvas; it is not a second dark band. The sidebar brand uses a 28px mark and 16px semibold wordmark to retain a clear identity above the navigation. |
-| Command Centre hierarchy | Critical conditions and their next action precede the readiness score, workflow detail and generic creation. The 44px score follows authoritative readiness: red for critical conditions, amber for risk or active warnings, green only for Ready, and neutral On track without warnings. Readiness/workflow meters use 6px tracks; completed workflows stay subdued. Global New is secondary; contextual page actions retain primary emphasis. |
-| Application grid controls | Search, routing, status, track and sort belong to the server-filter form. Density and Columns are adjacent view controls that update the URL while retaining applied filters and unapplied filter edits; submitting filters preserves the selected density. Column visibility follows the server-loaded URL without remounting the filter form, including Back/Forward navigation. Apply retains a contrasting primary treatment on hover and keyboard press. On mobile, selection actions occupy their own row above the view controls. Native select overflow is contained at the filter wrapper so the Columns menu can extend beyond short tables. |
+| Admin visual shell | Dark navigation with a light work canvas. At 360px and below the top bar keeps two rows so the current event name stays visible, and search collapses to its icon. |
+| Command Centre hierarchy | Critical conditions and their next action precede the readiness score, workflow detail and generic creation. The score follows authoritative readiness: red for critical conditions, amber for risk or active warnings, green only for Ready, and neutral On track without warnings. Readiness/workflow meters use 6px tracks; completed workflows stay subdued. Global New is secondary; contextual page actions retain primary emphasis. |
+| Application grid controls | Search, routing, status, track and sort belong to the server-filter form. Density and Columns are adjacent view controls that update the URL while retaining applied filters and unapplied filter edits; submitting filters preserves the selected density. Column visibility follows the server-loaded URL without remounting the filter form, including Back/Forward navigation. Apply retains a contrasting primary treatment on hover and keyboard press. On mobile, selection actions occupy their own row below the view controls. Native select overflow is contained at the filter wrapper so the Columns menu can extend beyond short tables. |
 | Submission choice labels | Form-choice labels accept up to 120 characters, matching event track and session-format labels. Manual application creation validates its immutable snapshot against the read schema before inserting the application. |
 | Participant/public density | Comfortable light surfaces with mobile-responsive workflows |
 | Speaker workspace navigation | See the unified [participant navigation contract](#role-aware-participant-navigation-and-bounded-review-scoring); the former separate speaker shell is retired. |
@@ -1828,14 +1828,14 @@ application surfaces continue to derive their accent exclusively from the
 published event brand; the product palette must not overwrite it. Operational
 shells use the self-hosted Inter variable face for headings as well as body
 copy, controls and data, so dense working views keep a single scanning rhythm.
-Operational page titles use the shared 30px, weight-600 Inter role at every
-viewport, including the participant dashboard. Form Builder and the reviewer
-workbench opt into the same explicit 23px compact header variant. Both variants
-share line height and tracking; workspace and responsive styles do not redefine
-their typography independently.
-Named operational page sections share the 19px, weight-600 Inter role at every
-viewport; card titles remain 16px. The shared administration section header and
-Command Centre section labels consume the same role. Communications omits an
+Ordinary page titles in the administrator and participant shells share one
+role: 34px bold on desktop and 30px bold on phones, with shared line height and
+tracking. Form Builder and the reviewer workbench opt into the explicit 23px
+compact header variant; the Schedule workbench and the Command Centre display
+title keep their own explicit roles. Workspace and responsive styles do not
+otherwise redefine page-title typography. Administration section headers use
+23px bold on desktop and 19px bold on phones, Command Centre section labels use
+19px semibold, and card titles remain 16px. Communications omits an
 in-page contents bar for its two-section daily workspace: visible headings and
 mobile disclosures provide direct access. Delivery settings retains jump links
 for its longer configuration sections, and section deep links remain supported.
@@ -2804,266 +2804,69 @@ including a global revocation performed from another event. Ordinary task-owner
 rules remain available to ordinary task commands. A refused readiness approval
 retires the stale preview rather than substituting a different owner.
 
-## Evidence-led interface refinement — 21 October 2026
+## Evidence-led interface refinement — 21–22 October 2026
 
-Keep the current Program Cue brand and prioritise visual/UI craft in this phase,
-following the operator's clarification. Evaluate typography, spacing, alignment,
-surface/border treatment, colour balance, icons and control geometry. Browser
-behavior and accessibility remain constraints. Task speed, feature coverage and
-above-fold record counts do not contribute to visual verdicts. A refreshed
-screenshot baseline establishes regression expectations, not aesthetic quality
-or independent approval.
+Prioritise visual/UI craft while keeping the current Program Cue brand:
+typography, spacing, alignment, surfaces, colour balance, icons and control
+geometry. Browser behavior, accessibility and responsive containment remain
+independent constraints that a visual verdict cannot override. A refreshed
+screenshot baseline records a regression expectation, not aesthetic approval.
 
-The application-owned design loop uses the published AEK 0.6.4 archive, verified
-against its release checksum, rather than packing an independently dirty AEK
-checkout. The SBEK criteria and production/regression suites remain separate.
-Historical 0.4.0 results remain historical; use fresh same-method evaluations
-for comparisons after the upgrade. No AEK source change is required for the
-initial integration.
+### Visual evaluation method
 
-Capture four operational surfaces at desktop and mobile sizes using an isolated
-D1 fixture, production build and fixed browser settings. Preserve source, method,
-toolchain and image hashes. Retain browser accessibility/interaction failures
-alongside visual evidence; an overall visual win cannot override those failures.
-The initial matrix covers initial viewports and a few explicit keyboard paths,
-not all product workflows, lower-page content or provider acceptance.
+- Use the checksum-verified published AEK 0.7.0 prerelease archive
+  (`f742f728434c58b4ba31c5d7da3c073de3074c6a269e0d39076e1d1eda172614`).
+  Native `aek image batch` owns queues, capacity retries, sealing, exact
+  resume/reuse and per-pair reports. Project code owns isolated D1 captures,
+  unchanged-paint guards, pinned reference crops, source-scale normalisation,
+  the title cohort and joining iteration histories. Earlier AEK 0.4.0/0.6.4
+  results and methods remain historical; do not import their votes.
+- Capture the real D1-backed interface in an isolated checkout with its own
+  build, Worker and database. Check source identity before and after capture and
+  pin browser, toolchain and method hashes.
+- Judge with Codex `gpt-6.1-sol` at high effort, five votes and unanimity, with a
+  global real-model concurrency of two across all evaluator commands.
+  Equivalence is not improvement. Model judgments remain advisory until
+  calibrated against independently reviewed examples.
+- Retain a changed view or component only with five strict preferences and five
+  absolute quality passes against the accepted phase baseline, at both current
+  desktop and mobile sizes. A mobile change invalidates earlier multi-view
+  quality evidence.
+- A failed or split verdict is final for those pixels. Change the actual UI
+  before judging again; never resample unchanged pixels or re-run against another
+  reference to obtain a favourable result. Reuse a verdict, positive or negative,
+  only when the source bytes and the complete judging contract match, and mark
+  reused votes as reused. Resume execution errors in the original sealed run.
+- The unchanged-paint guard (at most 64 differing pixels, a maximum RGBA delta
+  of four and identical geometry) marks unchanged views only. It never transfers
+  votes or relaxes either gate.
+- Published SaaS references (Linear navigation, Attio tables, Notion Forms and
+  Calendar) are dated, pinned component benchmarks. Keep source URLs, hashes,
+  crop bounds and export-density assumptions explicit; render Program Cue crops
+  at scale 1 and never enlarge either source. Peer comparisons are advisory and
+  separate from the same-product gate: do not adopt a layout merely because it
+  wins one, and make no whole-product parity claim.
+- Assess ordinary admin page titles as a twelve-page cohort with one computed
+  signature per viewport; individual page preferences cannot establish
+  cross-page consistency.
 
-Use Codex `gpt-6.1-sol` with high effort for judging, as requested by the operator.
-Keep blind relative comparisons separate from absolute readability requirements;
-use 3–5 votes per requirement and 80% agreement. A last-commit reference is a
-comparison target, not an automatically approved design. Non-regression allows
-observed equivalence; an improvement experiment uses strict preference and a
-specific hypothesis. Keep criteria fixed during an experiment and retain failures
-and inconclusive results. Do not regenerate screenshots merely to force a pass.
+### Interface decisions from the evaluation
 
-Model judgments remain advisory until calibrated against independently reviewed
-good/defective examples and held-out workflow examples. The injected unreadable
-variant is one negative control, not human calibration or proof of general judge
-accuracy. Choose one coherent change from the findings, recapture, and review
-both the target concern and unaffected views before adopting it. Keep existing
-behavior and cross-browser Playwright coverage as independent constraints.
-
-Potential reusable AEK work should follow integration evidence. A batch image
-comparison report could replace the small project-owned matrix wrapper. Broader
-workflow capture presets could reduce application setup code. Neither is a
-prerequisite: 0.6.4 already supplies image sealing, blind votes, absolute gates,
-repeated judging and judge-validation tooling.
-
-The revised method is `visual-ui-v2`, with selectable overall, typography,
-spacing, surface and component criteria. Its judgments are a new experiment;
-do not reinterpret the earlier workflow-oriented pilot as visual acceptance.
-The same sealed screenshots may be assessed with new criteria, but results under
-different criteria are not numerically comparable.
-
-Use published product UI as provisional external visual reference material.
-The initial Linear 12 March 2026 sidebar reference has pinned source bytes and
-explicit component crops, excluding the previous design and editorial annotation.
-The candidate crop is linked to its healthy browser capture by SHA-256. Compare
-the craft of similar UI elements rather than missing features, logo familiarity,
-exact brand colour or theme choice. Retain the publication URL, source bytes,
-crops and normalized panels. Editorial images require scale review; a sidebar
-comparison cannot establish whole-product visual parity. This is an agent-selected
-provisional reference rather than a user-curated visual standard.
-
-### Unanimous visual improvement target
-
-Use a fixed reference (`2d22f0a6`) and the frozen `visual-ui-v3-unanimous`
-rubric for twenty initial surfaces at desktop and mobile sizes. Each changed
-view must receive five candidate preferences and five absolute quality passes
-from independent Codex `gpt-6.1-sol`/high calls. Equivalence does not establish
-improvement. Unchanged views are guards, not improvements. Unanimity describes
-the retained sample, not all future judgments or users' tastes. Additional modal,
-deep-scroll and interaction states remain covered by existing browser tests.
-
-Keep failed and inconclusive judgments. Revise the actual candidate before
-judging it again; never reroll unchanged pixels for a favourable sample. Resume
-provider failures in the same sealed AEK run, preserving completed votes. Bound
-model concurrency at two after capacity errors with greater concurrency. Let
-healthy sibling comparisons finish when another comparison has an execution
-error; stop assigning new work and expose the incomplete result.
-
-Reuse a retained verdict, including a failure, only when both source images and
-the complete judging contract match. Verify sealed AEK inputs rather than
-trusting the unsealed coordinator metadata. An explicit cache-equivalence option
-permits at most 64 pixels differing by at most four RGBA levels with identical
-geometry. Native-control borders and SVG antialiasing established this fixed
-bound. Retain original bytes, measured differences, the prior verdict and its
-sealed inputs. This cache rule does not relax either visual acceptance gate.
-
-Preserve the established shared frame, branding, navigation geometry and ordinary
-page-title roles: broad chrome changes repeatedly failed to establish consensus.
-Limit visual refinements to concrete findings: intrinsic-height list boards,
-consistent filter labels and spacing, readable builder titles and contained
-outline controls, clear dashboard hierarchy, and subordinate participant action
-headings and progress metadata. Keep the compact schedule workbench heading and
-contain session metadata inside its card. Scope application table styling to its
-workspace after the generic treatment weakened Programme header hierarchy and
-produced equivalent Review views.
-
-Capture the real local D1-backed interface in an isolated checkout with its own
-build, Worker and database. Check source identity before and after capture, pin
-browser/toolchain/method hashes, and retain failures honestly. Page-level
-overflow checks are insufficient: explicitly test the builder outline's internal
-control and help containment and session-card metadata geometry. Local fixtures
-and model visual judgments do not establish deployed or provider acceptance.
-
-Published external UI remains a separate advisory craft comparison. The pinned
-Linear sidebar is an agent-selected component reference, not a user-approved
-whole-product style target. Its retained failures cannot establish SaaS parity.
-Model judgments remain advisory pending independently reviewed calibration.
-
-AEK 0.6.4 supplies the required sealed images, blind repeated votes and absolute
-gates. Keep the application-specific capture and matrix integration here. The
-integration demonstrates useful upstream work: a native batch report with strict
-resume/reuse, explicit bounded raster equivalence, and bounded transient-capacity
-retries that preserve healthy parallel work. Do not modify the unrelated dirty
-AEK checkout while iterating on Program Cue.
-
-### Published SaaS references and shared title roles
-
-The `saas-craft-v1` experiment uses pinned official publications from Linear,
-Attio and Notion for matched navigation, table, directory, form and calendar
-components. Record source dates and scale limitations; an older published image
-is not a verified capture of today's live product. Compare visual craft without
-rewarding brand familiarity, literal resemblance, feature count or inferred UX.
-Keep external non-regression separate from strict same-product improvement.
-Both use five Codex `gpt-6.1-sol`/high votes with unanimity; a split or equivalent
-same-product result does not establish improvement. Retain failures and resume
-execution errors in the original sealed run.
-
-Assess shared ordinary page titles as a complete cohort: Applications,
-Communications, Event settings, Branding, Review & selection, Event speakers,
-Speaker directory, Speaker sourcing pipeline, Bulk speaker invitations, Public
-programme & embeds, Tasks & readiness and Resource pages. Use one shared title
-style within each viewport: 34px bold on desktop and 30px bold on mobile, with
-shared line height and tracking. Keep compact workbench, display, participant
-and public heading roles explicit and separate. Individual page preferences
-cannot establish cross-page consistency. Retain computed styles and native-size
-collections of all twelve titles at both sizes, and judge the complete system
-before claiming an improvement to it. Page-action geometry remains a separate
-diagnostic because labels and legitimate responsive arrangements differ.
-
-The new experiment compares against the uncommitted UI at the start of this
-reference phase. Its component/cohort judgments are distinct from the earlier
-`visual-ui-v3-unanimous` forty-view comparison with commit `2d22f0a6`; do not
-transfer that earlier result to subsequent UI changes. Healthy forty-view
-browser captures and real workflow tests remain independent constraints.
-
-### Native-pixel table evaluation
-
-Keep the table refinement under the new `saas-tables-v2-native-pixels` contract.
-The earlier external panels enlarged Program Cue's 1162px crop by approximately
-6%, which can affect text rendering. Render its crop at scale 1 without
-interpolation on a fixed canvas; render the official Attio export at scale 0.5,
-explicitly retaining the unverified 2x export-density assumption. Neither source
-may be enlarged. Preserve earlier reports under their original method and do
-not interpret cross-method vote changes as proof of causation.
-
-Compare each new candidate with the current accepted UI as well as the fixed
-published reference. Require five strict same-product preferences and five
-absolute quality passes before retaining a changed component. Quality judging
-includes the real desktop and mobile views; pairwise craft judging uses the
-matched desktop crop. Keep browser behavior, accessibility, responsive layout
-and the ordinary-title consistency audit as independent constraints. Give each
-supplied scenario its own quality criterion so an unrelated omitted scenario
-does not create missing evidence. Do not resample identical pixels to erase a
-split vote.
-
-Scope directory-specific refinements to its route instead of changing the
-speaker roster through shared CRM selectors. Keep the application design tokens,
-shared Button component and existing server-filtered forms. The integration
-also demonstrates a useful upstream AEK enhancement: a native panel mode that
-preserves source scale and supports explicit export density. The project-owned
-normalizer supplies this now; the unrelated dirty AEK checkout stays untouched.
-
-
-### Native AEK 0.7.0 visual loop
-
-Consume the checksum-verified published 0.7.0 prerelease through a versioned
-archive, rather than rebuilding the sibling checkout. Its evaluator identity
-starts fresh runs; keep 0.6.4 reports historical and do not import their votes.
-The source archive SHA-256 is
-`f742f728434c58b4ba31c5d7da3c073de3074c6a269e0d39076e1d1eda172614`.
-
-Delegate image-comparison queues, progress, capacity retries, sealing, exact
-resume/reuse and per-pair reports to native `aek image batch`. Keep project-owned
-code for forty-view D1 captures, unchanged-paint guards, pinned reference crops,
-source-scale normalization, title cohorts and joining iteration histories.
-Use Codex `gpt-6.1-sol` at high effort and a global real-model concurrency of two.
-A native batch absolute criterion sees only its candidate image. Preserve the
-separate table quality suite over the desktop, mobile and component originals;
-substituting a crop-only check would narrow the gate.
-
-A retained changed directory needs five component preferences, five current
-multi-view quality passes, and five preferences plus five quality passes for
-both full desktop and mobile pages. A small equivalent styling change remains
-unretained even when its desktop crop wins. Reuse positive and negative exact
-native contracts; revise the actual pixels before judging an unsuccessful
-candidate again. Mobile changes invalidate old multi-view quality even when the
-desktop crop stays identical. Clearly mark copied votes as reused, not new calls.
-
-Capture paint equivalence remains a separate unchanged guard (at most 64 pixels
-and a maximum RGBA delta of four). It does not transfer native votes or weaken
-quality/preference criteria. Verify native seals and match their image hashes,
-criteria, model/effort, panel and vote settings before presenting current results.
-Published SaaS comparisons remain dated component references and an advisory
-comparison, separate from same-product strict improvement and browser checks.
-
-### Form and schedule visual refinement
-
-Keep the form editor and scheduler in their compact workbench heading role;
-ordinary admin titles retain their existing shared desktop/mobile role. A form
-canvas uses a stronger document/section/field hierarchy. On mobile, the canvas
-hint has its own line so supporting copy has clear inset spacing.
-
-Give schedule room columns a 144px minimum to keep event titles and metadata
-legible within duration-sized cards. Retain bounded horizontal scrolling and its
-keyboard alternative. Apply categorical event-card refinements only to cards
-without conflicts, preserving the existing warning and blocking treatments.
-
-Use native full-viewport before/after batches for this phase: each retained
-changed desktop and mobile view needs five strict preferences and five absolute
-quality passes. Keep the official Notion Forms/Calendar crops advisory and
-separate from that gate. Record native scale and actual component crop bounds
-when a column resize changes the component boundary; never enlarge reference
-or application pixels. Linear's form-template composer is supporting inspiration,
-not a matched builder benchmark. Preserve split quality outcomes as well as
-preference dissent, and change the actual UI before judging again.
-
-### Whole-cohort visual craft and published component references
-
-Assess the twenty representative screens as paired original desktop and mobile
-images under the frozen `saas-cohort-craft-v1` criterion. Require five craft
-passes for each pair. Keep this stronger contract separate from earlier
-single-image quality checks and from strict before/after preference gates.
-Retain changed views only when all five preference votes and all five absolute
-quality votes pass against the accepted phase baseline.
-
-Use matched published components for navigation, application tables, contact
-directories, form canvases and calendar canvases. Keep source dates, exact crop
-bounds and unverified editorial export-density assumptions explicit. This is
-a bounded visual benchmark, not evidence of current authenticated competitor
-interfaces or universal product parity.
-
-Join historical evidence only when both original viewport hashes match the
-current craft pair, or both exact component hashes and the frozen native
-contract match a current peer comparison. Bounded raster differences can pass
-an unchanged capture guard, but never transfer model votes. Preserve all judged
-rounds, including dissent. Run at most two model calls globally across native
-batches and craft audits; per-command concurrency alone is insufficient when
-multiple evaluator commands run together.
-
-Keep Resource metadata controls aligned independently of neighbouring helper
-text: start-align the grid items and use the shared desktop input typography.
-Keep mobile inputs at their existing 16px size. Scope the quieter Schedule grid
-and stronger calendar heading to desktop; preserve accepted mobile styling
-when a variant fails its strict before/after gate.
-
-Do not retain a new Applications layout merely because it wins a published
-peer comparison. Preserve the accepted baseline when experiments do not show
-unanimous improvement over it. Report the unresolved peer dissent and the
-unmet zero-loss peer target explicitly; do not turn an advisory comparison
-into a claim of universal SaaS parity.
+- List boards (Applications, speaker roster and directory) are as tall as their
+  rows rather than stretched to the viewport.
+- Application table styling stays scoped to its workspace and directory
+  refinements to their route; generic table-header changes weakened Programme,
+  Review and Tasks and were withdrawn. Broad shell restyling did not reach
+  consensus and was withdrawn.
+- Schedule room columns have a 144px minimum to keep titles and metadata legible
+  in duration-sized cards; bounded horizontal scrolling and its keyboard
+  alternative remain. Categorical card refinements apply only to cards without
+  conflicts, preserving warning and blocking treatments. The quieter grid and
+  stronger calendar heading are desktop-only.
+- Form canvases use a document/section/field hierarchy; on mobile the canvas hint
+  has its own line.
+- Resource metadata controls start-align and use the shared desktop input
+  typography; mobile inputs stay at 16px.
 
 ### Browser readiness and the build dependency floor
 

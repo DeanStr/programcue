@@ -7,9 +7,13 @@ export function retainedTableVerdict(
 ) {
   const matches = (stage, labels) =>
     labels.every((label) => stage.input.inputs[label].sha256 === current.inputs[label].sha256);
-  const improvement = history
-    .filter((stage) => stage.mode === "improvement" && matches(stage, ["candidate"]) && stage.data)
-    .at(-1);
+  const improvements = history.filter(
+    (stage) => stage.mode === "improvement" && matches(stage, ["candidate"]) && stage.data,
+  );
+  const improvement = improvements.at(-1);
+  // A split or failed preference is final for these pixels; a later unanimous
+  // round against another reference cannot erase it.
+  const dissent = improvements.some((stage) => stage.data.decision.counts.win !== 5);
   const external = history
     .filter((stage) => stage.mode === "external" && matches(stage, ["candidate"]) && stage.data)
     .at(-1);
@@ -21,7 +25,7 @@ export function retainedTableVerdict(
   const unchanged =
     current.inputs.candidate.sha256 === baseline.inputs.candidate.sha256 || Boolean(unchangedPaint);
   const componentAccepted =
-    !unchanged && improvement?.data.decision.counts.win === 5 && Boolean(quality);
+    !unchanged && !dissent && improvement?.data.decision.counts.win === 5 && Boolean(quality);
   return {
     unchanged,
     componentAccepted,
