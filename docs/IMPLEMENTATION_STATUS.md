@@ -791,6 +791,610 @@ URL-restored filters, local recovery and unsaved-edit protection. Manual
 assistive-technology acceptance remains outstanding. Domain contracts and limits
 are recorded in [DECISIONS.md](DECISIONS.md).
 
+The 20 October shell refinements are **local; not deployed**. The light context
+bar, quieter headings and content-sized record tables retain their reviewed
+desktop, mobile and laptop baselines. Follow-up fixes restore distinct pressed
+fills for secondary, row and header buttons and keep the application Density
+label visible beside its control. All 27 visual/grid Chromium checks and eight
+focused component tests passed, along with `check:focused`, the build and
+design-system checks. Browser inspection verified nine pressed states, no
+application-page overflow at seven widths from 320 to 1440 pixels, and no
+automated WCAG A/AA violations at 320, 390 and 1440 pixels. Receipts are under
+`.artifacts/visual-review-fixes/`; the full release and cross-browser gates were
+not repeated for these presentation fixes.
+
+Subsequent Codex reviews found clipped Columns options in one-record queues and
+horizontal overflow from valid long track labels. The outer board now lets the
+picker extend below it; the inner table retains scrolling and bottom corner
+clipping. Filter wrappers keep their intrinsic sizing for ordinary labels while
+the controls can shrink to contain long values. Both regression checks failed
+before their fixes and passed afterward. Coverage includes pointer hit-testing
+in both densities at desktop, tablet and phone widths, plus a supported
+112-character track option in its
+default and selected states across six widths. The expanded 29-check Chromium
+visual/grid run, `check:focused`, build and design-system checks passed. All four
+Columns options were also reachable in ten inspected width/density combinations
+without page overflow. Review findings, triage rationale, before/after evidence
+and validation receipts are retained under `.artifacts/shell-review-loop/`.
+A final width correction passed the same 29 Chromium checks, `check:focused`,
+build and design-system checks. Browser inspection across nine widths from 320
+to 1440 pixels confirmed readable ordinary filter values and no page overflow
+with long track labels, both selected and unselected. Receipts and screenshots
+are under `.artifacts/filter-width-fix/`. These remain local presentation changes;
+the full release and cross-browser gates were not repeated.
+
+The next review resolved four additional findings, **local; not deployed**.
+Selected long track labels are contained in WebKit at the filter wrapper while
+Columns remains reachable below short tables; the clipped controls retain a
+visible inset focus ring. Density now sits beside Columns, updates the URL
+without losing keyboard focus and survives subsequent filter submissions. At
+1440 pixels the filter form is one row (about 80 pixels high rather than 142).
+Critical next actions retain their red rail at rest, on hover and on keyboard
+focus. Application desktop/mobile visual baselines now cover the revised grid.
+
+Manual entry previously persisted snapshots containing valid 81–120-character
+track names that the reader rejected because choice labels were limited to 80
+characters. Choice labels now share the event configuration's 120-character
+limit, and manual creation validates the snapshot before insertion. Focused
+Worker tests verify creation, detail reads and frozen answers after a track
+rename at both 81 and 120 characters. A real browser creates and reloads a
+112-character-track application, and the previously failing isolated local
+record also opens successfully without rewriting its snapshot. OpenAPI source
+and generated JSON remain synchronized.
+
+The final 38-check Chromium/Firefox/WebKit behavior and visual run passed,
+including long select values across six widths, single-record Columns hit
+targets, density/filter URL behavior, keyboard focus and the manual-entry
+workflow. Browser inspection covered seven widths from 320 to 1440 pixels with
+no document overflow. `check:focused` passed with 988 tests; the broad runtime
+lane passed 667 unit, 2,068 Worker and one agent test. Build, TypeScript,
+formatting, design-system, OpenAPI, migration/audit and recovery checks passed.
+Evidence is under `.artifacts/review-resolution/`. That core run failed because
+the refreshed branding screenshot differed from the film's locked story-state
+checksum. The subsequent review loop below resolves this mismatch. The full
+release gate was not run.
+
+The Command Centre hierarchy follow-up is also **local; not deployed**. Its
+44px readiness readout follows the server-derived state and warning count: red
+for critical conditions, amber for risk or warnings, green only for Ready, and
+neutral for On track without warnings. Condition counts sit closer to the
+readout. Readiness and workflow meters are 6px high, with completed workflows
+subdued. Global New uses the secondary outlined button; contextual page actions
+retain their primary treatment and the creation dialog restores trigger focus.
+
+The 38-check Chromium/Firefox/WebKit behavior and visual pass, 28 focused unit
+tests, generated TypeScript checks, production build and design-system checks
+passed. Affected desktop/mobile/laptop baselines were refreshed and replayed.
+Inspection of isolated D1 fixtures covered critical, warning, neutral On track
+and Ready states at 390 and 1440 pixels; all eight accessibility scans reported
+zero automated WCAG A/AA violations and no document overflow. Receipts and
+screenshots are under `.artifacts/command-hierarchy/`. The full release gate was
+not repeated for these presentation changes.
+
+The subsequent uncommitted review loop found two actionable regressions. At
+320 pixels, Density overlapped the selected-application actions because a
+board-specific flex declaration overrode the mobile grid. Removing that
+redundant declaration restores a separate selection row. A new browser check
+failed against the previous build, then passed with real copy/clear interactions
+at seven widths from 320 to 1440 pixels in both densities. The mobile application
+baseline now covers the restored layout.
+
+Fifteen refreshed screenshots were also pinned inputs to the working launch
+film. Their hashes are now synchronized after visual review, with displaced
+Command Centre focus rings/cursor and Setup annotations realigned to their
+targets. The story/caption gate passes, and all 60 curated plus 136 boundary
+frames render. Affected annotation frames were inspected at full resolution.
+The 39-check Chromium/Firefox/WebKit behavior and visual run passed. Core
+validation passed 667 unit, 2,068 Worker, one agent, 98 configuration and 15
+scanner tests, TypeScript, build and repository contracts. Its initial formatting
+failure was corrected and the failed Biome lane passed when rerun separately.
+The full release gate was not run. Review findings, triage rationale and
+validation receipts are under `.artifacts/uncommitted-review-loop-20261020/`.
+
+The sidebar brand follow-up uses a 28px mark and 16px semibold wordmark,
+scoped to administrator navigation. Inspection across seven widths from 320 to
+1440 pixels verified containment, expanded/collapsed rails, keyboard access and
+mobile navigation focus return. Three automated WCAG A/AA scans found no
+violations. The 39-check Chromium/Firefox/WebKit behavior and visual run, 17
+focused unit tests, generated TypeScript, build, formatting and design-system
+checks passed. Affected baselines and 11 pinned film captures are synchronized;
+the story/caption gate passes. The comparison gallery now reflects the revised
+brand. These changes are **local; not deployed**; the full release gate was not
+run for this presentation adjustment. Receipts are under
+`.artifacts/brand-presence-20261020/`.
+
+Operational page titles now share a 30px, weight-600 Inter role across desktop
+and mobile, including the participant dashboard. Form Builder and the reviewer
+workbench explicitly use the shared 23px compact variant. Independent workspace
+and mobile typography overrides were removed. Real D1-backed browser inspection
+verified the computed sizes, weights, visible headings and document containment
+in 84 combinations across 14 pages and six widths from 320 to 1440 pixels.
+Eight automated WCAG A/AA scans reported no violations.
+
+The 39 focused Chromium/Firefox/WebKit behavior and visual checks passed across
+the initial run (38 passed) and a focused replay after inspecting and refreshing
+one stale mobile evaluation-setup baseline. The additional native Form Builder
+drag-creation/reordering check, 21 focused unit tests, generated TypeScript,
+production build, formatting and design-system checks passed. Refreshed visual
+baselines and 16 pinned film captures are synchronized; the story/caption gate
+passes and all 196 review frames render. Representative interface and film
+frames were visually inspected. The comparison gallery now contains 44 views
+across 18 pages. These changes are **local; not deployed**; the full release gate
+was not repeated for this typography adjustment. Receipts are under
+`.artifacts/page-heading-standard-20261020/`.
+
+The section hierarchy follow-up shares a 19px, weight-600 title role between
+administration section headers and Command Centre sections, at every viewport.
+Communications removes its two-link "On this page" bar from the daily workspace;
+Delivery settings retains its longer-view jump navigation. On mobile, collapsing
+Templates brings History into view, and its disclosure supports keyboard access.
+History deep links and reload recovery remain verified.
+
+Real browser inspection covered 24 page/viewport combinations and all four Event
+settings panels; six automated WCAG A/AA scans reported no violations. The 32
+Chromium/Firefox/WebKit visual and smoke checks, seven template/UX checks, two
+focused navigation replays, five component tests, generated TypeScript, build,
+formatting and design-system checks passed. Eight affected visual baselines and
+four pinned film captures were refreshed after visual inspection; the story and
+caption gate passes and all 196 review frames render. The comparison gallery is
+current. This remains **local; not deployed**; the full release gate was not
+repeated for this presentation change. Receipts are under
+`.artifacts/section-hierarchy-20261020/`.
+
+### Interface evaluation tooling — 21 October 2026
+
+**Historical local visual/UI evaluation for the forty-view cohort, before the
+subsequent published-reference phase below.** Method
+`visual-ui-v3-unanimous` compares twenty initial surfaces at 1440×1000 and 390×844
+against the fixed last-commit reference `2d22f0a6`. The final `candidate-16` /
+`review-16` matrix has twelve changed views with **5/5 candidate preferences and
+5/5 absolute visual-quality passes each** (120 retained real-model votes), plus
+28 unchanged guards. All forty candidate views pass their browser checks,
+including WCAG A/AA scans, document containment, mobile navigation keyboard/focus
+return and application selection/clear. The reference has a known form-outline
+containment defect; the candidate fixes it and passes the added geometry check.
+
+The unanimous changes cover Command Centre, Applications, Form Builder and the
+participant dashboard at both sizes; Communications mobile; event speakers and
+the speaker directory on desktop; and Schedule desktop. They improve card
+proportions, filter spacing/labels, heading hierarchy, pane containment and
+session metadata truncation. Broad shared-chrome changes were withdrawn after
+split or equivalent verdicts. Generic table-header changes were also withdrawn
+from Programme, Review and Tasks. Unchanged views are not called improvements.
+This is initial-viewport visual evidence, not whole-product UX acceptance or a
+claim about every dialog, hover state, scroll position or future user's taste.
+
+The evaluator was upgraded from AEK 0.4.0 to the checksum-verified published
+**0.6.4 prerelease**. On 21 October, the latest published release and remote
+`master` both resolve to `a87553f0b8a7780e7fb3c7d3d643a025e6b9e309`; no newer
+release was present. The archive SHA-256 is
+`a8a9c10893c3ddc008f678d1b151a048cec8c55ac28bd2e55d63abb178529b5f`.
+The 98 upstream criteria remain unchanged. All 37 evaluator tests and the three
+existing configurations pass; the optional visual-reference configuration also
+validates. Mock judgments test orchestration only and contribute no design votes.
+All visual judging uses the requested Codex `gpt-6.1-sol` with high effort.
+
+Captures retain source, method/toolchain, browser and PNG hashes and use isolated
+local D1 state, builds and Workers. The matrix pins its judging contract, resumes
+provider errors in the same run, and verifies sealed original images before
+reusing matching verdicts, including failures. Explicit paint equivalence permits
+at most 64 pixels differing by at most four RGBA levels with identical geometry;
+measured native-control/SVG raster differences are recorded and never called an
+improvement. Model concurrency is bounded at two after observed capacity errors.
+`npm run ux:report` generates the interactive before/after matrix and per-view
+links. The report's images, filters and keyboard operation were browser-verified.
+
+The comparison target is our committed UI. A separate, provisional external
+component reference uses the pinned sidebar from Linear's published 12 March
+2026 refresh. Retained exploratory navigation runs preferred Linear in all five
+votes; later chrome experiments were withdrawn. This does not establish current
+whole-product SaaS parity or a user-approved visual direction. Earlier v2 pilots
+and the injected unreadable negative control remain historical evidence under
+their own criteria. Model judgments remain advisory pending independently
+reviewed, held-out calibration. No deployed or external-provider acceptance is
+claimed, and the unrelated dirty AEK checkout was left untouched.
+
+Validation: `check:core` passed in 443.1 seconds (667 unit tests, 2,068 Worker tests,
+one agent test, TypeScript, quality, build and repository contracts) before the
+final presentation/report refinements. Final generated TypeScript and quality
+checks pass. All 28 desktop/mobile/laptop visual tests passed during baseline
+refresh and again against the refreshed baselines; ten focused application/UX
+checks and the new session-card containment workflow passed. All seven final Firefox,
+WebKit and mobile Safari checks pass.
+Film snapshot hashes were synchronized; story/caption and configuration checks
+pass. The complete release gate was not run because this is a local design
+iteration, not a release or merge candidate. Nothing was deployed.
+
+Receipts: `evals/.agent-eval/ui-unanimous/reference-04`, `candidate-16` and
+`review-16/report.html`; the final matrix's twelve accepted AEK runs verify.
+Earlier failed/inconclusive experiments remain under the same ignored evidence
+root. Logs include `.artifacts/ui-unanimous-current-core.log`,
+`.artifacts/ui-unanimous-final-visual-verify.log`,
+`.artifacts/ui-unanimous-final-browser-fixed.log`,
+`.artifacts/ui-unanimous-session-card-browser.log`,
+`.artifacts/ui-unanimous-final-engines-2.log`,
+`.artifacts/ui-unanimous-final-generated-types.log` and
+`.artifacts/ui-unanimous-final-config.log`. Evaluator test/validation and artifact
+verification receipts are `evals/.agent-eval/ui-unanimous-final-harness-*-3.log`
+and `evals/.agent-eval/ui-unanimous-verify-16.log`. Reproduction, reference
+attribution and limits are in `evals/README.md`; durable policy is in
+`docs/DECISIONS.md`.
+
+### Published-reference visual iteration — 21 October 2026
+
+**Local D1-backed presentation changes and evaluation tooling; not deployed.**
+The `saas-craft-v1` phase uses pinned official Linear navigation, Attio tables,
+Notion Forms and Notion Calendar publications. Their source URLs, image hashes,
+dates, crops and scale limitations are retained. Linear is a March 2026
+publication; the Notion examples are from 2024, and Attio's capture date is
+unverified. These are visual references, not certified latest-live-product
+captures or a user-approved whole-product style direction.
+
+Four experiments received **5/5 strict candidate preferences**, with **5/5
+absolute quality verdicts** covering the components and title cohort, from real
+Codex `gpt-6.1-sol`/high calls. Retained changes give Applications consistent
+control heights and record hierarchy, group view settings above its filters,
+quiet directory headings/actions/separators and align its filter and secondary
+text geometry, subordinate calendar format labels and day tabs, and standardise
+the ordinary admin title role across twelve pages at both viewport sizes.
+The complete title collection, rather than isolated page preferences, establishes
+the shared-role result: desktop has one 34px bold signature and mobile one 30px
+bold signature, including line height and tracking. Compact workbench, display,
+participant and public roles remain outside this ordinary-title cohort.
+
+The Home icon experiment received five equivalent votes; the form helper/badge
+experiment received five preferences for the previous design. Both were
+withdrawn. The native before/after run retains those failed gates and therefore
+does not pass as a six-experiment batch. Final `candidate-09` component pixels
+match all three retained component comparisons exactly, its title collection
+matches the judged original exactly, and the two withdrawn components match
+their previous pixels. AEK losslessly re-encoded the header PNG; decoded judge
+pixels were separately verified identical. This is **component and title-cohort
+evidence**, not a new unanimous preference result for all forty full views.
+
+External comparison remains a separate, unmet benchmark. Current matching crops
+retain: navigation 2 equivalent/3 Linear preferences; Applications 5 Attio
+preferences; directory 1 Program Cue/4 Attio; form 4 Program Cue/1 Notion;
+calendar 3 Program Cue/2 Notion. Split votes remain inconclusive. No whole-product
+SaaS parity is claimed. The four reference rounds preserve all dissent; partial
+native runs retain unavailable coverage for omitted scenarios, including an
+unavailable cross-scenario quality gate, rather than supplying a full-suite
+score. The completed full before/after quality review supplies the retained
+experiments' separate quality evidence.
+
+Final validation: all forty captured views pass browser, accessibility and
+containment checks; all thirty desktop/mobile/laptop visual checks passed during
+the final baseline refresh and again against it. Six focused application-grid
+and CRM workflows, the calendar metadata/inspector workflow, and ten final
+Chromium/Firefox/WebKit/mobile Safari checks pass. Generated TypeScript, quality,
+two affected grid unit tests, 41 evaluator tests and the three existing suite
+validations pass; the 98 upstream criteria are unchanged. `check:core` passed in
+405.8 seconds (667 unit, 2,068 Worker and one agent test) before final presentation
+and report refinements. Film snapshot hashes and story/caption validation are
+current. The complete release gate was not run for this local design iteration.
+
+The HTML report was checked at desktop and mobile sizes: images and local links
+load, with no page errors or mobile overflow. It identifies restored experiments
+and applies historical comparisons only to byte-identical decoded crop pixels;
+an in-crop change invalidates reuse, including a previously failed verdict.
+Model judgments remain advisory pending independent calibration.
+
+Receipts: `evals/.agent-eval/ui-external/report/index.html`, `candidate-09`,
+`headers-final`, `iteration-01` through `iteration-04` and
+`improvements-01/runs/2026-10-21T10-46-25`. All five native run seals verify.
+Browser/quality/type logs are `.artifacts/saas-ui-retained-*.log`,
+`.artifacts/saas-ui-final-workflows.log`, `.artifacts/saas-ui-final-selection.log`
+and `.artifacts/saas-ui-final-planner.log`; evaluator validation, seal and HTTP
+receipts remain under the ignored evidence root. No external notifications were
+sent, and the unrelated dirty AEK checkout remains untouched.
+
+### Native-pixel table refinement — 21 October 2026
+
+**Local presentation changes and evaluator tooling; not deployed.** The new
+`saas-tables-v2-native-pixels` method preserves Program Cue's captured table
+pixels at scale 1. The old 1162px table crops were enlarged to 1229px, which
+could affect text rendering. V2 uses fixed canvases without enlarging either
+input; the pinned Attio export uses the explicitly unverified 2x-density
+assumption. V1 reports remain historical. Cross-method vote changes do not
+prove that scaling caused a preference change.
+
+Applications and the directory each received **5/5 strict improvement
+preferences and 5/5 quality passes**, using real Codex `gpt-6.1-sol`/high calls
+against the accepted UI at this phase's start. Retained changes lighten table
+rules and resting control outlines, group Applications filters with a subtle
+surface, align supporting record-text scale/colour, and give directory secondary
+text more consistent spacing and hierarchy. Directory styling is scoped to its
+route. The existing shared Button now renders Apply filters, fixing the design
+system adoption violation without changing its appearance or server behavior.
+
+Under the corrected external method, the retained Applications crop has four
+Program Cue preferences and one equivalent vote, meeting non-regression. The
+retained directory crop has two Program Cue preferences and three Attio
+preferences: inconclusive. An additional outlined directory-action experiment
+received four improvement preferences and one preference for the previous
+version; it was withdrawn. Both its before/after and external judgments remain
+in the report. Unchanged Applications inputs were retained during that scoped
+directory experiment, not resampled.
+
+Final `retained-capture` passes all forty browser checks. Its normalized table,
+original desktop and mobile inputs match the accepted first refinement exactly;
+the other views match it exactly except eighteen Form Builder raster pixels
+differing by one channel level, inside the existing explicit cache bound.
+The separate twelve-page title audit still has one signature per viewport.
+This remains desktop-component preference and desktop/mobile quality evidence,
+not a new forty-view preference result or whole-product SaaS parity claim.
+
+The evaluator has 44 passing tests, including native-pixel preservation,
+enlargement/bounds rejection, case scoping, substituted-input rejection and a
+regression preventing stale mobile quality from being reused for an unchanged
+desktop crop. The three existing suites validate; all 98 upstream criteria are
+unchanged. All five new native run seals verify. Shared-suite visual coverage
+uses real directory filter/action components and a stable filtered contact crop:
+organisation-wide totals and additional legitimate workflow contacts do not
+define their visual contract. Full directory views remain in the isolated eval.
+
+Validation includes seven focused grid/CRM workflows, ten Chromium/Firefox/
+WebKit checks, the final CRM/component replay, and all 32 final desktop/mobile/
+laptop visual tests. The report's images and 24 local links load, with no page
+errors or mobile overflow. The initial `check:core`
+returned a Button-adoption failure; its 667 unit, 2,068 Worker and one agent test,
+production build and type lanes passed. After the shared Button fix, the entire
+configuration/repository-contract lane passed in 172 seconds, including CSS,
+design-system adoption, scanner, migrations, audit, recovery and OpenAPI checks.
+Final generated TypeScript, quality, film-story and caption checks pass. The
+complete release gate was not run for this local iteration.
+
+Receipts: `evals/.agent-eval/ui-table-polish/report/index.html`, `baseline`,
+`retained-capture`, `accepted`, `reference-baseline`, `improvement-01`,
+`reference-final`, `improvement-02`, `reference-directory-02`, `accepted-proof.log`
+and `seals-final.log`. Browser and repository receipts are
+`.artifacts/table-polish-*.log`. Nothing was committed or deployed; external
+notifications were not sent and the unrelated dirty AEK checkout was untouched.
+
+
+### Native AEK 0.7.0 integration and directory refinement — 21 October 2026
+
+**Local evaluator integration and presentation changes; not deployed.** The
+published 0.7.0 prerelease is installed from its checksum-verified versioned
+archive (`f742f728434c58b4ba31c5d7da3c073de3074c6a269e0d39076e1d1eda172614`).
+Native image batches now own judging queues, progress, bounded capacity retries,
+exact resume/reuse, sealing and pair reports. The project retains its D1 capture
+checks, pinned/native-pixel crops, title cohort and cross-iteration evidence
+join. The table's quality-only native suite still assesses original desktop,
+mobile and component images; its gate is not narrowed to a crop-only check.
+
+The new `saas-tables-v3-native-batch` experiment starts fresh evaluator evidence;
+0.6.4 results above remain historical. On 0.7.0, both phase-baseline table crops
+received five preferences over the pinned published Attio image. The retained
+directory desktop crop also received five peer preferences. These dated component
+references do not establish current-live-product or whole-product parity.
+
+The retained directory has **5/5 strict preferences and 5/5 absolute quality
+passes at both full desktop and mobile sizes**, plus five component preferences
+and five current combined desktop/mobile/component quality passes. Styling
+coordinates disclosure text/chevrons, table-header separation and supporting
+history text. Mobile filters use a two-column layout beneath a full-width search.
+The first mobile attempt received five equivalent preferences and was not
+retained as an improvement; its full record remains in the report. The second
+candidate changes the actual mobile layout. Native reuse preserved the already
+accepted desktop and component votes without new pairwise calls; changed mobile
+invalidated the earlier combined quality evidence and received a fresh gate.
+
+`review-02` covers all forty initial views: two improved and 38 unchanged guards.
+Applications and Programme desktop have only eight and 39 paint pixels differing
+by one channel level, inside the existing 64-pixel/four-level bound. That bound
+marks unchanged guards only; it does not approximate native vote reuse. All forty
+browser captures pass. The twelve-page ordinary-title audit still has one shared
+signature at each size. The report binds verdicts to sealed image hashes,
+criteria, provider/model/effort, panel and vote settings. Editing coordinator
+metadata and substituting mobile bytes cannot borrow earlier quality passes;
+the retained tamper probe is rejected against the native source receipt.
+The final report loads all eleven images and 27 same-origin links at both sizes
+without overflow or page errors; the historical report link also returns 200.
+All 1,261 tracked app files match the captured isolated checkout. The phase has
+65 unique recorded judge-vote receipts; the ten desktop viewport receipts and
+five component receipts reused in round two remain byte-identical.
+
+The 44 evaluator tests and all three configurations validate, preserving all 98
+upstream criteria. Targeted CRM behavior, the 32-test visual inventory and six
+Chromium/Firefox/WebKit desktop/mobile filter/disclosure/focus checks pass.
+The core validation run passed 667 unit tests, 2,068 Worker tests, one agent test,
+generated types, TypeScript, build and repository contracts; its formatting lane
+failed before the CSS format correction. The corrected quality lane is checked
+separately. This was not a full release/merge gate.
+
+Receipts: `evals/.agent-eval/ui-native-batch-20261021/` contains the phase baseline,
+all iterations, `candidate-02`, `accepted`, both full matrices, native sealed
+batches/quality runs, `titles-02`, the mobile-substitution probe and consolidated
+`report/index.html`. Earlier phase reports remain unchanged. No production reset,
+external notification, commit or deployment was performed.
+
+### Form Builder and Schedule reference loop — 22 October 2026
+
+**Local presentation changes; not deployed.** The AEK 0.7.0 phase uses fresh
+isolated D1/browser captures of the accepted uncommitted UI, Codex
+`gpt-6.1-sol`/high, and five unanimous votes per gate. Form Builder and Schedule
+now each have **5/5 strict preferences and 5/5 absolute quality passes at both
+desktop and mobile sizes**. The consolidated report joins native verdicts only
+when their original full-view bytes match the current capture exactly. The
+remaining 36 views are byte-identical unchanged guards, not new improvement claims. All forty
+current browser captures pass, all 1,261 tracked app files match the captured
+checkout, and the twelve-page ordinary-title cohort retains one signature per
+viewport. Compact workbench titles remain separate and unchanged.
+
+The form canvas has stronger document/section hierarchy, aligned field content,
+inset mobile tabs and a fully contained supporting hint. The mobile header
+cannot flex-shrink over its second line. Schedule gives the calendar more width,
+uses a 144px minimum room column, quietens source-card selection, coordinates
+category rails and aligns mobile controls. Categorical refinements exclude
+conflict cards, preserving warning and blocking treatments. Existing bounded
+scrolling, keyboard alternatives, server actions and publication rules remain.
+
+Official Notion Forms and Calendar documentation assets were rechecked and
+pinned; both contain 2024 examples and are not verified latest-live-product
+captures. Linear's official form-template composer is supporting inspiration.
+The retained Form canvas received five peer preferences; Schedule received four
+wins and one loss, so its external result remains **split**, despite unanimous
+same-product improvement. Both current desktop component crops match their
+native peer inputs exactly, with no source enlarged. Peer comparisons do not
+establish whole-product SaaS parity.
+
+All unsuccessful rounds remain visible: the first desktop form attempt received
+three preferences and two losses; a later mobile attempt received five
+preferences but only four quality passes and one partial; the stacked hint then
+clipped and received five quality failures. Correcting its flex sizing produced
+the retained unanimous result. Native exact reuse preserves earlier positive
+and negative outcomes. A historical desktop frame differed by 22 inspector
+raster pixels at channel delta one; its independently judged record remains
+historical, while the final frame uses its exact matching accepted verdict.
+Those pixels lie outside the peer canvas crop. The phase retains 110 unique
+real-model vote receipts.
+
+Eleven focused Playwright workflows and twelve Chromium/Firefox/WebKit
+surface/device checks pass, covering form publishing/drag/reordering, preview,
+keyboard controls, schedule publication preview, inspector focus, room scrolling
+and responsive layouts. Four focused visual baselines cover desktop/mobile/
+laptop Form Builder and laptop Schedule. A new bounds assertion catches the
+mobile hint clipping before snapshot approval. Generated TypeScript, formatting
+and design-system checks pass. A synthetic warning/blocking and forced-colour
+render probe verifies styling only, not a new D1 conflict workflow. The initial
+visual-guard selector was corrected before repeating the focused checks. A
+Wrangler proxy crash and an ungraded token correction are preserved as capture
+execution history. The report loads all twelve images and 106 same-origin links
+at desktop and mobile sizes, without overflow or page errors. The full repository/release gate was not run for this
+focused presentation change.
+
+Receipts: `evals/.agent-eval/ui-forms-schedule-20261022/` contains the phase
+baseline, all native reviews and peer batches, current `candidate-07`, title
+cohort, browser/source proofs and consolidated `report/index.html`. Validation
+logs are also retained under `.artifacts/ui-forms-schedule-20261022/`. No
+production reset, external notification, commit or deployment was performed.
+
+### Whole-cohort visual craft loop — 22 October 2026
+
+**Local presentation changes; not deployed.** The stronger frozen
+`saas-cohort-craft-v1` contract evaluates twenty original desktop/mobile pairs.
+All twenty current pairs have five craft passes using AEK 0.7.0 and
+`gpt-6.1-sol`/high. These are representative captured states, not whole-product
+UX acceptance or a universal SaaS ranking.
+
+Retain two desktop refinements: quieter Schedule structure and a stronger
+calendar heading; aligned Resource metadata inputs with consistent typography.
+Each has five strict before/after preferences and five absolute quality passes.
+The other 38 views are unchanged guards: 36 byte-identical, plus 22 Form Builder
+and 27 Event Settings raster pixels at a maximum channel delta of one. Those
+exact current pairs have their own craft evidence; paint guards never transfer
+votes. All twenty mobile images are byte-identical to the phase baseline.
+Ordinary titles remain 34px bold desktop / 30px bold mobile, with one shared
+signature per viewport across twelve pages; compact workbenches stay separate.
+
+Current peer results: Notion Forms, Notion Calendar and the Attio directory crop
+each have five preferences; Linear navigation has five equivalents. Applications
+remains at three preferences, one equivalent and one loss against Attio. The
+initial zero-loss target across all five components was **not met**. Four
+Applications variants were withdrawn: one failed its peer gate, while three
+unanimous peer winners failed strict comparison with our own baseline. Preserve
+the accepted Applications design rather than retain contested changes. Mobile
+Schedule was also restored after one preference and four losses. The Resource
+baseline's four passes and one partial remain visible alongside the corrected
+result. No unchanged images were rerolled to erase dissent.
+
+Every current result is bound to exact original inputs and native contracts.
+AEK's command collector re-encodes screenshots as opaque sRGB PNGs. Verification
+checks the pinned native transformation, identical decoded RGB pixels and
+dimensions for all 48 historical source/native image pairs, and all 240 judge
+attachments. Exact native reuse preserves both positive and negative outcomes;
+215 fresh model votes are retained, and native reuse avoided 120 repeated strict
+vote calls. Published images, crop bounds, dates and unverified export-density
+assumptions remain explicit. Authenticated live competitor interfaces were not
+captured.
+
+Passed on the final source: twelve focused Playwright workflows, five visual
+checks, thirteen Chromium/Firefox/WebKit surface/device/system-colour checks,
+forty capture guards, 44 evaluator tests, three evaluator configurations,
+generated TypeScript, formatting and design-system checks. The Resource bounds
+guard catches the observed input misalignment. Only the Schedule laptop snapshot
+changes. All 1,261 app files match the isolated checkout. One incomplete capture
+had a local Worker exit before Programme hydrated; it received no model votes.
+A fresh fixture produced healthy final `candidate-12`. Manual probe timing and
+heading scoping were corrected before the final checks. The HTML report loads
+all sixteen images and 104 same-origin links at desktop and mobile sizes with no
+page errors or horizontal overflow. The full release/merge gate was not run for
+this focused presentation change.
+
+Receipts: `evals/.agent-eval/ui-craft-20261022/` contains the accepted baseline,
+all native rounds, incomplete capture receipt, final `candidate-12`, paired
+craft audits, exact source/pixel proofs and consolidated `report/index.html`.
+Validation logs are retained in `.artifacts/ui-craft-20261022/`. No production
+reset, external notification, commit, push or deployment was performed.
+
+### Release-readiness validation after the visual pass — 22 October 2026
+
+**Initial local attempt; release gate not passed.** The broader workspace check passed
+667 unit tests, 2,068 Worker tests and one agent test, generated TypeScript,
+formatting and the production build. Its configuration lane rejected the stale
+Schedule laptop screenshot pin in `video/story-state.json`. The current capture
+was visually inspected against its published-baseline usage in the film, and
+only that pin was updated. The corrected configuration, design-system, scanner,
+migration, audit-provenance, local recovery and OpenAPI checks then passed.
+
+The evaluator suite passed all 44 tests with serial test-file execution, and all
+three evaluator configurations validated. An initial concurrent run hit the
+sequencing fixture's 30-second subprocess limit; its unchanged focused retry
+also passed. Keep the failed initial log rather than treating it as a pass.
+The native table report's historical link now uses a relative path through the
+retained report server instead of the stopped server on port 5255. Its target
+returns HTTP 200; native sealed evidence was not edited.
+
+The full five-shard application browser run finished at **263 passed, three
+failed and two optional performance skips**. That attempt's failures:
+
+- The phone accessibility sweep found no `button.scalar-code-copy` in the API
+  reference before its assertion deadline. This is a missing-control assertion,
+  not a reported axe violation; its cause remains unverified.
+- The mobile public-site preview snapshot expected 390×718 pixels and received
+  390×704. The baseline was not updated to conceal the mismatch.
+- The draft-preview containment test failed during its local fixture-reset POST
+  with `socket hang up`, before exercising the layout assertion.
+
+The dependency audit also failed because the npm advisory endpoint timed out;
+no clean dependency result or policy bypass is claimed. The separate
+production-shaped evaluation and public-website browser gates were not run
+after the application browser gate failed. That attempt performed no commit,
+push or deployment.
+Receipts: `.artifacts/release-readiness-20261022-*` retain the original gate,
+corrected contracts, evaluator retries, browser results and advisory timeout.
+
+**Resolved in the follow-up; full local release gate passed.** Scalar lazily
+mounts operation examples outside the phone introduction. The accessibility
+sweep now waits for the OpenAPI introduction and opens the readiness operation
+through its mobile navigation before checking code-copy names. Tablet and
+desktop retain their existing rendered examples. All accessibility assertions
+remain. Public-site panel helpers wait for hydration before clicking a tab.
+Both preview baselines were visually inspected and refreshed to the current
+390×704 frame; their visible content is unchanged apart from bounded raster
+noise. Fresh preview, containment and fixture-reset workflows passed.
+
+The restored npm audit exposed a high-severity finding in Vite 8.2.1. The
+declared minimum and lockfile now use patched Vite 8.2.4. The unchanged audit
+policy passes with seven low and two moderate advisories remaining.
+
+`npm run check` then completed successfully in **723.2 seconds**: 667 unit,
+2,068 Worker and one agent test; generated types, formatting, production build,
+configuration/design-system/scanner/schema/audit/recovery/OpenAPI checks;
+**266 application browser checks, 12 production-shaped evaluation checks and
+16 public-website checks**. Two opt-in performance checks were skipped. The
+normal evaluator `npm test` also passed all 44 tests, all three standard
+configurations validated, and the optional UI configuration validated. The six
+focused accessibility/preview checks passed before the complete gate.
+
+The application presentation source and the retained AEK image judgments were
+preserved during this repair. No push, deployment, production fixture reset or
+live-provider acceptance run was performed. Receipts:
+`.artifacts/release-fixes-20261022/` contains the successful complete gate,
+initial failures, browser probes, reviewed captures, dependency audit results,
+evaluator checks and source fingerprints.
+
 ## Requirements traceability
 
 “Connected” means repository implementation and its recorded checks, subject to

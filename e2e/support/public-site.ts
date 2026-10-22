@@ -8,6 +8,7 @@ const SITE_PANELS = {
 } as const;
 
 export async function openSitePanel(page: Page, tab: keyof typeof SITE_PANELS) {
+  await page.locator("body[data-hydrated='true']").waitFor();
   await page
     .locator(".public-site-editor-tabs button")
     .filter({ hasText: new RegExp(`^${tab}`) })

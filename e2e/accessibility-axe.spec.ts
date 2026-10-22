@@ -105,6 +105,28 @@ for (const viewport of VIEWPORTS) {
           .toBeGreaterThan(0);
       }
       if (surface.path === "/api/docs") {
+        await expect(
+          page.getByRole("button", {
+            name: "Download OpenAPI document as JSON",
+          }),
+        ).toBeVisible();
+        // Scalar mounts operation examples when they are reached. On phones,
+        // the introduction fills the viewport, so open an operation through
+        // its navigation before checking the example's copy controls.
+        if (viewport.label === "phone") {
+          await page
+            .getByRole("button", { name: "Open Menu", exact: true })
+            .click();
+          await page
+            .getByRole("link", { name: /^Check service readiness/ })
+            .click();
+          await expect(
+            page.getByRole("heading", {
+              name: "Check service readiness",
+              exact: true,
+            }),
+          ).toBeVisible();
+        }
         const copyButtons = page.locator("button.scalar-code-copy");
         await expect(copyButtons.first()).toHaveAttribute(
           "aria-label",
