@@ -69,6 +69,15 @@ const chainedSchema = formSchemaSchema.parse({
 });
 
 describe("submission form rules", () => {
+  it("accepts 120-character event choice labels and rejects longer labels", () => {
+    const schema = structuredClone(DEFAULT_FORM_SCHEMA);
+    const tracks = schema.fields.find((field) => field.id === "category")!;
+    tracks.options = ["T".repeat(120)];
+    expect(formSchemaSchema.safeParse(schema).success).toBe(true);
+    tracks.options = ["T".repeat(121)];
+    expect(formSchemaSchema.safeParse(schema).success).toBe(false);
+  });
+
   it("drops only a completely empty speaker placeholder when saving a draft", () => {
     const payload = {
       submissionId: "draft-1",

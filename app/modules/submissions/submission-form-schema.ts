@@ -19,7 +19,7 @@ const legacyFormFieldSchema = z
     required: z.boolean().default(false),
     help: z.string().trim().max(300).default(""),
     example: z.string().trim().max(300).default(""),
-    options: z.array(z.string().trim().min(1).max(80)).max(100).default([]),
+    options: z.array(z.string().trim().min(1).max(120)).max(100).default([]),
     reviewVisibility: z.enum(["reviewers", "administrators_only"]).optional(),
     /**
      * Blind review is fail-closed: a field must be explicitly classified as

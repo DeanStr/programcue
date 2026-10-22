@@ -7777,7 +7777,7 @@
                       "items": {
                         "type": "string",
                         "minLength": 1,
-                        "maxLength": 80
+                        "maxLength": 120
                       }
                     },
                     "reviewVisibility": {

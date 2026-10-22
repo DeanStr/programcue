@@ -8,6 +8,7 @@ import {
   ADMIN_MANUAL_ENTRY_FORM_VERSION_ID,
   DEFAULT_FORM_SCHEMA,
   type SubmissionFormSchema,
+  submittedSnapshotSchema,
 } from "./submission-schema";
 import { manualApplicationSchema } from "./submission-service-foundation.server";
 
@@ -196,6 +197,9 @@ export class SubmissionManualApplicationCommands extends SubmissionAdministratio
       speakers: input.speakers,
       uploads: {},
     };
+    // Use the read contract before inserting an immutable snapshot. A
+    // successful creation must remain readable after redirect and reload.
+    submittedSnapshotSchema.parse(snapshot);
     const statements: D1PreparedStatement[] = [
       ...this.adminMutationClaimStatements(command),
     ];

@@ -5,6 +5,7 @@ import { currentEventCookie } from "~/platform/auth/current-event.server";
 import { cloudflareContext } from "~/platform/cloudflare-context";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import { action } from "./admin-create-application";
+import { loader } from "./submissions-admin";
 
 function context() {
   const value = new RouterContextProvider();
@@ -35,6 +36,65 @@ beforeEach(async () => {
 });
 
 describe("administrator application-record creation", () => {
+  it.each([81, 120])(
+    "keeps manual applications with %i-character track names readable after creation and renaming",
+    async (length) => {
+      const trackName = "T".repeat(length);
+      await env.DB.prepare(
+        "UPDATE tracks SET name = ? WHERE id = ? AND event_id = ?",
+      )
+        .bind(trackName, "demo-track-ai", "evt-foe-2025")
+        .run();
+      const result = await action({
+        request: request(
+          new URLSearchParams({
+            _intent: "create_manual_application",
+            idempotencyKey: crypto.randomUUID(),
+            title: "Long track application",
+            description: "An application using a valid long event-track name.",
+            format: "presentation",
+            trackIds: "demo-track-ai",
+            submitterName: "Priya Shah",
+            submitterEmail: "priya.speaker@example.com",
+            speakers: JSON.stringify([
+              { name: "Priya Shah", email: "priya.speaker@example.com" },
+            ]),
+            confirmDuplicatePeople: "yes",
+          }),
+        ),
+        params: {},
+        context: context(),
+      } as never);
+      expect(result).toBeInstanceOf(Response);
+      if (!(result instanceof Response)) {
+        throw new Error("Application creation did not redirect.");
+      }
+      expect(result.status).toBe(303);
+      const location = result.headers.get("location")!;
+      const submissionId = location.split("/").pop()!.split("?")[0];
+      const read = () =>
+        loader({
+          request: new Request(`http://localhost${location}`, {
+            headers: request(new URLSearchParams()).headers,
+          }),
+          params: { submissionId },
+          context: context(),
+        } as never);
+      await expect(read()).resolves.toMatchObject({
+        mode: "detail",
+        submission: { category: trackName, answers: { category: [trackName] } },
+      });
+      await env.DB.prepare(
+        "UPDATE tracks SET name = 'Renamed track' WHERE id = ? AND event_id = ?",
+      )
+        .bind("demo-track-ai", "evt-foe-2025")
+        .run();
+      await expect(read()).resolves.toMatchObject({
+        submission: { answers: { category: [trackName] } },
+      });
+    },
+  );
+
   it("redirects to the exact immutable application record after creation", async () => {
     const title = `Manual route ${crypto.randomUUID()}`;
     const body = new URLSearchParams({
