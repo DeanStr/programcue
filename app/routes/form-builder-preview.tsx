@@ -368,7 +368,7 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
         value={JSON.stringify(input.routing)}
       />
 
-      <div className="page-head fb-page-head">
+      <div className="page-head fb-page-head pc-page-header-compact">
         <div>
           <h1>Call for Speakers Form Builder</h1>
           <p>Design, test and publish immutable application versions.</p>

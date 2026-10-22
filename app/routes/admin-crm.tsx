@@ -220,7 +220,7 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
     `${dashboard.returningSpeakers} returning ${dashboard.returningSpeakers === 1 ? "speaker" : "speakers"}`,
   ];
   return (
-    <div className="crm-workspace">
+    <div className="crm-workspace crm-directory-workspace">
       <div className="page-head pc-page-header">
         <div>
           <span className="pc-page-eyebrow">
@@ -355,9 +355,7 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
             </select>
           </label>
           <div className="crm-filter-actions">
-            <button className="crm-text-action" type="submit">
-              Apply filters
-            </button>
+            <Button type="submit">Apply filters</Button>
             {filtersActive ? (
               <Link className="crm-text-action" to="/admin/crm">
                 <FilterX aria-hidden size={15} /> Clear filters

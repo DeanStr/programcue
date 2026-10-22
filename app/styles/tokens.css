@@ -277,6 +277,8 @@
   --text-xl: 23px;
   --text-2xl: 28px;
   --text-3xl: 34px;
+  --page-title-size: var(--text-3xl);
+  --section-title-size: var(--text-lg);
   --display-2: clamp(28px, 4vw, 42px);
   --display-1: clamp(40px, 6vw, 72px);
 

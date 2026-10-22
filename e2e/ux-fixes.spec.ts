@@ -227,14 +227,19 @@ test("mobile administration sections reveal linked content without overflow", as
   await expectNoContrastViolations(page, "Delivery settings");
 
   await waitForInterface(page, "/admin/communications");
+  await expect(
+    page.getByRole("navigation", { name: "Communications Centre sections" }),
+  ).toBeVisible();
   // Templates is the centre's primary work and opens with the page; History
-  // is the one that starts closed.
+  // starts closed and opens directly from its keyboard-accessible disclosure.
+  await page
+    .getByRole("button", { name: "Collapse Templates", exact: true })
+    .click();
   const history = page.getByRole("button", { name: /History/ });
   await expect(history).toHaveAttribute("aria-expanded", "false");
-  await page
-    .getByRole("navigation", { name: "Communications Centre sections" })
-    .getByRole("link", { name: "History" })
-    .click();
+  await expect(history).toBeInViewport();
+  await history.focus();
+  await page.keyboard.press("Enter");
   await expect(history).toHaveAttribute("aria-expanded", "true");
   await expect(
     page.getByRole("heading", { name: "Delivery health" }),

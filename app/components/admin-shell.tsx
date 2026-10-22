@@ -356,8 +356,7 @@ function AdminTopbar({
       <div className="top-actions">
         {viewer.role !== "committee_chair" ? (
           <Button
-            /* The label span is display:none below 760px, which leaves the
-                 only filled primary in the global chrome with no name. */
+            /* Keep its accessible name when the visible label is hidden. */
             aria-label="New"
             variant="primary"
             onClick={() => setDialog("new")}

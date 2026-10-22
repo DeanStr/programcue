@@ -773,7 +773,7 @@ div.status::before {
 }
 /* --- Admin section header ------------------------------------------------
    A page is a sequence of named sections, not a run of cards. The heading
-   outranks the card titles beneath it (23px section over 16px card), and the
+   outranks the card titles beneath it (19px section over 16px card), and the
    rule carries the break to the edge so the eye can find the seam without
    reading. The disclosure control belongs to mobile only. */
 .pc-admin-section-head {
@@ -788,10 +788,6 @@ div.status::before {
 }
 .pc-admin-section-head h2 {
   margin: 0;
-  font-size: var(--text-xl);
-  font-weight: var(--weight-bold);
-  letter-spacing: var(--tracking-snug);
-  line-height: var(--leading-tight);
 }
 .pc-admin-section-head p {
   margin: var(--space-1) 0 0;
@@ -836,9 +832,6 @@ div.status::before {
     align-items: center;
     gap: var(--space-3);
     margin-bottom: var(--space-2);
-  }
-  .pc-admin-section-head h2 {
-    font-size: var(--text-lg);
   }
   .pc-admin-section-head p {
     font-size: var(--text-2xs);
@@ -901,14 +894,12 @@ a.card:hover,
 button.card:hover,
 .pc-interactive:hover {
   border-color: var(--border-strong);
-  box-shadow: var(--elev-1);
-  transform: translateY(-1px);
+  background: var(--surface-sunken);
 }
 a.card:active,
 button.card:active,
 .pc-interactive:active {
-  box-shadow: none;
-  transform: translateY(0);
+  background: color-mix(in srgb, var(--ink) 4%, var(--surface-sunken));
 }
 
 /* --- Numerals -------------------------------------------------------------

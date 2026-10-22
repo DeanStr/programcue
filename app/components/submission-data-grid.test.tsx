@@ -12,6 +12,7 @@ function renderGrid(submissions: AdminSubmission[], detailSearchParams = "") {
         element: (
           <SubmissionDataGrid
             submissions={submissions}
+            filters={null}
             columns={["submitter", "route", "speakers", "status"]}
             density="comfortable"
             sort="submittedAt-desc"

@@ -268,104 +268,106 @@ export default function SubmissionsAdmin({ loaderData }: Route.ComponentProps) {
         ].join(" · ")}
       </p>
       <section className="submissions-board">
-        <Form method="get" className="submissions-toolbar" role="search">
-          <input type="hidden" name="columns" value={view.columns.join(",")} />
-          <label className="submissions-filter">
-            <span>Search</span>
-            <input
-              className="field"
-              name="query"
-              defaultValue={filters.query}
-              placeholder="Title, submitter or email"
-            />
-          </label>
-          <label className="submissions-filter">
-            <span>Routing</span>
-            <select
-              className="select"
-              name="routing"
-              defaultValue={filters.routing}
-            >
-              <option value="">All routing states</option>
-              <option value="missing_automatic">
-                No automatic review-team route
-              </option>
-              <option value="manual_override">Manual routing override</option>
-            </select>
-          </label>
-          <label className="submissions-filter">
-            <span>Status</span>
-            <select
-              className="select"
-              name="status"
-              defaultValue={filters.status}
-            >
-              <option value="">All statuses</option>
-              {[
-                "draft",
-                "submitted",
-                "assigned",
-                "in_review",
-                "decision_ready",
-                "accepted",
-                "waitlisted",
-                "rejected",
-                "withdrawn",
-              ].map((status) => (
-                <option key={status} value={status}>
-                  {statusPresentation("submission", status).label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="submissions-filter">
-            <span>Track</span>
-            <select
-              className="select"
-              name="category"
-              defaultValue={filters.category}
-            >
-              <option value="">All tracks</option>
-              {categories.map((category) => (
-                <option key={category}>{category}</option>
-              ))}
-            </select>
-          </label>
-          <label className="submissions-filter submissions-filter-sort">
-            <span>Sort</span>
-            <select
-              className="select"
-              name="sort"
-              defaultValue={filters.sort ?? "submittedAt-desc"}
-            >
-              <option value="submittedAt-desc">Newest activity</option>
-              <option value="submittedAt-asc">Oldest activity</option>
-              <option value="title-asc">Application title A–Z</option>
-              <option value="title-desc">Application title Z–A</option>
-            </select>
-          </label>
-          <label className="submissions-filter">
-            <span>Density</span>
-            <select
-              className="select"
-              name="density"
-              defaultValue={view.density}
-            >
-              <option value="comfortable">Comfortable</option>
-              <option value="compact">Compact</option>
-            </select>
-          </label>
-          <div className="submissions-filter-actions">
-            <Button variant="primary" size="small" type="submit">
-              Apply
-            </Button>
-            <ButtonLink size="small" to="/admin/submissions">
-              Clear
-            </ButtonLink>
-          </div>
-        </Form>
         <SubmissionDataGrid
-          key={`${page}:${filters.status}:${filters.category}:${filters.query}:${filters.routing}:${filters.sort}:${view.columns.join(",")}:${view.density}`}
+          key={`${page}:${filters.status}:${filters.category}:${filters.query}:${filters.routing}:${filters.sort}:${view.columns.join(",")}`}
+          filters={
+            <Form method="get" className="submissions-toolbar" role="search">
+              <input
+                type="hidden"
+                name="columns"
+                value={view.columns.join(",")}
+              />
+              <input type="hidden" name="density" value={view.density} />
+              <label className="submissions-filter">
+                <span>Search</span>
+                <input
+                  className="field"
+                  name="query"
+                  defaultValue={filters.query}
+                  placeholder="Title, submitter or email"
+                />
+              </label>
+              <label className="submissions-filter">
+                <span>Routing</span>
+                <select
+                  className="select"
+                  name="routing"
+                  defaultValue={filters.routing}
+                >
+                  <option value="">All routing states</option>
+                  <option value="missing_automatic">
+                    No automatic review-team route
+                  </option>
+                  <option value="manual_override">
+                    Manual routing override
+                  </option>
+                </select>
+              </label>
+              <label className="submissions-filter">
+                <span>Status</span>
+                <select
+                  className="select"
+                  name="status"
+                  defaultValue={filters.status}
+                >
+                  <option value="">All statuses</option>
+                  {[
+                    "draft",
+                    "submitted",
+                    "assigned",
+                    "in_review",
+                    "decision_ready",
+                    "accepted",
+                    "waitlisted",
+                    "rejected",
+                    "withdrawn",
+                  ].map((status) => (
+                    <option key={status} value={status}>
+                      {statusPresentation("submission", status).label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="submissions-filter">
+                <span>Track</span>
+                <select
+                  className="select"
+                  name="category"
+                  defaultValue={filters.category}
+                >
+                  <option value="">All tracks</option>
+                  {categories.map((category) => (
+                    <option key={category}>{category}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="submissions-filter submissions-filter-sort">
+                <span>Sort</span>
+                <select
+                  className="select"
+                  name="sort"
+                  defaultValue={filters.sort ?? "submittedAt-desc"}
+                >
+                  <option value="submittedAt-desc">Newest activity</option>
+                  <option value="submittedAt-asc">Oldest activity</option>
+                  <option value="title-asc">Application title A–Z</option>
+                  <option value="title-desc">Application title Z–A</option>
+                </select>
+              </label>
+              <div className="submissions-filter-actions">
+                <Button variant="primary" size="small" type="submit">
+                  Apply
+                </Button>
+                <ButtonLink
+                  variant="ghost"
+                  size="small"
+                  to="/admin/submissions"
+                >
+                  Clear
+                </ButtonLink>
+              </div>
+            </Form>
+          }
           submissions={submissions}
           columns={view.columns}
           density={view.density}

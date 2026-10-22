@@ -209,6 +209,7 @@ a {
   flex: none;
   width: 20px;
 }
+
 /* A section's own sub-destinations, shown only while that section is current.
    Indented to the parent label's text, not given a second icon column. */
 .nav-child a {
@@ -328,7 +329,7 @@ a {
    of empty navy between the two halves of the bar and read as two toolbars. */
 .command-trigger {
   flex: 1 1 auto;
-  min-width: 260px;
+  min-width: 0;
   max-width: 420px;
   display: flex;
   align-items: center;
@@ -339,6 +340,18 @@ a {
   padding: var(--space-2) var(--space-3);
   color: var(--muted);
   text-align: left;
+}
+@media (min-width: 761px) {
+  .command-trigger {
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  .command-trigger span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 }
 .command-trigger kbd {
   margin-left: auto;
@@ -386,12 +399,6 @@ a {
 .icon-btn:hover {
   border-color: var(--border-strong);
   background: var(--surface-sunken);
-}
-/* Nothing in the product acknowledged pointer-down, which is the main reason
-   a fast interface reads as unresponsive. */
-.btn:active,
-.icon-btn:active {
-  transform: translateY(1px);
 }
 .btn.primary {
   /* Flat. A floating primary was the kit-button tell: Linear and Stripe
@@ -453,12 +460,35 @@ a {
   border-color: var(--border-strong);
   color: var(--text-primary);
 }
+/* Pressed fills follow variant hover rules so quiet actions still acknowledge
+   pointer-down without moving the control. */
+.btn:active,
+.icon-btn:active,
+.btn.ghost:active,
+.btn.small.primary:active,
+.data-table .btn.primary:active,
+.table-wrap .btn.primary:active,
+.row-actions .btn.primary:active {
+  background: color-mix(in srgb, var(--ink) 6%, var(--surface-sunken));
+}
+.btn.danger:active {
+  background: color-mix(
+    in srgb,
+    var(--state-bad-solid) 8%,
+    var(--state-bad-surface)
+  );
+}
 .pc-state-action .btn.primary,
 .pc-state-action .btn.small.primary {
   background: var(--brand-600);
   border-color: transparent;
   color: var(--text-inverse);
   font-weight: var(--weight-semibold);
+}
+.pc-state-action .btn.primary:active,
+.pc-state-action .btn.small.primary:active {
+  background: var(--brand-900);
+  color: var(--text-inverse);
 }
 /* One disabled treatment for every variant, including primary. */
 .btn:disabled,
@@ -650,10 +680,8 @@ a {
   margin-bottom: var(--space-4);
 }
 /* --- Heading ladder ------------------------------------------------------
-   Four steps, and every surface uses the same four: page 34 / section 23 /
-   card 16 / body 14. The scale in tokens.css always had eight roles, but the
-   product only ever spent three of them, which is why every page read flat.
-   The page title is the one place the display register appears in the app. */
+   Page titles use 34px bold, with compact workbench variants. Section titles
+   use 23px on desktop and 19px on phones; card titles use 16px. */
 .page-head h1 {
   margin: 0;
   font-size: var(--text-3xl);
@@ -667,8 +695,50 @@ a {
    sans face so dense labels, form controls and headings share one scanning
    rhythm; event-branded public pages retain their own heading treatment. */
 .app-admin :is(h1, h2, h3),
-.speaker-shell :is(h1, h2, h3) {
+.speaker-shell :is(h1, h2, h3),
+.reviewer-shell :is(h1, h2, h3) {
   font-family: var(--font);
+}
+/* One operational title role, with an explicit compact workbench variant. */
+.app-admin .page-head h1,
+.speaker-shell .page-head h1,
+.speaker-shell .speaker-portal-head h1 {
+  font-size: var(--page-title-size);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--leading-tight);
+}
+.page-head.pc-page-header-compact {
+  --page-title-size: var(--text-xl);
+}
+/* Named page regions share one section role across desktop and mobile. */
+.pc-admin-section-head h2,
+.command-section-head {
+  font-size: var(--section-title-size);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-snug);
+  line-height: var(--leading-tight);
+}
+.pc-admin-section-head h2 {
+  font-weight: var(--weight-bold);
+}
+@media (max-width: 760px) {
+  .app-admin {
+    --page-title-size: 30px;
+  }
+}
+@media (min-width: 761px) {
+  .app-admin {
+    --page-title-size: var(--text-3xl);
+  }
+  .app-admin .page-head h1 {
+    font-weight: var(--weight-bold);
+    letter-spacing: var(--tracking-tight);
+  }
+  .pc-admin-section-head h2 {
+    font-size: var(--text-xl);
+    font-weight: var(--weight-bold);
+  }
 }
 .page-head p {
   margin: var(--space-2) 0 0;

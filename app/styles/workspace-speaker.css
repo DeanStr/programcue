@@ -179,7 +179,8 @@
 }
 .speaker-next-hero h2 {
   max-width: 22ch;
-  font-size: clamp(var(--text-2xl), 2.4vw, var(--text-3xl));
+  font-size: var(--text-xl);
+  font-weight: var(--weight-semibold);
   line-height: var(--leading-tight);
   letter-spacing: var(--tracking-tight);
   text-wrap: balance;
@@ -193,6 +194,10 @@
   color: var(--text-tertiary);
   font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
+}
+.speaker-next-hero .speaker-next-facts {
+  margin: var(--space-4) 0 0;
+  font-size: var(--text-xs);
 }
 .upload-illustration {
   height: 145px;

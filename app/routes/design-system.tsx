@@ -35,11 +35,12 @@ const SWATCHES = [
 ] as const;
 
 const TYPE_SCALE = [
-  ["--text-3xl", "Page title"],
-  ["--text-2xl", "Section title"],
-  ["--text-xl", "Card title"],
-  ["--text-lg", "Subhead"],
-  ["--text-base", "Reading copy"],
+  ["--text-3xl", "Public page title"],
+  ["--page-title-size", "Operational page title"],
+  ["--text-2xl", "Display emphasis"],
+  ["--text-xl", "Compact workbench title"],
+  ["--section-title-size", "Section title"],
+  ["--text-base", "Card title / reading copy"],
   ["--text-sm", "Interface default"],
   ["--text-xs", "Dense data"],
   ["--text-2xs", "Metadata floor"],

@@ -259,7 +259,7 @@ export function CommandScene({ duration }: ProductSceneProps) {
     duration,
   );
   const cursorLocalX = between(frame, 394, 478, 360, 515, ease);
-  const cursorLocalY = between(frame, 394, 478, 112, 188, ease);
+  const cursorLocalY = between(frame, 394, 478, 112, 180, ease);
   const cursorPress =
     timelineFrame >= clickStart && timelineFrame <= clickRelease
       ? timelineFrame <= clickStart + 5
@@ -461,26 +461,26 @@ export function CommandScene({ duration }: ProductSceneProps) {
       >
         <FocusRing
           color={PALETTE.copper}
-          height={145}
+          height={150}
           label="Needs attention"
           opacity={between(frame, 176, 224, 0, 1, ease) * focusOne}
           radius={7}
           scale={commandZoom}
           width={496}
-          x={commandPanX + 187 * commandZoom}
-          y={commandImageTop + 303 * commandZoom}
+          x={commandPanX + 184 * commandZoom}
+          y={commandImageTop + 278 * commandZoom}
         />
         <FocusRing
           color={PALETTE.copper}
-          height={88}
+          height={80}
           label="Do this next"
-          labelPosition="top"
+          labelPosition="bottom"
           opacity={focusTwo}
           radius={8}
           scale={commandZoom}
           width={353}
-          x={commandPanX + 187 * commandZoom}
-          y={commandImageTop + 153 * commandZoom}
+          x={commandPanX + 184 * commandZoom}
+          y={commandImageTop + 140 * commandZoom}
         />
         <div
           aria-hidden="true"
@@ -491,13 +491,13 @@ export function CommandScene({ duration }: ProductSceneProps) {
             borderRadius: 7 * commandZoom,
             boxShadow: `0 0 ${28 * actionResponse}px rgba(190,98,66,.28), inset 0 0 ${18 * actionResponse}px rgba(190,98,66,.12)`,
             display: "flex",
-            height: 75 * commandZoom,
+            height: 70 * commandZoom,
             justifyContent: "flex-end",
-            left: commandPanX + 191 * commandZoom,
+            left: commandPanX + 188 * commandZoom,
             opacity: actionResponse,
             pointerEvents: "none",
             position: "absolute",
-            top: commandImageTop + 156 * commandZoom,
+            top: commandImageTop + 145 * commandZoom,
             transform: `scale(${1 - cursorPress * 0.008})`,
             transformOrigin: "center",
             width: 343 * commandZoom,

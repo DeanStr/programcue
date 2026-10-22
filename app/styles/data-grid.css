@@ -9,6 +9,9 @@
   border-radius: 0;
   box-shadow: none;
 }
+.submissions-board .table-wrap:last-child {
+  border-radius: 0 0 var(--radius) var(--radius);
+}
 .table-wrap[tabindex="0"]:focus-visible {
   border-color: var(--brand-400);
 }
@@ -51,12 +54,24 @@
   border-bottom: 1px solid var(--line);
   vertical-align: middle;
 }
+.submissions-board .data-table thead th {
+  background:
+    linear-gradient(var(--table-divider), var(--table-divider)) bottom / 100%
+    1px no-repeat,
+    var(--surface);
+  font-weight: var(--weight-medium);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
 .submissions-board .data-table td,
 .submissions-board .data-table tbody th[scope="row"] {
   padding: var(--space-3) var(--space-3);
+  border-bottom-color: var(--table-divider);
+  font-variant-numeric: tabular-nums;
 }
 .data-table tr:hover td {
-  background: var(--soft);
+  background: color-mix(in srgb, var(--ink) 3%, var(--surface));
 }
 .data-table tr.pc-focused-record td {
   background: var(--state-info-surface);
@@ -80,6 +95,8 @@
   display: flex;
   align-items: center;
   flex: 1;
+  justify-content: flex-end;
+  flex-wrap: wrap;
   gap: var(--space-2);
   min-width: 0;
 }
@@ -125,11 +142,9 @@
 }
 .pc-data-grid-columns legend {
   padding: 0 var(--space-1);
-  color: var(--muted);
+  color: var(--text-tertiary);
   font-size: var(--text-2xs);
-  font-weight: var(--weight-extrabold);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-weight: var(--weight-medium);
 }
 .pc-data-grid-columns label {
   display: flex;
@@ -186,11 +201,11 @@
 }
 
 /* --- Applications workspace ----------------------------------------------
-   The table is the page. One pulse line, one toolbar, rows to the bottom. */
+   The table is as tall as its rows. Stretching an empty board to the viewport
+   left a hollow card under two records. */
 .submissions-workspace {
   display: flex;
   flex-direction: column;
-  min-height: calc(100dvh - 148px);
 }
 .submissions-workspace > .page-head {
   margin-bottom: var(--space-2);
@@ -202,15 +217,15 @@
   font-variant-numeric: tabular-nums;
 }
 .submissions-workspace .submissions-board {
-  flex: 1 1 auto;
+  --table-divider: color-mix(in srgb, var(--line) 60%, var(--surface));
   display: flex;
   flex-direction: column;
   min-height: 0;
-  overflow: hidden;
-  border: 1px solid var(--border);
+  /* The column picker can extend below a short board. The inner table owns
+     scrolling and clips its own bottom corners. */
+  border: 1px solid var(--table-divider);
   border-radius: var(--radius);
   background: var(--surface);
-  box-shadow: var(--elev-1);
 }
 .submissions-workspace .pc-data-grid-wrap {
   flex: 1 1 auto;
@@ -219,54 +234,87 @@
 .submissions-toolbar {
   display: flex;
   flex-wrap: wrap;
-  align-items: end;
+  align-items: flex-end;
   gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  border-bottom: 1px solid var(--border);
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--table-divider);
+  background: var(--surface-sunken);
 }
 .submissions-board .pc-data-grid-toolbar {
-  display: flex;
   min-height: 36px;
   padding: var(--space-2) var(--space-4);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--table-divider);
 }
-.submissions-board .pc-data-grid-density {
+.submissions-toolbar > input[type="hidden"] {
   display: none;
 }
 .submissions-filter {
   display: grid;
   gap: 2px;
-  min-width: 0;
-  flex: 1 1 8rem;
+  flex: 0 0 auto;
+  width: max-content;
+  /* Wrap once a control can no longer show its longest value. Growing a
+     wrapped control stretched it across the row. */
+  max-width: 100%;
+  /* WebKit includes a selected native option's intrinsic text width in
+     scroll overflow. Contain the control without clipping Columns below. */
+  overflow: hidden;
 }
 .submissions-filter:first-of-type {
-  flex: 1.4 1 14rem;
-  min-width: 14rem;
+  flex: 1 1 13rem;
+  width: auto;
+  min-width: min(11rem, 100%);
+  max-width: 18rem;
 }
-.submissions-filter-sort {
-  flex: 0 0 12.5rem;
-  min-width: 12.5rem;
-}
-.submissions-filter > span {
+.submissions-filter > span:not(.sr-only) {
   color: var(--text-tertiary);
   font-size: var(--text-2xs);
-  font-weight: var(--weight-semibold);
+  font-weight: var(--weight-medium);
+  line-height: 1.2;
+  white-space: nowrap;
 }
 .submissions-filter .field,
 .submissions-filter .select {
-  min-height: 34px;
+  width: 100%;
   min-width: 0;
+  min-height: 34px;
 }
-.submissions-filter-sort .select {
-  min-width: 12.5rem;
-  width: 12.5rem;
+.submissions-filter :is(.field, .select):focus {
+  /* Keep the shared focus ring visible inside the clipped control wrapper. */
+  outline-offset: calc(-1 * var(--focus-width));
 }
 .submissions-filter-actions {
   display: flex;
   align-items: center;
   gap: var(--space-1);
-  padding-bottom: 1px;
+  padding-bottom: 0;
   flex: 0 0 auto;
+}
+.submissions-toolbar :is(.field, .select, .btn),
+.submissions-board .pc-data-grid-toolbar :is(.select, .btn) {
+  height: var(--control-height);
+  min-height: var(--control-height);
+  padding-block: var(--space-1);
+  font-size: var(--text-sm);
+}
+.submissions-toolbar .btn,
+.submissions-board .pc-data-grid-toolbar .btn {
+  font-weight: var(--weight-medium);
+}
+.submissions-toolbar
+  :is(.field, .select):not(:hover):not(:focus):not(:disabled) {
+  border-color: var(--table-divider);
+}
+.submissions-board
+  .pc-data-grid-toolbar
+  :is(.select, .btn):not(:hover):not(:focus-visible) {
+  border-color: var(--line);
+}
+.submissions-filter-actions .btn.primary {
+  border-color: var(--brand-600);
+  background: var(--brand-600);
+  color: var(--text-inverse);
+  font-weight: var(--weight-semibold);
 }
 .submissions-pager {
   display: flex;
@@ -291,10 +339,18 @@
 .pc-record-route {
   display: block;
   font-size: var(--text-xs);
-  font-weight: var(--weight-semibold);
+  font-weight: var(--weight-normal);
 }
 .pc-record-meta {
   display: block;
+  color: var(--text-tertiary);
+  font-size: var(--text-2xs);
+}
+.submissions-board :is(.pc-record-person, .pc-record-route) {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+.submissions-board :is(.pc-record-meta, .pc-record-email) {
   color: var(--text-tertiary);
   font-size: var(--text-2xs);
 }
@@ -316,11 +372,16 @@
 }
 
 @media (max-width: 1000px) {
-  .submissions-filter {
+  .submissions-filter,
+  .submissions-filter:first-of-type {
     flex: 1 1 calc(50% - var(--space-2));
+    width: auto;
+    max-width: none;
+    min-width: 0;
   }
-  .submissions-filter-sort {
-    flex: 1 1 12.5rem;
+  .submissions-filter .field,
+  .submissions-filter .select {
+    min-width: 0;
   }
   .submissions-filter-actions {
     width: 100%;
@@ -329,12 +390,24 @@
 }
 
 @media (max-width: 600px) {
-  .submissions-filter,
-  .submissions-filter-sort {
-    flex: 1 1 100%;
+  .submissions-toolbar {
+    row-gap: var(--space-3);
   }
-  .submissions-filter-sort .select {
-    width: 100%;
-    min-width: 12.5rem;
+  .submissions-filter,
+  .submissions-filter:first-of-type {
+    flex: 1 1 100%;
+    max-width: none;
+  }
+  .submissions-filter {
+    gap: var(--space-1);
+  }
+  .submissions-board .pc-data-grid-density > span {
+    font-size: var(--text-2xs);
+    font-weight: var(--weight-medium);
+    line-height: 1.2;
+  }
+  .submissions-board .pc-data-grid-toolbar :is(.select, .btn) {
+    height: 44px;
+    min-height: 44px;
   }
 }

@@ -8,6 +8,7 @@ import {
 import { Check, ClipboardCopy, Columns3, X } from "lucide-react";
 import {
   type InputHTMLAttributes,
+  type ReactNode,
   useEffect,
   useMemo,
   useRef,
@@ -169,12 +170,14 @@ type ClipboardFeedback = { ok: boolean; message: string };
 
 export function SubmissionDataGrid({
   submissions,
+  filters,
   columns: visibleOptionalColumns,
   density,
   sort: _sort,
   detailSearchParams = "",
 }: {
   submissions: AdminSubmission[];
+  filters: ReactNode;
   columns: AdminSubmissionOptionalColumn[];
   density: AdminSubmissionDensity;
   sort: AdminSubmissionSort;
@@ -257,32 +260,20 @@ export function SubmissionDataGrid({
   return (
     <>
       <div className="pc-data-grid-toolbar">
-        <div className="pc-data-grid-selection" aria-live="polite">
-          {selectedRows.length ? (
-            <>
-              <strong>
-                {selectedRows.length} of {submissions.length} selected
-              </strong>
-              <Button
-                size="small"
-                type="button"
-                onClick={copySelectedReferences}
-              >
-                <ClipboardCopy aria-hidden size={14} /> Copy references
-              </Button>
-              <Button
-                size="small"
-                type="button"
-                onClick={() => {
-                  table.resetRowSelection(true);
-                  setClipboardFeedback(null);
-                }}
-              >
-                <X aria-hidden size={14} /> Clear selection
-              </Button>
-            </>
-          ) : null}
-        </div>
+        <label className="pc-data-grid-density">
+          <span>Density</span>
+          <select
+            className="select"
+            name="density"
+            value={density}
+            onChange={(event) =>
+              setViewParameter("density", event.target.value, "comfortable")
+            }
+          >
+            <option value="comfortable">Comfortable</option>
+            <option value="compact">Compact</option>
+          </select>
+        </label>
         <details className="pc-data-grid-columns">
           <ButtonSummary size="small">
             <Columns3 aria-hidden size={14} /> Columns
@@ -309,7 +300,35 @@ export function SubmissionDataGrid({
               ))}
           </fieldset>
         </details>
+        <div className="pc-data-grid-selection" aria-live="polite">
+          {selectedRows.length ? (
+            <>
+              <strong>
+                {selectedRows.length} of {submissions.length} selected
+              </strong>
+              <Button
+                size="small"
+                type="button"
+                onClick={copySelectedReferences}
+              >
+                <ClipboardCopy aria-hidden size={14} /> Copy references
+              </Button>
+              <Button
+                size="small"
+                type="button"
+                onClick={() => {
+                  table.resetRowSelection(true);
+                  setClipboardFeedback(null);
+                }}
+              >
+                <X aria-hidden size={14} /> Clear selection
+              </Button>
+            </>
+          ) : null}
+        </div>
       </div>
+
+      {filters}
 
       {clipboardFeedback ? (
         <div

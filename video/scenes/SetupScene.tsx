@@ -344,7 +344,7 @@ export function SetupScene({ duration }: ProductSceneProps) {
           radius={9}
           width={485}
           x={510}
-          y={250}
+          y={244}
         />
       </BrowserWindow>
 
@@ -543,24 +543,23 @@ export function SetupScene({ duration }: ProductSceneProps) {
           <FocusRing
             color={PALETTE.copper}
             height={78}
-            label="Draft preview"
             opacity={
               between(frame, 496, 545, 0, 1, ease) *
               between(frame, 552, 578, 1, 0, ease)
             }
             radius={7}
             width={515}
-            x={500}
-            y={165}
+            x={494}
+            y={149}
           />
           <FocusRing
             color={PALETTE.sageDeep}
-            height={42}
+            height={35}
             opacity={between(frame, 564, 610, 0, 1, ease)}
             radius={7}
-            width={120}
-            x={895}
-            y={573}
+            width={110}
+            x={898}
+            y={557}
           />
         </BrowserWindow>
         <PhonePreview frame={frame} opacity={brand} start={515} />

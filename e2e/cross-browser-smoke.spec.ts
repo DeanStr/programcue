@@ -1,4 +1,11 @@
 import { expect, type Page, test } from "@playwright/test";
+import { expectLongTrackFilterContained } from "./support/application-grid";
+
+test("long track filters do not create page overflow in the browser engine", async ({
+  page,
+}) => {
+  await expectLongTrackFilterContained(page);
+});
 
 async function openHydrated(page: Page, path: string) {
   const response = await page.goto(path);

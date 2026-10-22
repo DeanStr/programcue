@@ -333,6 +333,24 @@ test("keeps notes and session content beside the planner", async ({ page }) => {
   await expect(otherSession).toHaveAccessibleName(
     "View AI in Event Operations details.",
   );
+  const overflowingMetadata = await otherSession
+    .locator("small")
+    .evaluateAll((labels) =>
+      labels
+        .filter((label) => {
+          const card = label.closest(".session-card");
+          if (!card) throw new Error("Session metadata needs a card");
+          return (
+            label.getBoundingClientRect().right >
+            card.getBoundingClientRect().right + 1
+          );
+        })
+        .map((label) => label.textContent),
+    );
+  expect(
+    overflowingMetadata,
+    "Session time and speaker labels must fit inside their card",
+  ).toEqual([]);
   await otherSession.focus();
   await page.keyboard.press("Enter");
   await expect(inspector).toBeVisible();

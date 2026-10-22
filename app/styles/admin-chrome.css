@@ -69,7 +69,7 @@
   border-color: var(--nav);
 }
 
-/* The rail's one spatial change had no continuity: 230px to 76px in a single
+/* The rail's one spatial change had no continuity: 224px to 76px in a single
    frame, reflowing the whole page. Both durations collapse to 1ms under
    prefers-reduced-motion. The class is set a frame after hydration so that
    restoring a stored preference paints as a starting width, not a movement. */
@@ -182,19 +182,10 @@
 }
 
 /* 320: a search field that reads “Search or r…” is overflow, not chrome.
-   Collapse to the search icon; the control already has an accessible name. */
+   Keep the two-row bar so the event name still has a row, and collapse
+   search to its icon. The control already has an accessible name. */
 @media (max-width: 360px) {
-  .app-admin {
-    --topbar: 56px;
-  }
-  .app-admin .topbar {
-    grid-template-columns: 36px minmax(0, 1fr) 36px auto;
-    grid-template-areas: "menu event search actions";
-    row-gap: 0;
-    align-content: center;
-  }
   .app-admin .command-trigger {
-    grid-area: search;
     flex: none;
     width: 36px;
     min-width: 36px;

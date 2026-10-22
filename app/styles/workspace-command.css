@@ -42,15 +42,14 @@
   align-items: flex-end;
   margin-bottom: var(--space-5);
 }
-.command-page-head h1 {
+.app-admin .command-page-head h1 {
   font-size: var(--display-2);
   font-weight: var(--weight-extrabold);
   letter-spacing: var(--tracking-tight);
-  line-height: 0.95;
 }
 .command-page-head .pc-page-header-lede,
 .command-page-head p {
-  margin-top: var(--space-3);
+  margin-top: var(--space-2);
   max-width: 46ch;
   color: var(--text-secondary);
   font-size: var(--text-sm);
@@ -82,10 +81,6 @@
 .command-section-head {
   margin: 0;
   color: var(--text-secondary);
-  font-size: var(--text-base);
-  font-weight: var(--weight-semibold);
-  letter-spacing: var(--tracking-snug);
-  line-height: var(--leading-tight);
 }
 .command-band-head {
   margin: 0;
@@ -202,9 +197,8 @@
   min-width: 0;
 }
 
-/* On track is not a warning. Painting the largest element on the page in
-   copper made a healthy score read as an alarm, so the numeral is ink unless
-   the state itself is coloured; the fill and the state word carry the hue. */
+/* Spend emphasis on readiness rather than generic creation. Critical
+   conditions outrank the percentage; only fully ready events use green. */
 .command-score {
   --score-tone: var(--text-primary);
   --score-label: var(--text-secondary);
@@ -215,7 +209,8 @@
   --score-label: var(--state-good-text);
   --score-fill: var(--state-good-solid);
 }
-.command-score[data-state="at_risk"] {
+.command-score[data-state="at_risk"],
+.command-score[data-state="on_track"][data-has-warnings="true"] {
   --score-tone: var(--state-warn-text);
   --score-label: var(--state-warn-text);
   --score-fill: var(--state-warn-solid);
@@ -239,8 +234,9 @@
   color: var(--score-tone);
   font-size: var(--text-3xl);
   font-weight: var(--weight-extrabold);
-  letter-spacing: -0.045em;
-  line-height: 0.82;
+  letter-spacing: var(--tracking-tight);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 .command-score-unit {
   display: inline-block;
@@ -259,15 +255,14 @@
   padding-bottom: 0.28em;
 }
 .command-score-condition {
-  margin: var(--space-3) 0 0;
+  margin: var(--space-2) 0 0;
   color: var(--score-label);
   font-size: var(--text-sm);
   font-weight: var(--weight-semibold);
 }
-/* The track fills its column. A 192px stub under a 72px numeral read as a
-   leftover; at column width it reads as the gauge it is. */
+/* A full-width, 6px gauge supports comparison beneath the readiness readout. */
 .command-score-track {
-  height: 8px;
+  height: 6px;
   margin: var(--space-5) 0 0;
   background: color-mix(in srgb, var(--score-fill) 16%, var(--track));
   overflow: hidden;
@@ -318,10 +313,14 @@
 }
 .command-top-action {
   --blocker-ink: var(--state-warn-text);
+  --blocker-rail: var(--state-warn-solid);
   --blocker-surface: var(--state-warn-surface);
+  --blocker-border: var(--state-warn-border);
   align-items: center;
+  align-content: center;
   background: var(--blocker-surface);
-  border: 1px solid var(--state-warn-border);
+  border: 1px solid var(--blocker-border);
+  border-left: 3px solid var(--blocker-rail);
   border-radius: var(--radius-sm);
   color: inherit;
   display: grid;
@@ -329,11 +328,24 @@
   grid-template-columns: minmax(0, 1fr) auto;
   padding: var(--space-4);
   text-decoration: none;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+}
+.command-top-action:hover,
+.command-top-action:focus-visible {
+  background: color-mix(
+    in srgb,
+    var(--blocker-rail) 10%,
+    var(--blocker-surface)
+  );
+  border-left-color: var(--blocker-rail);
 }
 .command-top-action.is-danger {
   --blocker-ink: var(--state-bad-text);
+  --blocker-rail: var(--state-bad-solid);
   --blocker-surface: var(--state-bad-surface);
-  border-color: var(--state-bad-border);
+  --blocker-border: var(--state-bad-border);
 }
 .command-top-action-kicker,
 .command-top-action small {
@@ -351,12 +363,13 @@
   grid-row: 1 / span 3;
 }
 .command-top-action-kicker {
-  font-weight: var(--weight-semibold);
-  letter-spacing: var(--tracking-snug);
-  text-transform: uppercase;
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-normal);
 }
 .command-top-action strong {
+  color: var(--text-primary);
   font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
 }
 .command-blocker-group {
   display: grid;
@@ -364,10 +377,9 @@
 .command-blocker-group h3 {
   color: var(--text-tertiary);
   font-size: var(--text-2xs);
-  font-weight: var(--weight-semibold);
-  letter-spacing: var(--tracking-snug);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-normal);
   margin: var(--space-2) 0 0;
-  text-transform: uppercase;
 }
 .command-blocker {
   position: relative;
@@ -581,6 +593,9 @@
   color: var(--text-secondary);
   margin: 0;
   max-width: 62ch;
+}
+.command-ai-unavailable .btn {
+  justify-self: start;
 }
 /* Wrapping flex rather than two fixed tracks. The pair only fits side by side
    once each control clears the widest option it has to show ("Speakers with
@@ -838,9 +853,13 @@ ol.timeline > li > small {
   align-items: start;
   gap: var(--space-5);
 }
+.command-work-overview > div:first-child {
+  display: grid;
+}
 .command-work-counts {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: 1fr;
   gap: var(--space-3);
 }
 .command-work-count {
@@ -848,21 +867,38 @@ ol.timeline > li > small {
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-3);
+  padding: var(--space-3) var(--space-4);
   color: inherit;
-  background: var(--surface-sunken);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
   text-decoration: none;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
 }
-.command-work-count:hover {
-  background: var(--brand-50);
+.command-work-count:hover,
+.command-work-count:focus-visible {
+  background: var(--surface-sunken);
+  border-color: var(--border-strong);
 }
 .command-work-count strong {
   font-size: var(--text-2xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-snug);
+  line-height: 1;
 }
 .command-work-count span {
   font-size: var(--text-xs);
+}
+@media (min-width: 1001px) {
+  .command-work-count {
+    padding: var(--space-3);
+  }
+  .command-work-count strong {
+    letter-spacing: normal;
+    line-height: inherit;
+  }
 }
 @media (max-width: 1000px) {
   .command-work-overview {

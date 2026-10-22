@@ -104,7 +104,7 @@ export default function CommunicationsCentre({
   const setup = loaderData.view === "setup";
   return (
     <>
-      <div className="page-head">
+      <div className="page-head comms-page-head">
         <div>
           <h1>{setup ? "Delivery settings" : "Communications Centre"}</h1>
           <p>

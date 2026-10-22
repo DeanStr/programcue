@@ -74,8 +74,7 @@ export const NAV_ITEMS = [
     "Tasks & readiness",
     "Speaker, session and event readiness work",
   ],
-  /* Files and FileStack are the same stacked-paper outline at 16px, which is
-     exactly the size the rail runs at when the icon is the only label. */
+  /* Files and FileStack share a stacked-paper outline; use a folder here. */
   ["content", FolderOpen, "Session content & files"],
   [
     "programme",

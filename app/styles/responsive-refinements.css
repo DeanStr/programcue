@@ -98,7 +98,7 @@
     min-width: 225px;
   }
   .command-trigger {
-    min-width: 200px;
+    min-width: 0;
   }
   .main {
     padding: var(--space-5);

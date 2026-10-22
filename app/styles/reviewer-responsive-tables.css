@@ -266,6 +266,7 @@
 }
 .reviewer-shell .review-page-head h1 {
   font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
   letter-spacing: var(--tracking-snug);
 }
 .reviewer-shell .review-page-head p {

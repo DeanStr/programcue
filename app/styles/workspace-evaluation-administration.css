@@ -212,9 +212,6 @@
   padding-block: var(--space-2);
 }
 
-.pc-eval-admin .page-head h1 {
-  letter-spacing: var(--tracking-snug);
-}
 .pc-eval-text-action {
   display: inline-flex;
   align-items: center;

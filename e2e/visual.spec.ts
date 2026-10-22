@@ -19,6 +19,7 @@ const SURFACES: readonly Surface[] = [
   { name: "event-setup", path: "/admin/event" },
   { name: "branding", path: "/admin/branding" },
   { name: "command-centre", path: "/admin/command" },
+  { name: "applications", path: "/admin/submissions" },
   { name: "form-builder", path: "/admin/submissions/form" },
   {
     name: "review-workbench",
@@ -164,6 +165,43 @@ async function waitForSurfaceReady(page: Page, name: string) {
     await expect(
       page.getByText("Changes update the draft immediately."),
     ).toBeVisible();
+    const hintBounds = await page
+      .locator("#form-builder .fb-canvas > .fb-pane-head")
+      .evaluate((header) => {
+        const hint = header.querySelector(".fb-pane-hint");
+        if (!hint) throw new Error("Form canvas hint is missing");
+        const outer = header.getBoundingClientRect();
+        const inner = hint.getBoundingClientRect();
+        return {
+          leftInset: inner.left - outer.left,
+          rightInset: outer.right - inner.right,
+          bottomInset: outer.bottom - inner.bottom,
+        };
+      });
+    expect(
+      hintBounds.leftInset,
+      "Canvas hint needs a left inset",
+    ).toBeGreaterThanOrEqual(8);
+    expect(
+      hintBounds.rightInset,
+      "Canvas hint needs a right inset",
+    ).toBeGreaterThanOrEqual(8);
+    expect(
+      hintBounds.bottomInset,
+      "Canvas hint must stay inside its header",
+    ).toBeGreaterThanOrEqual(0);
+    const layout = editor.getByLabel("Applicant layout");
+    if (await layout.isVisible()) {
+      const overflow = await layout.evaluate((element) => {
+        const label = element.closest("label");
+        if (!label) throw new Error("Applicant layout needs a label");
+        return label.scrollWidth - label.clientWidth;
+      });
+      expect(
+        overflow,
+        "Applicant layout and help must fit the outline pane",
+      ).toBeLessThanOrEqual(1);
+    }
   } else if (name === "communications") {
     await expect(
       page.getByRole("heading", { name: "Template versions" }),
@@ -419,6 +457,12 @@ test.describe
       await openHydrated(page, "/admin/submissions/form");
       await waitForSurfaceReady(page, "form-builder");
       await expect(
+        page.getByRole("heading", {
+          name: "Call for Speakers Form Builder",
+          exact: true,
+        }),
+      ).toBeInViewport();
+      await expect(
         page.getByRole("region", {
           name: "Visual call-for-speakers form editor",
         }),
@@ -524,6 +568,65 @@ test.describe
       await resetDemoEvent(request);
     });
 
+    test("ordinary administration pages share one title role per viewport", async ({
+      page,
+    }) => {
+      const styles = [];
+      for (const route of [
+        "/admin/submissions",
+        "/admin/communications",
+        "/admin/event",
+        "/admin/branding",
+        "/admin/review",
+        "/admin/speakers",
+        "/admin/crm",
+        "/admin/crm/pipeline",
+        "/admin/crm/outreach",
+        "/admin/programme",
+        "/admin/tasks",
+        "/admin/resources",
+      ]) {
+        await openHydrated(page, route);
+        if (
+          route === "/admin/resources" &&
+          (page.viewportSize()?.width ?? 0) > 760
+        ) {
+          const title = await page
+            .getByRole("textbox", { name: "Title", exact: true })
+            .boundingBox();
+          const slug = await page
+            .getByRole("textbox", { name: "URL slug", exact: true })
+            .boundingBox();
+          expect(title, "Resource title should be measured").toBeTruthy();
+          expect(slug, "Resource slug should be measured").toBeTruthy();
+          expect(
+            Math.abs(title!.y - slug!.y),
+            "Adjacent resource controls should share a top edge",
+          ).toBeLessThanOrEqual(1);
+          expect(
+            Math.abs(title!.height - slug!.height),
+            "Adjacent resource controls should share a height",
+          ).toBeLessThanOrEqual(1);
+        }
+        styles.push(
+          await page
+            .getByRole("heading", { level: 1 })
+            .first()
+            .evaluate((element) => {
+              const style = getComputedStyle(element);
+              return {
+                fontFamily: style.fontFamily,
+                fontSize: style.fontSize,
+                fontWeight: style.fontWeight,
+                lineHeight: style.lineHeight,
+                letterSpacing: style.letterSpacing,
+              };
+            }),
+        );
+      }
+      for (const style of styles) expect(style).toEqual(styles[0]);
+    });
+
     for (const surface of SURFACES) {
       test(`${surface.name} uses the Program Cue visual system`, async ({
         page,
@@ -572,6 +675,48 @@ test.describe
         await expectDocumentContained(page, surface.name);
       });
     }
+
+    test("speaker directory controls and contact typography retain reviewed visual baselines", async ({
+      page,
+    }) => {
+      await openHydrated(page, "/admin/crm");
+      // Other workflows legitimately add organisation-wide contacts/events.
+      // Protect the changed components without pinning their changing totals.
+      await captureState(
+        page,
+        page.locator(".crm-toolbar"),
+        "speaker-directory-filters",
+      );
+      await captureState(
+        page,
+        page.locator(".crm-aux:has(> .crm-disclosure)"),
+        "speaker-directory-actions",
+      );
+      await page
+        .getByPlaceholder("Name or email", { exact: true })
+        .fill("priya.speaker@example.com");
+      await expect
+        .poll(() => new URL(page.url()).searchParams.get("query"))
+        .toBe("priya.speaker@example.com");
+      const contact = page.locator(".crm-person-copy").filter({
+        has: page.getByRole("link", { name: "Priya Shah", exact: true }),
+      });
+      await contact.scrollIntoViewIfNeeded();
+      const contactBounds = await contact.boundingBox();
+      if (!contactBounds)
+        throw new Error("The baseline contact should be visible");
+      // Auto table columns can widen when another test adds a long name.
+      // Preserve the actual name/email pixels in a stable component crop.
+      await expect(page).toHaveScreenshot("speaker-directory-contact.png", {
+        clip: {
+          x: contactBounds.x,
+          y: contactBounds.y,
+          width: 200,
+          height: 44,
+        },
+      });
+      await expectDocumentContained(page, "speaker-directory");
+    });
 
     test("mounted workspace panels retain reviewed visual baselines", async ({
       page,

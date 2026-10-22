@@ -523,6 +523,7 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
         <section
           className="command-score"
           data-state={loaderData.readiness.status}
+          data-has-warnings={loaderData.readiness.warningConditionCount > 0}
         >
           <h2 className="command-section-head command-score-kicker">
             Overall readiness

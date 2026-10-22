@@ -24,18 +24,15 @@
     grid-template-columns: minmax(0, 1fr);
     gap: var(--space-6);
   }
-  .command-score-reading strong {
-    font-size: clamp(48px, 11vw, 72px);
-  }
 }
 
 @media (max-width: 760px) {
+  .app-admin .command-page-head h1 {
+    font-size: var(--text-2xl);
+  }
   .command-page-head {
     align-items: flex-start;
     margin-bottom: var(--space-5);
-  }
-  .command-page-head h1 {
-    font-size: var(--text-2xl);
   }
   .command-page-head .page-actions {
     justify-content: flex-start;
@@ -114,12 +111,6 @@
 }
 
 @media (max-width: 360px) {
-  .command-page-head h1 {
-    font-size: var(--text-xl);
-  }
-  .command-score-reading strong {
-    font-size: 48px;
-  }
   .command-blocker {
     gap: var(--space-2);
   }
