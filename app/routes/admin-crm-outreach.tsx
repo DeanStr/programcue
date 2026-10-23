@@ -116,15 +116,12 @@ export default function AdminCrmOutreach({ loaderData }: Route.ComponentProps) {
       <div className="page-head pc-page-header">
         <div>
           <h1>Bulk speaker invitations</h1>
-          <p className="crm-caption">
-            Select at least two speaker contacts, write an event-specific
-            invitation, then use the existing authoritative preview and
-            confirmation workflow.
-          </p>
         </div>
-        <ButtonLink to="/admin/crm">
-          <ArrowLeft aria-hidden size={15} /> Speaker directory
-        </ButtonLink>
+        <div className="page-actions">
+          <ButtonLink to="/admin/crm">
+            <ArrowLeft aria-hidden size={15} /> Speaker directory
+          </ButtonLink>
+        </div>
       </div>
       {actionData ? (
         <div className="validation-item error crm-notice" role="alert">
@@ -140,6 +137,7 @@ export default function AdminCrmOutreach({ loaderData }: Route.ComponentProps) {
         />
         <section>
           <h2>Selected contacts</h2>
+          <p className="help">Select at least two contacts.</p>
           <div className="stack mt">
             {loaderData.contacts.map((contact) => {
               const checked = loaderData.selected.some(

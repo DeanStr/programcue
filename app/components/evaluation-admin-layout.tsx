@@ -16,9 +16,6 @@ export function EvaluationHeader() {
     <div className="page-head">
       <div>
         <h1>Review &amp; selection</h1>
-        <p>
-          Configure review, assign evaluators and release programme decisions.
-        </p>
       </div>
       <div className="page-actions">
         <ButtonLink to="/review/workbench">Open reviewer workspace</ButtonLink>

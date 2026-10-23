@@ -141,13 +141,6 @@ export async function action({ request, context }: Route.ActionArgs) {
 
 export const meta = () => [{ title: "Bulk sessions · Program Cue" }];
 
-function actionDescription(action: SessionBulkAction) {
-  if (action === "add_tag") return "Add a reusable event tag";
-  if (action === "remove_tag") return "Remove one event tag";
-  if (action === "archive") return "Hide inactive unscheduled sessions";
-  return "Restore each session to its prior status";
-}
-
 function itemChange(
   item: NonNullable<
     Route.ComponentProps["loaderData"]["operation"]
@@ -183,12 +176,7 @@ export default function AdminSessionBulk({ loaderData }: Route.ComponentProps) {
     <>
       <div className="page-head pc-page-header">
         <div>
-          <span className="pc-page-eyebrow">Preview · confirm · audit</span>
           <h1>Bulk session updates</h1>
-          <p>
-            Select exact records, review every change and commit them as one
-            tenant-scoped operation.
-          </p>
         </div>
         <div className="page-actions">
           <ButtonLink to="/admin/schedule">Open schedule</ButtonLink>
@@ -235,7 +223,6 @@ export default function AdminSessionBulk({ loaderData }: Route.ComponentProps) {
                 <option value="archive">Archive</option>
                 <option value="restore">Restore</option>
               </select>
-              <span className="help">{actionDescription(bulkAction)}</span>
             </label>
             {bulkAction === "add_tag" ? (
               <label className="label">
@@ -362,7 +349,6 @@ export default function AdminSessionBulk({ loaderData }: Route.ComponentProps) {
           {!loaderData.workspace.sessions.length ? (
             <EmptyState
               title="No sessions to update"
-              description="Accepted or directly created sessions will appear here."
               action={
                 <ButtonLink variant="primary" to="/admin/schedule">
                   Open schedule

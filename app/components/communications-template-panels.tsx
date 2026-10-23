@@ -77,7 +77,6 @@ export function TemplateVersionList({
             className="comms-empty"
             icon={FileText}
             title="No templates yet"
-            description="Create the first versioned email template with the editor beside this list."
           />
         )}
       </div>

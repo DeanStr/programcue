@@ -80,7 +80,6 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           <BrandMark />
           <span>Program Cue</span>
         </div>
-        <span className="pc-page-eyebrow">Account ready</span>
         <h1>No workspace access yet</h1>
         <p>
           {evaluation

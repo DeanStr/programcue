@@ -618,9 +618,6 @@ export function ItineraryPanel({ model }: { model: PublicProgrammeModel }) {
     >
       <div className="itinerary-head">
         <div>
-          <p className="itinerary-kicker">
-            {shared ? "Shared with you" : "Personal schedule"}
-          </p>
           <h2>{shared ? "Shared itinerary" : "My itinerary"}</h2>
         </div>
         <span className="itinerary-count">

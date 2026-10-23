@@ -850,9 +850,7 @@ test.describe
       await expect(
         routing.getByText(/Selected “Event Operations” →/),
       ).toContainText("No automatic review-team route configured");
-      await expect(routing).toContainText(
-        "Review-team routing records the intended review destination",
-      );
+      await expect(routing).toContainText("Routing does not assign evaluators");
       await expect(
         page.getByRole("link", { name: "Open in Review" }),
       ).toHaveAttribute(
@@ -901,6 +899,9 @@ test.describe
           exact: true,
         }),
       });
+      await expect(directSession).toContainText(
+        "Adding the session emails a portal invitation",
+      );
       await directSession
         .getByLabel("Session title")
         .fill(`Sponsor briefing ${unique}`);

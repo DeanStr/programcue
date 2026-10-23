@@ -3,6 +3,7 @@ import { Form, Link } from "react-router";
 import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
 import { Button, ButtonLink } from "~/components/ui/button";
 import { useConfirm } from "~/components/ui/confirm-dialog";
+import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EventDateTime } from "~/components/ui/event-date-time";
 import { EmptyState } from "~/components/ui/states";
 import { shortReference } from "~/lib/short-reference";
@@ -47,9 +48,6 @@ export function EvaluationSubmissionQueue() {
       <div className="card-title">
         <div>
           <h2>Proposal assignments and decisions</h2>
-          <p className="subtle">
-            Assign proposal reviews, inspect evidence and release decisions.
-          </p>
           {!loaderData.aiReviewAssessmentsSupported ? (
             <p className="help">
               AI first-pass assessments are unavailable while Airtable is the
@@ -78,8 +76,11 @@ export function EvaluationSubmissionQueue() {
       </div>
       {loaderData.canManageAiAssessments ? (
         <p className="help">
-          AI first-pass destination: {providerDescription}. Opening the request
-          details sends nothing; generation requires confirmation.
+          {provider
+            ? `AI first-pass destination: ${providerDescription}.`
+            : providerDescription}{" "}
+          Opening the request details sends nothing; generation requires
+          confirmation.
         </p>
       ) : null}
       {loaderData.submissions.length ? (
@@ -585,11 +586,10 @@ export function EvaluationSubmissionQueue() {
                       </div>
                     </td>
                     <td data-label="Status">
-                      <span
-                        className={`status ${terminal ? "success" : "info"}`}
-                      >
-                        {submission.status.replaceAll("_", " ")}
-                      </span>
+                      <DomainStatusBadge
+                        domain="submission"
+                        status={submission.status}
+                      />
                     </td>
                     <td data-label="Reviews">
                       <span>
@@ -730,10 +730,7 @@ export function EvaluationSubmissionQueue() {
           </table>
         </section>
       ) : (
-        <EmptyState
-          title="No submitted proposals"
-          description="Published form submissions will appear here."
-        />
+        <EmptyState title="No submitted proposals" />
       )}
     </section>
   );

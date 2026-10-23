@@ -1,5 +1,8 @@
 import { data, Form, useActionData } from "react-router";
-import { SubmissionDataGrid } from "~/components/submission-data-grid";
+import {
+  SUBMISSION_FILTER_FORM_ID,
+  SubmissionDataGrid,
+} from "~/components/submission-data-grid";
 import { Button, ButtonLink } from "~/components/ui/button";
 import { statusPresentation } from "~/components/ui/domain-status-badge";
 import { adminRecordBreadcrumbLabelAtPath } from "~/modules/administration/admin-route-breadcrumb";
@@ -229,9 +232,6 @@ export default function SubmissionsAdmin({ loaderData }: Route.ComponentProps) {
       <div className="page-head">
         <div>
           <h1>Applications</h1>
-          <p>
-            Track applications from private draft through programme decision.
-          </p>
         </div>
         <div className="page-actions">
           <ButtonLink to="/admin/submissions/form">Form Builder</ButtonLink>
@@ -271,13 +271,12 @@ export default function SubmissionsAdmin({ loaderData }: Route.ComponentProps) {
         <SubmissionDataGrid
           key={`${page}:${filters.status}:${filters.category}:${filters.query}:${filters.routing}:${filters.sort}`}
           filters={
-            <Form method="get" className="submissions-toolbar" role="search">
-              <input
-                type="hidden"
-                name="columns"
-                value={view.columns.join(",")}
-              />
-              <input type="hidden" name="density" value={view.density} />
+            <Form
+              id={SUBMISSION_FILTER_FORM_ID}
+              method="get"
+              className="submissions-toolbar"
+              role="search"
+            >
               <label className="submissions-filter">
                 <span>Search</span>
                 <input

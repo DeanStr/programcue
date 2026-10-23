@@ -504,7 +504,6 @@ export function PublicTimetableSurface({
       <SurfaceHeading
         title="Timetable"
         id="public-timetable-title"
-        description="Compare times and rooms at a glance. Open a session to see the details included in this timetable."
         count={`${sessionCount} sessions`}
       />
       {!model.embedded && model.showControl("day") ? (

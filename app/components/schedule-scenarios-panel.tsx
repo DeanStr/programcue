@@ -124,8 +124,6 @@ export function ScheduleScenariosPanel({
             Compare before changing the draft
           </h2>
           <p className="help">
-            Prepare the deterministic placement proposal, choose the moves that
-            define an alternative, then save it privately for comparison.
             Scenarios never replace or publish the active schedule.
           </p>
           {!scenarioCapacityAvailable ? (
@@ -266,14 +264,14 @@ export function ScheduleScenariosPanel({
       ) : (
         <p className="schedule-scenario-empty">
           {scenarioCreationAvailable
-            ? "No saved scenarios yet. Prepare the current deterministic proposal, then choose which moves to preserve as an alternative."
+            ? "No saved scenarios yet."
             : "No saved scenarios. Create an editable draft with eligible unscheduled sessions to prepare one."}
         </p>
       )}
       {preparedPreview ? (
         <AutoPlacementPreviewDialog
           title={`Save scenario · ${scenarioName}`}
-          intro="Choose the proposed moves that define this named alternative. Saving keeps the active draft unchanged."
+          intro="Saving keeps the active draft unchanged."
           preview={preparedPreview}
           workspace={workspace}
           sessionById={
@@ -292,7 +290,7 @@ export function ScheduleScenariosPanel({
       {selectedScenario ? (
         <AutoPlacementPreviewDialog
           title={`Scenario · ${selectedScenario.name}`}
-          intro="Compare this saved proposal with the active draft. Applying selected placements changes only the draft and never publishes it."
+          intro="Applying selected placements changes only the draft and never publishes it."
           preview={selectedScenario.preview}
           workspace={workspace}
           sessionById={

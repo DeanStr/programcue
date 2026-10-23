@@ -60,7 +60,6 @@
   --format-ink: #0f5f56;
   --green: #3a5f42;
   --amber: #d97706;
-  --red: #dc2626;
   --blue: #2563eb;
   --orange: #c2410c;
   --cyan: #0e7490;
@@ -165,23 +164,33 @@
     var(--state-good-solid) 24%,
     var(--border)
   );
-  /* Warning is deliberately gold rather than orange-brown. Copper owns brand
-     and informational emphasis; a separate hue keeps operational risk legible
-     at a glance without borrowing the red family used for failures. */
-  --state-warn-solid: #8a6500;
+  /* Warning is deliberately gold rather than orange-brown. Copper owns brand,
+     primary actions, links and selection only; no state borrows it, so a
+     status never reads as an action and an action never reads as a risk.
+     The solid is a clear amber-gold; the darker #8a6500 read olive-brown in
+     thin meters. It paints marks only (3.29:1 on the track), never text. */
+  --state-warn-solid: #a67700;
   --state-warn-text: #6f5200;
-  --state-warn-surface: #f4edd4;
-  --state-warn-surface-subtle: #faf6ea;
+  --state-warn-surface: #f8f0d8;
+  --state-warn-surface-subtle: #fcf8ec;
   /* The counterpart to --state-bad-border, which already existed. Three files
      were typing this value by hand. */
   --state-warn-border: #d4a72c;
-  --state-bad-solid: #dc2626;
-  --state-bad-text: #991b1b;
-  --state-bad-surface: #f6eeec;
-  --state-bad-border: #e8cfc9;
-  --state-info-solid: var(--brand-600);
-  --state-info-text: var(--brand-700);
-  --state-info-surface: var(--brand-50);
+  /* Failure is crimson (hue ~345°), not the 0° red that sat 14° from copper
+     and made brand actions, copper links and errors read as one signal. Its
+     surface is a near-neutral rose: the crimson rail and text carry the
+     signal, and a saturated pink read as decoration rather than failure. */
+  --state-bad-solid: #be123c;
+  --state-bad-text: #9f1239;
+  --state-bad-surface: #f7f1f1;
+  --state-bad-border: #e6d3d6;
+  /* In-progress and informational states (Submitted, Assigned, Queued,
+     Running, Draft) are a muted steel blue: calm, distinct from copper
+     actions, gold risk and crimson failure, and grey enough to sit with the
+     forest navigation. Selection keeps the brand tint. */
+  --state-info-solid: #3f6d90;
+  --state-info-text: #2d5677;
+  --state-info-surface: #edf2f6;
   --track: #e8eae3;
 
   /* --- Borders ----------------------------------------------------------- */

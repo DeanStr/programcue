@@ -88,7 +88,7 @@ export function SpeakerFilesPanel({
             },
           ]}
           heading="Upload a headshot"
-          description="Headshots are reusable profile media. Upload slides, handouts, posters and session videos from the corresponding task; completed uploads are also listed here."
+          description="Upload slides, handouts, posters and session videos from the corresponding task."
         />
       </div>
       <div className="speaker-work-list">
@@ -477,7 +477,6 @@ export function SpeakerProfilePanel({
           <input type="hidden" name="intent" value="save-custom-fields" />
           <div className="card-title">
             <div>
-              <span className="pc-section-kicker">Event-specific</span>
               <h2>Additional information</h2>
             </div>
           </div>

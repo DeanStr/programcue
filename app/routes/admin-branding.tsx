@@ -618,10 +618,6 @@ export default function AdminBranding({ loaderData }: Route.ComponentProps) {
       <div className="page-head branding-page-head">
         <div>
           <h1>Branding</h1>
-          <p>
-            Preview one event identity, save it as a draft, then publish it to
-            every participant-facing surface.
-          </p>
         </div>
       </div>
 
@@ -741,8 +737,7 @@ export default function AdminBranding({ loaderData }: Route.ComponentProps) {
               <div>
                 <h2>Brand images</h2>
                 <p className="help">
-                  Image bytes are validated and kept in private file storage.
-                  Only published selections are available publicly.
+                  Stored privately. Only published images are public.
                 </p>
               </div>
             </header>
@@ -784,7 +779,6 @@ export default function AdminBranding({ loaderData }: Route.ComponentProps) {
             }
             footer={
               <div className="branding-preview-commit">
-                <p className="help">Publishing is explicit and audited.</p>
                 <Button
                   variant="primary"
                   type="button"

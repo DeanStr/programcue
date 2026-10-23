@@ -200,7 +200,9 @@
 }
 
 /* One filled control per row. Secondary work is a text disclosure. */
-.tasks-assigned .pc-record-action-cell,
+/* The row is a wrapper, not the cell: a flex <td> stops being a table cell,
+   so its divider sat at its own content height instead of the row's. */
+.tasks-assigned .task-admin-action-row,
 .tasks-assigned .task-admin-actions {
   display: flex;
   flex-wrap: wrap;
@@ -223,7 +225,7 @@
 .tasks-assigned .task-ghost:hover {
   color: var(--ink);
 }
-.tasks-assigned .pc-record-action-cell details[open] {
+.tasks-assigned .task-admin-action-row details[open] {
   width: 100%;
 }
 .task-bottom {
@@ -292,6 +294,9 @@
     padding: 0;
     border: 0;
     background: transparent;
+  }
+  .tasks-assigned .task-admin-action-row {
+    display: block;
   }
   .tasks-assigned .pc-responsive-table td::before,
   .tasks-assigned .pc-responsive-table .pc-record-primary-cell::before,

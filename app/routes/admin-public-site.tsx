@@ -618,10 +618,6 @@ export default function AdminPublicSite({ loaderData }: Route.ComponentProps) {
       <div className="page-head pc-page-header">
         <div>
           <h1>Event website</h1>
-          <p>
-            Compose a bounded homepage and pages from approved event and
-            programme records.
-          </p>
         </div>
         <div className="page-actions">
           {loaderData.published ? (

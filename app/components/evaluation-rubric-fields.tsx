@@ -79,8 +79,8 @@ export function RubricFields({
         Yes/no, dropdown and free-text criteria are contextual and must have
         zero weight. Every scored criterion is required; contextual criteria may
         be optional. Dropdown options are saved in the order entered, separated
-        by commas. Leave the final row blank unless another criterion is needed.
-        Clear an existing criterion name to remove that criterion when you save.
+        by commas. Clear an existing criterion name to remove that criterion
+        when you save.
       </p>
       {rows.map((criterion, index) => (
         <div className="card pad" key={criterion.id ?? `new-${index}`}>

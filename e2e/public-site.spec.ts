@@ -1123,11 +1123,13 @@ test("draft preview stays in its column and does not cover promotion", async ({
   /* The two commitments this page exists for stay on screen once a panel is
      long enough to scroll: the editor toolbar carries Save rather than the foot
      of the column it saves, and the preview card is capped to the sticky
-     viewport so its commit bar is not the part that falls off the bottom. */
+     viewport so its commit bar is not the part that falls off the bottom.
+     Scroll to the end rather than to a heading: whether a heading is already
+     in view depends on how much copy precedes it. */
   await openSitePanel(page, "Sponsors");
-  await page
-    .getByRole("heading", { name: "Add a sponsor" })
-    .scrollIntoViewIfNeeded();
+  await page.evaluate(() =>
+    window.scrollTo(0, document.documentElement.scrollHeight),
+  );
   await expect(
     page.getByRole("button", { name: "Save website draft" }),
   ).toBeInViewport();

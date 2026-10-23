@@ -119,21 +119,19 @@ export async function loader({ request, context }: Route.LoaderArgs) {
               count: shellContext.notificationCounts.overdueTasks,
               href: "/admin/tasks?state=overdue",
               severity: "danger" as const,
-              detail: "Past their due date and still open",
             },
             {
               label: "Blocking schedule conflicts",
               count: shellContext.notificationCounts.scheduleConflicts,
               href: "/admin/schedule?filter=conflicts",
               severity: "danger" as const,
-              detail: "Revalidated at publication, and blocking until resolved",
+              detail: "Blocks publication until resolved",
             },
             {
               label: "Failed operations",
               count: shellContext.notificationCounts.failedOperations,
               href: "/admin/operations?status=failed",
               severity: "warning" as const,
-              detail: "Inspect the error, then retry or archive the alert",
             },
           ].filter((notification) => notification.count > 0),
   };

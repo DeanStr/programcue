@@ -152,9 +152,7 @@ export function SponsorAssets({
               >
                 {hidden("stage-logo", a)}
                 <p>
-                  Review the website details below and select this approved logo
-                  for the website draft. Company profile details are prefilled;
-                  editing this public copy does not change the company profile.
+                  Editing this public copy does not change the company profile.
                   Publish the website separately.
                 </p>
                 <label className="label">

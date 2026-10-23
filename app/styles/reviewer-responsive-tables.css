@@ -113,7 +113,11 @@
 .reviewer-shell .queue-card-state::first-letter {
   text-transform: uppercase;
 }
+/* Atomic, so the reference moves to the next line whole and only breaks
+   inside itself when it is wider than the rail. */
 .reviewer-shell .queue-card-state .pc-num {
+  display: inline-block;
+  max-width: 100%;
   color: var(--text-tertiary);
   font-weight: var(--weight-normal);
 }
@@ -957,6 +961,18 @@
   .reviewer-shell .review-score-body {
     overflow-y: auto;
     scrollbar-gutter: stable;
+    /* Fields leave under a fade instead of being sliced mid-line above the
+       action bar; the padding lets the last field scroll clear of it. */
+    padding-bottom: var(--space-5);
+    mask-image: linear-gradient(
+      to bottom,
+      black calc(100% - var(--space-5)),
+      transparent
+    );
+  }
+  /* The action bar, with its own save state, is always in view here. */
+  .reviewer-shell .review-head-status {
+    display: none;
   }
   .reviewer-shell .review-score-head {
     position: sticky;

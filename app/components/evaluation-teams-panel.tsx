@@ -25,10 +25,6 @@ export function EvaluationTeamsPanel() {
       <div className="card-title">
         <div>
           <h2>Evaluation teams</h2>
-          <p className="subtle">
-            Team assignments expand to each active member and preserve the team
-            on the assignment audit trail.
-          </p>
         </div>
         <span className="status info right">{loaderData.teams.length}</span>
       </div>
@@ -227,9 +223,9 @@ export function EvaluationTeamsPanel() {
                 {team.status}
               </span>
             </div>
-            <p className="subtle">
-              {team.description || "No team description"}
-            </p>
+            {team.description ? (
+              <p className="subtle">{team.description}</p>
+            ) : null}
             {team.members.length ? (
               <ul className="list-clean">
                 {team.members.map((member) => (

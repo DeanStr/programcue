@@ -554,10 +554,6 @@ export function EventSetupForm({
         <div className="page-head event-setup-page-head">
           <div>
             <h1>Event settings</h1>
-            <p>
-              Configure event identity, programme structure, access and delivery
-              defaults.
-            </p>
           </div>
           <div className="page-actions">
             <ButtonLink to="/admin/event/fields">
@@ -646,7 +642,6 @@ export function EventSetupForm({
             <AdminPageSection
               id="event-setup-identity"
               label="Identity"
-              description="How this event is named internally and how it presents itself to participants and the public."
               defaultExpandedOnMobile
             >
               <div className="grid">
@@ -666,7 +661,6 @@ export function EventSetupForm({
             <AdminPageSection
               id="event-setup-structure"
               label="Programme structure"
-              description="The rooms, tracks and session formats the schedule builder can draw on."
               defaultExpandedOnMobile
             >
               <div className="grid">
@@ -711,7 +705,6 @@ export function EventSetupForm({
             <AdminPageSection
               id="event-setup-access"
               label="Access and roles"
-              description="Who can administer this event, and how applicants reach the submission form."
               defaultExpandedOnMobile
             >
               <EventAccessPanels
@@ -727,7 +720,6 @@ export function EventSetupForm({
             <AdminPageSection
               id="event-setup-data"
               label="Data and files"
-              description="Upload limits, where event data is authoritative, and how long it is kept."
               defaultExpandedOnMobile
             >
               <div className="grid grid-2">

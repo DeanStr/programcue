@@ -11,8 +11,7 @@ export function EvaluationDiscussionPanel() {
   if (!discussion) {
     return (
       <p className="subtle">
-        Choose a proposal with Open discussion, or add <code>?submission=</code>{" "}
-        to the Results URL, to load that committee thread.
+        Choose a proposal with Open discussion to load its committee thread.
       </p>
     );
   }

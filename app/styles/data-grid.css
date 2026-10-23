@@ -74,7 +74,7 @@
   background: color-mix(in srgb, var(--ink) 3%, var(--surface));
 }
 .data-table tr.pc-focused-record td {
-  background: var(--state-info-surface);
+  background: var(--brand-50);
 }
 .data-table tr.pc-focused-record {
   scroll-margin-top: 96px;

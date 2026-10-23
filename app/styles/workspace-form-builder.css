@@ -204,10 +204,6 @@
 .fb-pane-head .right {
   margin-left: auto;
 }
-.fb-pane-hint {
-  color: var(--text-tertiary);
-  font-size: var(--text-2xs);
-}
 .fb-draft-pill {
   color: var(--text-tertiary);
   font-size: var(--text-2xs);
@@ -1313,11 +1309,6 @@
     flex: 0 0 auto;
     align-items: flex-start;
     gap: var(--space-1);
-  }
-  .fb-canvas > .fb-pane-head .fb-pane-hint {
-    flex-basis: 100%;
-    margin-left: 0;
-    line-height: var(--leading-normal);
   }
   .program-cue-form-canvas {
     height: auto;

@@ -124,7 +124,7 @@ export function AdminPublicSiteSponsors({
     >
       <SitePanelHeading
         title="Sponsors"
-        help="Sponsor records are snapshotted onto the public site only when the site is published."
+        help="Sponsors reach the public site only when it is published."
       />
       {blockedReason ? (
         <p className="validation-item warn" role="status">

@@ -194,10 +194,10 @@
   background: var(--state-good-solid);
 }
 .pc-eval-flag.is-info {
-  color: var(--text-accent);
+  color: var(--state-info-text);
 }
 .pc-eval-flag.is-info::before {
-  background: var(--brand-500);
+  background: var(--state-info-solid);
 }
 
 .pc-eval-round .card-title {

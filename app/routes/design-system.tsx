@@ -29,6 +29,7 @@ const SWATCHES = [
   ["Brand", "--brand-600", "Primary actions"],
   ["Ink", "--ink", "Core content"],
   ["Canvas", "--canvas", "Work surfaces"],
+  ["In progress", "--state-info-solid", "Active, normal work"],
   ["Success", "--state-good-solid", "Completed work"],
   ["Warning", "--state-warn-solid", "Attention needed"],
   ["Danger", "--state-bad-solid", "Blocking issues"],
@@ -109,8 +110,8 @@ export default function DesignSystem() {
               <h2>Colour and hierarchy</h2>
             </div>
             <p>
-              Copper carries product actions. Event identity and semantic states
-              remain independent.
+              Copper carries product actions, links and selection. No state
+              borrows it, and event identity remains independent.
             </p>
           </div>
           <div className="pc-swatch-grid">

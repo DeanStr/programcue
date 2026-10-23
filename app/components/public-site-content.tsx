@@ -47,19 +47,16 @@ function dayCount(start: string, end: string) {
 
 function HomeSection({
   title,
-  kicker,
   className = "",
   children,
 }: {
   title: string;
-  kicker?: string;
   className?: string;
   children: ReactNode;
 }) {
   return (
     <section className={`public-site-section ${className}`.trim()}>
       <div className="public-site-section-heading">
-        {kicker ? <p className="public-site-section-kicker">{kicker}</p> : null}
         <h2>{title}</h2>
       </div>
       {children}
@@ -254,11 +251,7 @@ export function PublicSiteHome({
       </HomeSection>
     ),
     featured_speakers: (
-      <HomeSection
-        title="Featured speakers"
-        kicker="The people on stage"
-        className="public-site-speakers"
-      >
+      <HomeSection title="Featured speakers" className="public-site-speakers">
         <div className="public-site-feature-grid">
           {featuredSpeakers.map((speaker) => (
             <PreviewSafeLink
@@ -291,7 +284,6 @@ export function PublicSiteHome({
     featured_sessions: (
       <HomeSection
         title="Featured sessions"
-        kicker="Start here"
         className={`public-site-sessions${
           featuredSessions.length <= 2 ? " is-pair" : ""
         }`}
@@ -367,7 +359,6 @@ export function PublicSiteHome({
     faq: (
       <HomeSection
         title="Frequently asked questions"
-        kicker="Before you arrive"
         className="public-site-faq-section"
       >
         <div className="public-site-faq">

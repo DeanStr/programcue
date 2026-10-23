@@ -416,7 +416,7 @@ body:has(.sidebar-is-collapsed) {
   z-index: 1;
 }
 .pc-menu-item[aria-current="true"] {
-  background: var(--state-info-surface);
+  background: var(--brand-50);
 }
 .pc-menu-item[aria-current="true"]::before {
   opacity: 1;

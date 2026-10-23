@@ -2,6 +2,7 @@ import { Sparkles } from "lucide-react";
 import { Link, useFetcher } from "react-router";
 import { useReviewWorkbenchModel } from "~/components/review-workbench-model";
 import { Button } from "~/components/ui/button";
+import { statusPresentation } from "~/components/ui/status-presentation";
 import { buildUnansweredReviewerAiImport } from "~/modules/evaluations/reviewer-ai-import";
 import type { action } from "~/routes/review-workbench.server";
 
@@ -75,7 +76,7 @@ export function ReviewQueuePanel() {
                     <span aria-hidden="true"> · </span>
                   </>
                 ) : null}
-                {assignment.status.replaceAll("_", " ")}{" "}
+                {statusPresentation("review", assignment.status).label}{" "}
                 <span aria-hidden="true">·</span>{" "}
                 <span className="pc-num">{assignment.reference}</span>
               </small>

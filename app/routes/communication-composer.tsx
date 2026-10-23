@@ -498,9 +498,7 @@ export default function CommunicationComposer({
     <div className="pc-compose">
       {dialog}
       <PageHeader
-        eyebrow="Durable communication workflow"
         title={draft ? "Compose communication" : "New communication"}
-        description="Configure a saved draft, recompute the exact audience, then confirm the same record for delivery."
         actions={
           <>
             {draft ? (
@@ -573,7 +571,6 @@ export default function CommunicationComposer({
           ) : (
             <EmptyState
               title="No published templates"
-              description="Publish a template version before composing a communication."
               action={
                 <ButtonLink variant="primary" to="/admin/communications">
                   Manage templates
@@ -622,10 +619,6 @@ export default function CommunicationComposer({
             <div className="card-title">
               <div>
                 <h2>2. Verify the authoritative preview</h2>
-                <p className="help">
-                  Recipient, source, template and sender data are queried again
-                  each time.
-                </p>
               </div>
               <span className="status info right">Nothing queued</span>
             </div>

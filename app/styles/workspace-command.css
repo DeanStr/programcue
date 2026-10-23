@@ -202,7 +202,7 @@
 .command-score {
   --score-tone: var(--text-primary);
   --score-label: var(--text-secondary);
-  --score-fill: var(--brand-600);
+  --score-fill: var(--text-tertiary);
 }
 .command-score[data-state="ready"] {
   --score-tone: var(--state-good-text);
@@ -272,12 +272,6 @@
   height: 100%;
   background: var(--score-fill);
   transition: width var(--dur-slow) var(--ease-out);
-}
-.command-score-caption {
-  margin: var(--space-4) 0 0;
-  color: var(--text-tertiary);
-  font-size: var(--text-xs);
-  line-height: var(--leading-snug);
 }
 .command-score-method {
   margin-top: var(--space-2);
@@ -546,10 +540,12 @@
   background: var(--track);
   overflow: hidden;
 }
+/* A healthy, incomplete workflow is neutral ink. Hue is spent only where a
+   workflow needs attention, and complete work is quieter still. */
 .command-meter > span {
   display: block;
   height: 100%;
-  background: var(--brand-600);
+  background: var(--text-tertiary);
   transition: width var(--dur-slow) var(--ease-out);
 }
 .command-meter.quiet > span {

@@ -117,7 +117,6 @@ export function AdminAuxiliaryDialogs({
       {dialog === "views" && viewArea ? (
         <Dialog
           title="Saved views"
-          description={`Keep the current filters and sorting for ${VIEW_AREA_LABELS[viewArea]} as a view you can return to.`}
           icon={<Save aria-hidden size={17} />}
           onClose={closeDialog}
         >
@@ -150,10 +149,6 @@ export function AdminAuxiliaryDialogs({
                 <option value="event">Event administrators</option>
               </select>
             </label>
-            <p className="help">
-              A view stores what the page URL encodes: the filters, the sort and
-              the columns you are looking at now.
-            </p>
             <div className="page-actions">
               <Button variant="primary" type="submit">
                 <Save aria-hidden size={14} /> Save view
@@ -218,7 +213,6 @@ export function AdminAuxiliaryDialogs({
       {dialog === "shortcuts" ? (
         <Dialog
           title="Keyboard shortcuts"
-          description="Everything in the administrator chrome is reachable without a pointer."
           icon={<Keyboard aria-hidden size={17} />}
           size="sm"
           onClose={closeDialog}
@@ -348,7 +342,6 @@ export function AdminAuxiliaryDialogs({
                   </span>
                   <span className="pc-menu-copy">
                     <strong>Event setup</strong>
-                    <small>Dates, venue, formats and publication.</small>
                   </span>
                 </Link>
                 {viewer.canCreateEvents ? (
@@ -445,7 +438,6 @@ export function AdminAuxiliaryDialogs({
               </span>
               <span className="pc-menu-copy">
                 <strong>Task</strong>
-                <small>Assign readiness work to a person or a session.</small>
               </span>
             </Link>
           </div>
@@ -482,7 +474,9 @@ export function AdminAuxiliaryDialogs({
                   </span>
                   <span className="pc-menu-copy">
                     <strong>{notification.label}</strong>
-                    <small>{notification.detail}</small>
+                    {notification.detail ? (
+                      <small>{notification.detail}</small>
+                    ) : null}
                   </span>
                   <span className="pc-count" data-tone={notification.severity}>
                     {notification.count}
@@ -494,10 +488,6 @@ export function AdminAuxiliaryDialogs({
             <div className="pc-empty-state">
               <CheckCircle2 aria-hidden className="pc-state-icon" />
               <h2 className="pc-empty-state-title">No operational alerts</h2>
-              <p>
-                There are no overdue tasks, blocking conflicts or failed
-                operations in the current event.
-              </p>
             </div>
           )}
         </Dialog>
@@ -551,11 +541,11 @@ export function AdminAuxiliaryDialogs({
                   <strong>
                     {viewer.demo ? "Browse anonymously" : "Sign out"}
                   </strong>
-                  <small>
-                    {viewer.demo
-                      ? "Leave the demo identity and view public surfaces."
-                      : "End this session on this device."}
-                  </small>
+                  {viewer.demo ? (
+                    <small>
+                      Leave the demo identity and view public surfaces.
+                    </small>
+                  ) : null}
                 </span>
               </button>
             </Form>

@@ -26,10 +26,6 @@ export function EvaluationProgressionPanel() {
       <div className="card-title">
         <div>
           <h2>Round progression</h2>
-          <p className="subtle">
-            Add a protected next round by cloning an existing rubric, then
-            advance a reviewed shortlist atomically.
-          </p>
         </div>
       </div>
       {plan.rounds.length < 10 ? (

@@ -245,15 +245,13 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
           <section className="card pad mb" aria-labelledby="duplicate-heading">
             <div className="card-title">
               <div>
-                <span className="pc-section-kicker">Identity safety</span>
                 <h2 id="duplicate-heading">Possible duplicate contacts</h2>
               </div>
               <Merge aria-hidden className="subtle" />
             </div>
             <p>
-              These contacts have the same normalized name. Choose which record
-              remains visible as the primary speaker directory contact. Linked
-              identities are refused rather than merged unsafely.
+              These contacts have the same normalized name. Linked identities
+              are refused rather than merged unsafely.
             </p>
             <div className="stack mt">
               {contact.duplicates.map((duplicate) => (
@@ -439,11 +437,7 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
               </table>
             </section>
           ) : (
-            <EmptyState
-              icon={History}
-              title="No event history yet"
-              description="Sessions appear here once this contact is added to an event below."
-            />
+            <EmptyState icon={History} title="No event history yet" />
           )}
         </section>
 
@@ -455,9 +449,7 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
             <h2 id="event-handoff-heading">Add to event</h2>
             <p className="subtle">
               Adds this contact to the event roster as a prospect without
-              creating account access or sending email. Their
-              organisation-scoped directory profile remains visible in the Event
-              speakers workspace, where invitations are sent explicitly.
+              creating account access or sending email.
             </p>
             <Form method="post" className="stack mt">
               <input type="hidden" name="_intent" value="add_to_event" />

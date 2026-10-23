@@ -158,7 +158,7 @@ export function ScheduleReviewLinksPanel({
             Draft review links
           </h2>
           <p className="subtle">
-            Share a frozen unpublished timetable. The secret URL is shown once.
+            The secret URL is shown once.
             {workspace.reviewLinks.length === 0 &&
             workspace.reviewLinkOmittedInactiveCount === 0
               ? " No review links have been created for this event."

@@ -42,9 +42,7 @@ export function ActivityTimelinePanel({
             ? "Organisation activity timeline"
             : "Event activity timeline"}
         </h2>
-        <span className="help right">
-          Immutable audit events · newest first
-        </span>
+        <span className="help right">Newest first</span>
       </div>
       <Form method="get" className="grid grid-3 mb">
         <input type="hidden" name="panel" value="activity" />
@@ -184,10 +182,7 @@ export function ActivityTimelinePanel({
           })}
         </ol>
       ) : (
-        <EmptyState
-          title="No matching activity"
-          description={`Adjust the activity filters or start work in this ${loaderData.activityScope}.`}
-        />
+        <EmptyState title="No matching activity" />
       )}
       {olderActivityHref ? (
         <div className="page-actions mt">
@@ -383,10 +378,7 @@ export function OperationsListPanel({
           })}
         </ul>
       ) : (
-        <EmptyState
-          title="No background operations yet"
-          description="Imports, sends, calendar updates and publications will appear here."
-        />
+        <EmptyState title="No background operations yet" />
       )}
       {loaderData.failurePagination &&
       !loaderData.selectedOperationId &&
@@ -456,8 +448,7 @@ export function OperationDetailPanel({
               (item) => item.status === "failed",
             ) ? (
               <p className="help table-scroll-hint">
-                Failed records expose individual retry and explicit skip
-                controls; successful records are not resent.
+                Successful records are not resent.
               </p>
             ) : null}
             <section
@@ -663,7 +654,6 @@ export function OperationDetailPanel({
       >
         <div className="card-title">
           <h2 id="operation-audit-heading">Audit trail</h2>
-          <span className="help right">Immutable event history</span>
         </div>
         {loaderData.operationDetail.audit.length ? (
           <ol className="timeline">
@@ -684,10 +674,7 @@ export function OperationDetailPanel({
             ))}
           </ol>
         ) : (
-          <EmptyState
-            title="No linked audit events"
-            description="Events linked to this operation will appear here."
-          />
+          <EmptyState title="No linked audit events" />
         )}
       </section>
       {dialog}

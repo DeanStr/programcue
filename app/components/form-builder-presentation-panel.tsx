@@ -55,14 +55,9 @@ export function PresentationSettingsPanel({
       <summary>
         <span>
           <strong>Public landing page</strong>
-          <small>Invitation, organiser, imagery and programme promotion</small>
         </span>
       </summary>
       <div className="fb-disclosure-fields">
-        <p className="help">
-          Give applicants enough event context to decide before they start a
-          private draft.
-        </p>
         <label className="label">
           Invitation heading
           <input

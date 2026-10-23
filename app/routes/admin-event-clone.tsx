@@ -168,9 +168,7 @@ export default function AdminEventClone({ loaderData }: Route.ComponentProps) {
     <div className="pc-event-create">
       {dialog}
       <PageHeader
-        eyebrow="Reusable event template"
         title={`Clone ${loaderData.source.name}`}
-        description="Create a clean event with the published branding settings, rooms, tracks, policies and reusable form, evaluation, task and email templates."
         actions={
           <ButtonLink to="/admin/event">Back to Event settings</ButtonLink>
         }
@@ -230,7 +228,6 @@ export default function AdminEventClone({ loaderData }: Route.ComponentProps) {
         <section className="card pad event-setup-surface event-setup-create-form">
           <header className="event-setup-surface-head">
             <h3>New event identity</h3>
-            <p>A clean event from the current published settings.</p>
           </header>
           <Form method="post" className="stack">
             <input type="hidden" name="intent" value="clone" />
@@ -286,7 +283,6 @@ export default function AdminEventClone({ loaderData }: Route.ComponentProps) {
                 />
                 <span>
                   <strong>Program Cue — recommended</strong>
-                  <small>Copy all reusable settings in one step.</small>
                 </span>
               </label>
               <label className="pc-repository-choice mt">
@@ -321,13 +317,16 @@ export default function AdminEventClone({ loaderData }: Route.ComponentProps) {
                     ))}
                   </select>
                 </label>
-                <p className="help">
-                  {loaderData.emailProviderIssue
-                    ? `Sender reuse is unavailable: ${loaderData.emailProviderIssue}`
-                    : loaderData.reusableSenderProfiles.length > 0
-                      ? "Copies the selected verified sender into the cloned event. Choose None to configure it later in Communications."
-                      : "No verified sender is available in an active event in this organisation."}
-                </p>
+                {loaderData.emailProviderIssue ? (
+                  <p className="help">
+                    {`Sender reuse is unavailable: ${loaderData.emailProviderIssue}`}
+                  </p>
+                ) : loaderData.reusableSenderProfiles.length === 0 ? (
+                  <p className="help">
+                    No verified sender is available in an active event in this
+                    organisation.
+                  </p>
+                ) : null}
               </fieldset>
             ) : null}
             {repositoryProvider === "airtable" ? (

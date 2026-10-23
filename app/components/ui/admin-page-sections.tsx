@@ -63,7 +63,7 @@ export function AdminPageSection({
 }: {
   id: string;
   label: string;
-  description: string;
+  description?: string;
   defaultExpandedOnMobile?: boolean;
   className?: string;
   children: ReactNode;
@@ -128,7 +128,7 @@ export function AdminPageSection({
       <header className="pc-admin-section-head">
         <div className="pc-admin-section-head-copy">
           <h2 id={headingId}>{label}</h2>
-          <p>{description}</p>
+          {description ? <p>{description}</p> : null}
         </div>
         <button
           className="pc-admin-section-toggle"

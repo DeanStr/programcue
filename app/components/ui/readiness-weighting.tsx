@@ -9,6 +9,12 @@ const IMPACT_LABELS: Record<(typeof IMPACT_ORDER)[number], string> = {
   low: "Low",
 };
 
+export function impactLabel(impact: string) {
+  const label = IMPACT_LABELS[impact as (typeof IMPACT_ORDER)[number]];
+  if (!label) throw new Error(`Unsupported task impact: ${impact}.`);
+  return label;
+}
+
 export function ReadinessWeightingCard() {
   const headingId = "readiness-weighting-heading";
   return (

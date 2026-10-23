@@ -12,9 +12,8 @@ export function AcceptedSpeakerInvitationsPanel() {
         <div>
           <h2>Speaker access invitations</h2>
           <p className="subtle">
-            Renew an unaccepted speaker link explicitly. Renewal rotates the
-            one-time token, invalidates every earlier link and starts a new
-            seven-day window.
+            Renewal rotates the one-time token, invalidates every earlier link
+            and starts a new seven-day window.
           </p>
         </div>
       </div>

@@ -58,12 +58,7 @@ export function AdminSpeakerHeadshotPanel({
                   event.timezone,
                 )}
               </p>
-            ) : (
-              <p className="subtle">
-                Upload a JPG, PNG or WebP replacement below. It remains private
-                until signature validation and malware scanning pass.
-              </p>
-            )}
+            ) : null}
           </div>
           {headshot ? (
             <ButtonAnchor
@@ -103,9 +98,8 @@ export function AdminSpeakerFilesPanel({
     <section className="crm-record-section" id="files">
       <h2>Uploaded files and versions</h2>
       <p className="subtle">
-        Speaker uploads stay private to the speaker workspace. Organisers see
-        the scan and release state of every stored version here and can download
-        only the current released version.
+        Speaker uploads stay private to the speaker workspace. Organisers can
+        download only the current released version.
       </p>
       {files.length ? (
         <div className="stack mt">
@@ -171,7 +165,6 @@ export function AdminSpeakerFilesPanel({
         <EmptyState
           icon={FileCheck2}
           title="No uploaded files"
-          description="Assign an upload task so this speaker can share headshots or slides."
           action={
             <ButtonLink to="/admin/tasks">
               <ListChecks aria-hidden size={15} /> Manage tasks

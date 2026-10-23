@@ -95,7 +95,6 @@ type Destination = {
   to: string;
   icon: LucideIcon;
   label: string;
-  detail: string;
 };
 
 function retryAfterLabel(seconds: number) {
@@ -117,37 +116,31 @@ export const PUBLIC_DESTINATIONS: readonly Destination[] = [
     to: "/public/programme/future-of-events-2027",
     icon: BookOpen,
     label: "Published programme",
-    detail: "The live attendee programme.",
   },
   {
     to: "/public/programme/future-of-events-2027/timetable",
     icon: CalendarDays,
     label: "Timetable",
-    detail: "Compare published sessions by time and room.",
   },
   {
     to: "/public/programme/future-of-events-2027/schedule",
     icon: CalendarDays,
     label: "Day-by-day schedule",
-    detail: "Browse rich chronological session and speaker details.",
   },
   {
     to: "/public/programme/future-of-events-2027/gallery",
     icon: Images,
     label: "Speaker gallery",
-    detail: "Published speaker profiles.",
   },
   {
     to: "/apply/form",
     icon: FileText,
     label: "Application form",
-    detail: "The open call for proposals.",
   },
   {
     to: "/api/docs",
     icon: Code,
     label: "API documentation",
-    detail: "The public programme API reference.",
   },
 ];
 
@@ -156,55 +149,46 @@ const OPERATIONS_DESTINATIONS: readonly Destination[] = [
     to: "/admin/submissions",
     icon: FileText,
     label: "Applications",
-    detail: "Proposal intake and triage.",
   },
   {
     to: "/admin/review",
     icon: ClipboardCheck,
     label: "Review & selection",
-    detail: "Rounds, scoring and outcomes.",
   },
   {
     to: "/admin/speakers",
     icon: Users,
     label: "Event speakers",
-    detail: "Roster, profiles and readiness.",
   },
   {
     to: "/admin/tasks",
     icon: ListChecks,
     label: "Tasks & readiness",
-    detail: "Speaker, session and event readiness work.",
   },
   {
     to: "/admin/content",
     icon: FolderOpen,
     label: "Session content & files",
-    detail: "Resources, uploads and retention.",
   },
   {
     to: "/admin/schedule",
     icon: CalendarClock,
     label: "Schedule planner",
-    detail: "The planner and its conflicts.",
   },
   {
     to: "/admin/communications",
     icon: Megaphone,
     label: "Communications",
-    detail: "Templates and delivery results.",
   },
   {
     to: "/admin/crm",
     icon: Contact,
     label: "Speaker directory",
-    detail: "Prospects and the invitation pipeline.",
   },
   {
     to: "/admin/events/new",
     icon: Plus,
     label: "Create event",
-    detail: "A blank event in the same organisation.",
   },
 ];
 
@@ -227,7 +211,6 @@ function DestinationLinks({
               </span>
               <span>
                 <strong>{destination.label}</strong>
-                <span>{destination.detail}</span>
               </span>
             </Link>
           </li>

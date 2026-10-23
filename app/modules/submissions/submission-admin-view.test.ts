@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   adminSubmissionSearchParams,
+  adminSubmissionViewControls,
   parseAdminSubmissionView,
+  withAdminSubmissionColumn,
 } from "./submission-admin-view";
 
 describe("submission administrator URL state", () => {
@@ -61,5 +63,47 @@ describe("submission administrator URL state", () => {
         new URL("https://example.test/admin/submissions?columns="),
       ).columns,
     ).toEqual([]);
+  });
+
+  it("keeps earlier column changes when toggles build on each other", () => {
+    const start = new URLSearchParams("status=assigned&density=compact");
+    const first = withAdminSubmissionColumn(start, "submitter", false);
+    const second = withAdminSubmissionColumn(first, "route", false);
+
+    expect(second.toString()).toBe(
+      "status=assigned&density=compact&columns=speakers%2Cstatus",
+    );
+    expect(
+      withAdminSubmissionColumn(
+        withAdminSubmissionColumn(second, "route", true),
+        "submitter",
+        true,
+      ).toString(),
+    ).toBe("status=assigned&density=compact");
+  });
+
+  it("reads the grid's view controls from requested parameters", () => {
+    expect(
+      adminSubmissionViewControls(
+        new URLSearchParams("columns=status&density=compact&query=trust"),
+      ),
+    ).toEqual({ columns: ["status"], density: "compact" });
+    expect(adminSubmissionViewControls(new URLSearchParams())).toEqual({
+      columns: ["submitter", "route", "speakers", "status"],
+      density: "comfortable",
+    });
+    expect(() =>
+      adminSubmissionViewControls(new URLSearchParams("density=unknown")),
+    ).toThrow(Response);
+  });
+
+  it("restores a shown column in canonical order", () => {
+    expect(
+      withAdminSubmissionColumn(
+        new URLSearchParams("columns=status"),
+        "submitter",
+        true,
+      ).get("columns"),
+    ).toBe("submitter,status");
   });
 });

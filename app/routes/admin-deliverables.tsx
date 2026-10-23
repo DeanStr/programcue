@@ -183,12 +183,10 @@ export default function Deliverables({
       <div className="page-head pc-page-header">
         <div>
           <h1>Speaker deliverables</h1>
-          <p>
-            Compare personal requirements across the active speaker roster.
-            Session and event tasks remain in Tasks & readiness.
-          </p>
         </div>
-        <ButtonLink to="/admin/tasks">Tasks &amp; readiness</ButtonLink>
+        <div className="page-actions">
+          <ButtonLink to="/admin/tasks">Tasks &amp; readiness</ButtonLink>
+        </div>
       </div>
       {actionData && (
         <p role={actionData.ok ? "status" : "alert"}>{actionData.message}</p>
@@ -278,7 +276,7 @@ export default function Deliverables({
       <p className="mt">
         {d.total} {d.total === 1 ? "speaker" : "speakers"} · Speaker page{" "}
         {d.filters.page} of {d.pages} · Requirement page {d.filters.columns} of{" "}
-        {d.columnPages}. Cells retain all statuses for each matching speaker.
+        {d.columnPages}
       </p>
       <section
         className="table-wrap deliverables-matrix"
@@ -404,28 +402,30 @@ export default function Deliverables({
           </tbody>
         </table>
       </section>
-      <nav className="page-actions mt" aria-label="Deliverables pages">
-        {d.filters.page > 1 && (
-          <ButtonLink to={pageUrl(d.filters.page - 1, d.filters.columns)}>
-            Previous speakers
-          </ButtonLink>
-        )}
-        {d.filters.page < d.pages && (
-          <ButtonLink to={pageUrl(d.filters.page + 1, d.filters.columns)}>
-            Next speakers
-          </ButtonLink>
-        )}
-        {d.filters.columns > 1 && (
-          <ButtonLink to={pageUrl(d.filters.page, d.filters.columns - 1)}>
-            Previous requirements
-          </ButtonLink>
-        )}
-        {d.filters.columns < d.columnPages && (
-          <ButtonLink to={pageUrl(d.filters.page, d.filters.columns + 1)}>
-            Next requirements
-          </ButtonLink>
-        )}
-      </nav>
+      {d.pages > 1 || d.columnPages > 1 ? (
+        <nav className="page-actions mt" aria-label="Deliverables pages">
+          {d.filters.page > 1 && (
+            <ButtonLink to={pageUrl(d.filters.page - 1, d.filters.columns)}>
+              Previous speakers
+            </ButtonLink>
+          )}
+          {d.filters.page < d.pages && (
+            <ButtonLink to={pageUrl(d.filters.page + 1, d.filters.columns)}>
+              Next speakers
+            </ButtonLink>
+          )}
+          {d.filters.columns > 1 && (
+            <ButtonLink to={pageUrl(d.filters.page, d.filters.columns - 1)}>
+              Previous requirements
+            </ButtonLink>
+          )}
+          {d.filters.columns < d.columnPages && (
+            <ButtonLink to={pageUrl(d.filters.page, d.filters.columns + 1)}>
+              Next requirements
+            </ButtonLink>
+          )}
+        </nav>
+      ) : null}
     </>
   );
 }

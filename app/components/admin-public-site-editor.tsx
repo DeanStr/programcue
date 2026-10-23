@@ -17,7 +17,6 @@ import {
 } from "~/modules/public-site/public-site";
 import {
   type PublicSiteStatisticType,
-  publicSitePageDescriptions,
   publicSiteSectionDescriptions,
   publicSiteSectionLabels,
   publicSiteStatisticLabels,
@@ -364,7 +363,6 @@ function SitePageEditor({
       <div className="public-site-page-row">
         <div>
           <strong>{value.title}</strong>
-          <p className="help">{publicSitePageDescriptions[page]}</p>
         </div>
         <label className="public-site-inline-check">
           <input
@@ -725,10 +723,7 @@ export function AdminPublicSiteEditor({
         aria-label="Homepage and appearance"
         hidden={activePanel !== "homepage"}
       >
-        <SitePanelHeading
-          title="Site identity and theme"
-          help="The tagline and theme apply to every published page."
-        />
+        <SitePanelHeading title="Site identity and theme" />
         <div className="public-site-identity-grid">
           <label className="label">
             Tagline
@@ -763,10 +758,7 @@ export function AdminPublicSiteEditor({
           </label>
         </div>
 
-        <SitePanelHeading
-          title="Homepage sections"
-          help="Shown sections appear in this order. Open a section to compose it."
-        />
+        <SitePanelHeading title="Homepage sections" />
         <ol className="public-site-section-order">
           {configuration.sectionOrder.map((section, index) => {
             const visible = configuration.sectionVisibility[section];
@@ -802,7 +794,7 @@ export function AdminPublicSiteEditor({
       >
         <SitePanelHeading
           title="Event pages"
-          help="Five fixed pages, no nesting or arbitrary routes. Only published pages reach the event navigation."
+          help="Only published pages appear in the event navigation."
         />
         <div className="public-site-page-editor">
           {PUBLIC_SITE_PAGE_TYPES.map((page) => (

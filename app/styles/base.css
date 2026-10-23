@@ -554,7 +554,7 @@ a {
   position: absolute;
   right: -5px;
   top: -6px;
-  background: var(--red);
+  background: var(--state-bad-solid);
   color: white;
   border: 2px solid #fff;
   border-radius: var(--radius-full);
@@ -746,6 +746,13 @@ a {
   max-width: 78ch;
   color: var(--text-tertiary);
   line-height: var(--leading-snug);
+}
+/* An action row is a row wherever it sits. As a block, adjacent buttons and
+   pills touched because JSX leaves no whitespace between them. */
+.page-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
 }
 .page-head .page-actions {
   margin-left: auto;
@@ -986,12 +993,13 @@ a {
   overflow: hidden;
 }
 /* A gradient on a measurement is a lie: it implies the value varies across
-   the bar. Flat fill, and the tone carries the reading. */
+   the bar. Flat fill, and the tone carries the reading; an untoned meter is
+   neutral ink, like .command-meter, because copper belongs to actions. */
 .progress > span {
   display: block;
   height: 100%;
   border-radius: var(--radius-full);
-  background: var(--brand-600);
+  background: var(--text-tertiary);
   transition: width var(--dur-slow) var(--ease-out);
 }
 .progress.green > span {

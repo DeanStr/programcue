@@ -259,9 +259,7 @@ test("accepted speaker saves a new anonymous application from the participant wo
 
   await page.getByRole("link", { name: "Applications", exact: true }).click();
   await page
-    .getByRole("link", {
-      name: /Call for Speakers.*Start a new application/u,
-    })
+    .getByRole("link", { name: "Call for Speakers", exact: true })
     .click();
   await expect(
     page.getByText("Accepted speaker is selected for private workspaces."),

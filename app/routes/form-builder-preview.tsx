@@ -371,7 +371,6 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
       <div className="page-head fb-page-head pc-page-header-compact">
         <div>
           <h1>Call for Speakers Form Builder</h1>
-          <p>Design, test and publish immutable application versions.</p>
         </div>
       </div>
 
@@ -528,12 +527,6 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
               Load server version
             </Button>
           </span>
-        </div>
-      ) : null}
-      {!input.id ? (
-        <div className="validation-item warn card pad mb">
-          <strong>Start here</strong>
-          <span>Configure the form, then save it before publishing.</span>
         </div>
       ) : null}
 
@@ -703,9 +696,6 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
           <section className="card fb-pane fb-canvas">
             <div className="fb-pane-head">
               <h2>Form canvas</h2>
-              <span className="fb-pane-hint right">
-                Changes update the draft immediately.
-              </span>
             </div>
             <div className="fb-pane-body">
               <FormBuilderVisualCanvas
@@ -728,10 +718,7 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
                 footer={
                   <div className="fb-canvas-footer">
                     <p className="fb-pane-note">
-                      Drag fields from the palette into the form or drag
-                      existing fields to reorder them. Select a field to edit
-                      its settings; keyboard users can add from the palette and
-                      reorder in Form structure.
+                      Keyboard users can reorder fields in Form structure.
                     </p>
                     {!clientReady ? (
                       <p className="fb-pane-note">

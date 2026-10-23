@@ -75,7 +75,6 @@ function PromotionTools({
     <section className="public-site-promotion">
       <div className="card-title">
         <div>
-          <span className="pc-page-eyebrow">Promotion</span>
           <h2 className="public-site-panel-title">Announcement handoff</h2>
         </div>
       </div>

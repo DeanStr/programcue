@@ -672,6 +672,20 @@ describe("organisation speaker CRM", () => {
       body: "Hello {{recipient.firstName}}, join {{event.name}}.",
       physicalAddress: "100 Programme Way, Toronto",
     };
+    await expect(
+      crm.createOutreachDraft(administrator, {
+        ...outreachInput,
+        personIds: [first.personId],
+        idempotencyKey: `crm-outreach-one-${crypto.randomUUID()}`,
+      }),
+    ).rejects.toMatchObject({
+      issues: [
+        expect.objectContaining({
+          message:
+            "Choose at least two different contacts for speaker invitations.",
+        }),
+      ],
+    });
     const draft = await crm.createOutreachDraft(administrator, outreachInput);
     await expect(
       crm.createOutreachDraft(administrator, outreachInput),

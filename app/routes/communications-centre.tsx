@@ -107,11 +107,6 @@ export default function CommunicationsCentre({
       <div className="page-head comms-page-head">
         <div>
           <h1>{setup ? "Delivery settings" : "Communications Centre"}</h1>
-          <p>
-            {setup
-              ? "Sender profiles, reminder triggers and calendar connections. Set these up once; the Communications Centre is where the daily work happens."
-              : "Publish versioned email content, then launch a durable staged draft for each audience."}
-          </p>
         </div>
         <div className="page-actions">
           {setup ? (

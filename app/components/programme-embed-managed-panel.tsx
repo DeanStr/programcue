@@ -43,9 +43,7 @@ export function ManagedEmbedWorkflow({
       <div className="programme-panel-heading">
         <h2>Managed embeds</h2>
         <p className="help">
-          Save a named configuration behind a stable URL. Stateless snippets
-          remain available and unchanged; new drafts use the current Embed
-          builder configuration.
+          New drafts use the current Embed builder configuration.
         </p>
       </div>
       {actionData?.message ? (
@@ -197,9 +195,6 @@ export function ManagedEmbedWorkflow({
       {selectedEmbed && selectedManagedUrl ? (
         <div className="programme-managed-form stack">
           <h3>Stable installation</h3>
-          <p className="help">
-            This URL does not change when the configuration revision changes.
-          </p>
           <a
             href={selectedManagedUrl}
             target="_blank"

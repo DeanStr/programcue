@@ -14,7 +14,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Link, useSearchParams } from "react-router";
+import { Link, useLocation, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { submissionReferenceClipboard } from "~/components/operational-ui-rules";
 import { Button, ButtonSummary } from "~/components/ui/button";
@@ -23,6 +23,8 @@ import {
   ADMIN_SUBMISSION_OPTIONAL_COLUMNS,
   type AdminSubmissionDensity,
   type AdminSubmissionOptionalColumn,
+  adminSubmissionViewControls,
+  withAdminSubmissionColumn,
 } from "~/modules/submissions/submission-admin-view";
 import type {
   AdminSubmission,
@@ -53,6 +55,16 @@ const routingStateLabels = {
   manual_override: "Manual routing override",
   manual_unassigned: "No manual team override",
 } as const;
+
+// Automatic routing to a team is the expected case, so it shows only the
+// team. Without a team, the routing state alone explains why.
+function routeSummary(submission: AdminSubmission) {
+  const state = routingStateLabels[submission.routingState];
+  if (!submission.routedTeamIds.length) return state;
+  return submission.routingState === "automatic"
+    ? submission.routedTo
+    : `${submission.routedTo} · ${state}`;
+}
 
 function columnLabel(columnId: string) {
   const label = columnLabels[columnId];
@@ -146,9 +158,7 @@ function submissionColumns(detailSearchParams: string) {
           <span className="pc-record-route">
             {row.original.category || "Uncategorised"}
           </span>
-          <small className="pc-record-meta">
-            {`${row.original.routedTo} · ${routingStateLabels[row.original.routingState]}`}
-          </small>
+          <small className="pc-record-meta">{routeSummary(row.original)}</small>
         </div>
       ),
     }),
@@ -168,6 +178,13 @@ function submissionColumns(detailSearchParams: string) {
 
 type ClipboardFeedback = { ok: boolean; message: string };
 
+type PendingView = ReturnType<typeof adminSubmissionViewControls> & {
+  locationKey: string;
+  search: URLSearchParams;
+};
+
+export const SUBMISSION_FILTER_FORM_ID = "submission-filters";
+
 export function SubmissionDataGrid({
   submissions,
   filters,
@@ -184,24 +201,34 @@ export function SubmissionDataGrid({
   detailSearchParams?: string;
 }) {
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+  // A view change shows at once, but the URL changes only when its loader
+  // finishes. Until then, further changes and the filter form build on the
+  // pending request, or they would drop it. Any committed navigation — this
+  // request, or one that replaced it such as Clear — moves to another location
+  // key, which discards the pending view in favour of what actually loaded.
+  // It is discarded rather than ignored because Back returns to the old key.
+  const [pendingView, setPendingView] = useState<PendingView | null>(null);
+  if (pendingView && pendingView.locationKey !== location.key) {
+    setPendingView(null);
+  }
+  const pending =
+    pendingView?.locationKey === location.key ? pendingView : null;
+  const viewSearch = pending?.search ?? searchParams;
+  const shownColumns = pending?.columns ?? visibleOptionalColumns;
+  const shownDensity = pending?.density ?? density;
   const [clipboardFeedback, setClipboardFeedback] =
     useState<ClipboardFeedback | null>(null);
-  const loadedColumnVisibility = useMemo(
+  const columnVisibility = useMemo(
     () =>
       Object.fromEntries(
         ADMIN_SUBMISSION_OPTIONAL_COLUMNS.map((column) => [
           column,
-          visibleOptionalColumns.includes(column),
+          shownColumns.includes(column),
         ]),
       ),
-    [visibleOptionalColumns],
+    [shownColumns],
   );
-  const [columnVisibility, setColumnVisibility] = useState(
-    loadedColumnVisibility,
-  );
-  useEffect(() => {
-    setColumnVisibility(loadedColumnVisibility);
-  }, [loadedColumnVisibility]);
   const columns = useMemo(
     () => submissionColumns(detailSearchParams),
     [detailSearchParams],
@@ -214,29 +241,27 @@ export function SubmissionDataGrid({
     state: { columnVisibility },
   });
 
+  function requestView(next: URLSearchParams) {
+    setPendingView({
+      locationKey: location.key,
+      search: next,
+      ...adminSubmissionViewControls(next),
+    });
+    setSearchParams(next);
+  }
+
   function setViewParameter(name: string, value: string, defaultValue: string) {
-    const next = new URLSearchParams(searchParams);
+    const next = new URLSearchParams(viewSearch);
     if (value === defaultValue) next.delete(name);
     else next.set(name, value);
-    setSearchParams(next);
+    requestView(next);
   }
 
   function setColumnVisible(
     column: AdminSubmissionOptionalColumn,
     visible: boolean,
   ) {
-    setColumnVisibility((current) => ({ ...current, [column]: visible }));
-    const nextColumns = visible
-      ? ADMIN_SUBMISSION_OPTIONAL_COLUMNS.filter(
-          (candidate) =>
-            candidate === column || visibleOptionalColumns.includes(candidate),
-        )
-      : visibleOptionalColumns.filter((candidate) => candidate !== column);
-    setViewParameter(
-      "columns",
-      nextColumns.join(","),
-      ADMIN_SUBMISSION_OPTIONAL_COLUMNS.join(","),
-    );
+    requestView(withAdminSubmissionColumn(viewSearch, column, visible));
   }
 
   const selectedRows = table
@@ -273,7 +298,7 @@ export function SubmissionDataGrid({
           <select
             className="select"
             name="density"
-            value={density}
+            value={shownDensity}
             onChange={(event) =>
               setViewParameter("density", event.target.value, "comfortable")
             }
@@ -336,6 +361,20 @@ export function SubmissionDataGrid({
         </div>
       </div>
 
+      {/* The filter form submits the view as last requested, not as last
+          loaded, so Apply during a pending view change keeps that change. */}
+      <input
+        type="hidden"
+        form={SUBMISSION_FILTER_FORM_ID}
+        name="columns"
+        value={shownColumns.join(",")}
+      />
+      <input
+        type="hidden"
+        form={SUBMISSION_FILTER_FORM_ID}
+        name="density"
+        value={shownDensity}
+      />
       {filters}
 
       {clipboardFeedback ? (
@@ -359,7 +398,7 @@ export function SubmissionDataGrid({
         aria-label="Application queue table; scroll to view more records or columns"
       >
         <table
-          className={`data-table pc-responsive-table pc-data-grid is-${density}`}
+          className={`data-table pc-responsive-table pc-data-grid is-${shownDensity}`}
         >
           <caption className="sr-only">
             Server-filtered applications on the current result page
@@ -409,10 +448,6 @@ export function SubmissionDataGrid({
                 >
                   <div className="pc-empty-state">
                     <h2>No matching applications</h2>
-                    <p className="subtle">
-                      Publish a form and submit an application, or clear the
-                      filters.
-                    </p>
                   </div>
                 </td>
               </tr>

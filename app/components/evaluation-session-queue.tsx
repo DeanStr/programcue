@@ -2,6 +2,7 @@ import { Form, Link } from "react-router";
 
 import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
 import { Button } from "~/components/ui/button";
+import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EmptyState } from "~/components/ui/states";
 import { availableEvaluationAssignmentTargets } from "~/modules/evaluations/evaluation-assignment-availability";
 
@@ -19,8 +20,8 @@ export function EvaluationSessionQueue() {
         <div>
           <h2>Session queue</h2>
           <p className="subtle">
-            Assign existing sessions directly. Reviewers receive a frozen copy
-            of the session details and speakers at assignment time.
+            Reviewers receive a frozen copy of the session details and speakers
+            at assignment time.
           </p>
         </div>
       </div>
@@ -69,7 +70,6 @@ export function EvaluationSessionQueue() {
                       <div className="pc-record-stack">
                         <strong>{session.title}</strong>
                         <small className="subtle">
-                          {session.reference} ·{" "}
                           {session.format.replaceAll("_", " ")} ·{" "}
                           {session.durationMinutes} min
                         </small>
@@ -79,9 +79,10 @@ export function EvaluationSessionQueue() {
                       </div>
                     </td>
                     <td data-label="Programme state">
-                      <span className="status info">
-                        {session.status.replaceAll("_", " ")}
-                      </span>
+                      <DomainStatusBadge
+                        domain="session"
+                        status={session.status}
+                      />
                     </td>
                     <td data-label="Reviews">
                       <span>

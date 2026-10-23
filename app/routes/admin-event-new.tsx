@@ -201,9 +201,7 @@ export default function AdminEventNew({ loaderData }: Route.ComponentProps) {
     <div className="pc-event-create">
       {dialog}
       <PageHeader
-        eyebrow="Blank event workspace"
         title="New event"
-        description="Start with Program Cue defaults and no rooms, tracks, forms, submissions, schedules or reusable templates."
         actions={
           <ButtonLink to="/admin/event">Back to Event settings</ButtonLink>
         }
@@ -283,9 +281,6 @@ export default function AdminEventNew({ loaderData }: Route.ComponentProps) {
         <section className="card pad event-setup-surface event-setup-create-form">
           <header className="event-setup-surface-head">
             <h3>Event identity</h3>
-            <p>
-              A blank event with Program Cue defaults and no imported records.
-            </p>
           </header>
           <Form method="post" className="stack">
             <input type="hidden" name="intent" value="create" />
@@ -342,7 +337,6 @@ export default function AdminEventNew({ loaderData }: Route.ComponentProps) {
                 />
                 <span>
                   <strong>Program Cue — recommended</strong>
-                  <small>Keep event data here. Nothing else to set up.</small>
                 </span>
               </label>
               <label className="pc-repository-choice mt">
@@ -387,13 +381,15 @@ export default function AdminEventNew({ loaderData }: Route.ComponentProps) {
                     ))}
                   </select>
                 </label>
-                <p className="help">
-                  {loaderData.emailProviderIssue
-                    ? `Sender reuse is unavailable: ${loaderData.emailProviderIssue} You can create this event without a sender, but email sends fail until the provider and a verified sender are configured.`
-                    : loaderData.reusableSenderProfiles.length > 0
-                      ? `Copies the exact verified ${emailProviderLabel} sender and reply-to identity into the new event. Choose None to configure it later in Communications.`
-                      : `No verified ${emailProviderLabel} sender is available in an active event in this organisation. Configure one later in Communications.`}
-                </p>
+                {loaderData.emailProviderIssue ? (
+                  <p className="help">
+                    {`Sender reuse is unavailable: ${loaderData.emailProviderIssue} You can create this event without a sender, but email sends fail until the provider and a verified sender are configured.`}
+                  </p>
+                ) : loaderData.reusableSenderProfiles.length === 0 ? (
+                  <p className="help">
+                    {`No verified ${emailProviderLabel} sender is available in an active event in this organisation. Configure one later in Communications.`}
+                  </p>
+                ) : null}
                 {selectedSender ? (
                   <p className="help">
                     Reply-to:{" "}
@@ -492,10 +488,6 @@ export default function AdminEventNew({ loaderData }: Route.ComponentProps) {
               </div>
             </div>
           </div>
-          <p className="help">
-            To reuse configuration instead, return to the event menu and choose
-            Clone current event.
-          </p>
         </aside>
       </div>
     </div>

@@ -116,7 +116,6 @@ export function CalendarAdministration({
       {dialog}
       <div className="card-title">
         <h2>Calendar connections</h2>
-        <span className="help right">Google, Microsoft 365 and email ICS</span>
       </div>
       <div className="row-actions mb">
         <ButtonLink to="/oauth/calendar/google">
@@ -242,7 +241,7 @@ export function CalendarAdministration({
           className="mb comms-empty"
           icon={Link2}
           title="No calendar account is connected"
-          description="Connect Google or Microsoft 365 above to send invitations directly from a participant's own calendar. Email ICS invitations work without a connection."
+          description="Email ICS invitations work without a connection."
         />
       )}
       <h3>Published-session invitations</h3>
@@ -432,10 +431,7 @@ export function CalendarLifecycleTable({
           ))}
         </ul>
       ) : (
-        <p className="comms-activity-empty">
-          No calendar operations yet. Published schedule updates will create
-          stable-UID calendar operations here.
-        </p>
+        <p className="comms-activity-empty">No calendar operations yet.</p>
       )}
     </section>
   );

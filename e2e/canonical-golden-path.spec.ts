@@ -278,8 +278,9 @@ test.describe
       const row = page
         .getByRole("region", { name: "Evaluation proposal queue" })
         .getByRole("row", { name: new RegExp(SUBMISSION_TITLE) });
+      const status = row.locator('td[data-label="Status"]');
       await expect(row).toContainText(`Routed to ${TEAM_NAME}`);
-      await expect(row).toContainText("submitted");
+      await expect(status).toHaveText("Submitted");
       await expect(row).toContainText("0 / 0");
       await row
         .getByLabel(`Evaluator or team for ${SUBMISSION_TITLE}`)
@@ -300,7 +301,7 @@ test.describe
       await expect(
         reviewers.getByRole("option", { name: "Jordan Lee", exact: true }),
       ).toHaveCount(0);
-      await expect(row).toContainText("assigned");
+      await expect(status).toHaveText("Assigned");
       await expect(row).toContainText("0 / 1");
 
       await page.reload();

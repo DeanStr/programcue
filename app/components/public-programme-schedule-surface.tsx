@@ -48,7 +48,6 @@ export function PublicScheduleSurface({
       <SurfaceHeading
         title="Day-by-day schedule"
         id="public-schedule-title"
-        description="Browse the published programme in chronological order, with the details included in this view."
         count={`${sessionCount} sessions`}
       />
       {!model.embedded && model.showControl("day") ? (

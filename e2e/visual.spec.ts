@@ -39,6 +39,29 @@ const SURFACES: readonly Surface[] = [
   },
 ];
 
+// Key pages fail on any real visual change. The suite-wide 1% ratio (14,400
+// pixels of a desktop page) let a recoloured status label, 78 differing
+// pixels, pass. Fresh runs of these pages differ by zero pixels: Playwright's
+// per-pixel threshold already ignores raster noise, and this small budget
+// only absorbs an isolated anti-aliased pixel.
+const KEY_PAGES = new Set([
+  "command-centre",
+  "applications",
+  "form-builder",
+  "review-workbench",
+  "communications",
+  "speaker-dashboard",
+  "schedule-planner",
+  "tasks-readiness",
+  "tasks-readiness-plans",
+  "tasks-readiness-templates",
+]);
+const KEY_PAGE_MAX_DIFF_PIXELS = 16;
+
+function screenshotOptions(name: string) {
+  return KEY_PAGES.has(name) ? { maxDiffPixels: KEY_PAGE_MAX_DIFF_PIXELS } : {};
+}
+
 async function selectDemoRole(page: Page, role: DemoRole) {
   await page.context().addCookies([
     {
@@ -162,34 +185,6 @@ async function waitForSurfaceReady(page: Page, name: string) {
       name: "Visual call-for-speakers form editor",
     });
     await expect(editor.locator(".fb-canvas-page")).toBeVisible();
-    await expect(
-      page.getByText("Changes update the draft immediately."),
-    ).toBeVisible();
-    const hintBounds = await page
-      .locator("#form-builder .fb-canvas > .fb-pane-head")
-      .evaluate((header) => {
-        const hint = header.querySelector(".fb-pane-hint");
-        if (!hint) throw new Error("Form canvas hint is missing");
-        const outer = header.getBoundingClientRect();
-        const inner = hint.getBoundingClientRect();
-        return {
-          leftInset: inner.left - outer.left,
-          rightInset: outer.right - inner.right,
-          bottomInset: outer.bottom - inner.bottom,
-        };
-      });
-    expect(
-      hintBounds.leftInset,
-      "Canvas hint needs a left inset",
-    ).toBeGreaterThanOrEqual(8);
-    expect(
-      hintBounds.rightInset,
-      "Canvas hint needs a right inset",
-    ).toBeGreaterThanOrEqual(8);
-    expect(
-      hintBounds.bottomInset,
-      "Canvas hint must stay inside its header",
-    ).toBeGreaterThanOrEqual(0);
     const layout = editor.getByLabel("Applicant layout");
     if (await layout.isVisible()) {
       const overflow = await layout.evaluate((element) => {
@@ -255,7 +250,10 @@ async function captureState(page: Page, target: Locator, name: string) {
     content: ".topbar, .skip-link { visibility: hidden !important; }",
   });
   try {
-    await expect(target).toHaveScreenshot(`${name}.png`);
+    await expect(target).toHaveScreenshot(
+      `${name}.png`,
+      screenshotOptions(name),
+    );
   } finally {
     await unrelatedFixedChrome.evaluate((style) =>
       style.parentNode?.removeChild(style),
@@ -279,7 +277,7 @@ async function captureLaptopViewport(page: Page, name: string) {
         })
       : null;
   try {
-    await expect(page).toHaveScreenshot(`${name}.png`);
+    await expect(page).toHaveScreenshot(`${name}.png`, screenshotOptions(name));
   } finally {
     await dateCopy?.evaluate((style) => style.parentNode?.removeChild(style));
   }
@@ -660,6 +658,7 @@ test.describe
         try {
           await expect(page.locator("body")).toHaveScreenshot(
             `${surface.name}.png`,
+            screenshotOptions(surface.name),
           );
         } finally {
           await fixedNavigationStyle?.evaluate((style) =>

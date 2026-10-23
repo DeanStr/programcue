@@ -267,9 +267,8 @@ export function ScheduleStandardCalendar({
       {placementAvailable && view !== "list" ? (
         <p className="help mt">
           Drag to change time or day, or drag an event’s lower edge to resize.
-          Changes appear immediately, then roll back if authoritative server
-          validation rejects them. Use “Place or move with form” for a complete
-          keyboard alternative, including room changes.
+          Use “Place or move with form” for a complete keyboard alternative,
+          including room changes.
         </p>
       ) : null}
     </section>

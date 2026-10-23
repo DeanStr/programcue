@@ -226,10 +226,7 @@ export function CommunicationDraftPreview({
           name="suppressedCount"
           value={preview.confirmation.suppressedCount}
         />
-        <span className="help">
-          Confirmation recomputes the audience and atomically transitions this
-          draft.
-        </span>
+        <span className="help">Confirmation recomputes the audience.</span>
         <Button type="submit" variant="primary" disabled={confirmationBlocked}>
           <Send aria-hidden size={16} />
           {working && pendingIntent === "confirm-draft"

@@ -7,6 +7,151 @@ verification or deployment. The [product specification](../sessionboard-replacem
 owns intended scope, [DECISIONS.md](DECISIONS.md) owns engineering decisions, and
 Git history retains earlier committed work logs.
 
+## Interface defects, displayed values and view races — 22 October 2026
+
+**Local presentation and client-state change; not deployed.**
+
+Defects fixed:
+- `.page-actions` is now a flex row with a gap everywhere. Outside page
+  headers it was a block, so adjacent controls touched. Affected: the Delivery
+  health count and its period button, task filter Apply/Clear, bulk task
+  links, and the session-content Desktop/Mobile toggle. Two navs that had
+  rendered empty (sponsors, deliverables paging) now render only with links.
+- The Tasks table's action cell is a table cell again, so its row divider
+  lines up with the rest of the row.
+- The speaker dashboard calendar note has a gap after its icon.
+- The AI notice on Review & selection no longer ends a sentence with "..".
+- Review workbench:
+  - Queue references wrap whole instead of mid-reference.
+  - The header save state is hidden where the action bar is always in view
+    (three-column layout). It remains on narrower layouts.
+  - Rubric fields fade out above the action bar instead of being sliced
+    mid-line.
+
+Raw values replaced:
+- Statuses now use the shared presentation labels and tones:
+  - Review & selection submission and session statuses;
+  - the session results row;
+  - review queue cards.
+- Task priorities are capitalised.
+- Session slugs no longer appear in the review session queue or results.
+- Communication record ids and a duplicate sent count no longer appear in
+  Recent communications.
+- Applications shows the routing state alone when no team is routed, and the
+  team alone when routing is automatic.
+- Session formats still show the event's format key, because the review loader
+  does not read the event's format labels.
+
+View races fixed in the Applications grid:
+- Column and density changes build on the last requested URL. Holding requests
+  open, two quick column toggles kept both changes 9 of 9 times; the previous
+  code lost one 5 of 6 times.
+- The filter form's view fields come from the grid's requested state, so Apply
+  pressed during a pending density change keeps it. The previous code lost the
+  change 3 of 3 times.
+- A pending view is discarded on any committed navigation. Before this, Clear
+  pressed during a pending density change reset the URL but left the selector,
+  table and form value on Compact. Back would also have revived an old pending
+  view.
+- Browser tests reproduce the races with held requests, and cover Clear and
+  Back/Forward. Unit tests cover chained column changes and reading the
+  requested view.
+
+Validation:
+- The five-shard browser suite passed apart from the visual baselines these
+  fixes move. A first run lost two shard servers mid-run, and the rerun passed.
+- The 11 changed visual baselines were regenerated with
+  `--update-snapshots=all` and inspected. One of them sits inside the 1% ratio,
+  so it would not have been refreshed otherwise. Their 7 film pins were updated
+  and the affected frames rendered. The visual suite then passed 32 of 32.
+- The evaluation suite passed 12 of 12, and 53 affected unit tests passed.
+  Biome, TypeScript, CSS hygiene, design-system adoption and story-state
+  validation passed.
+- One test fixture used a session status the schema does not allow. It now
+  uses `scheduled`.
+- The complete gate was not run.
+
+## Secondary copy reduction — 22 October 2026
+
+**Local presentation change; not deployed.** Administrator, reviewer,
+participant, applicant and public pages no longer repeat their titles in ledes,
+section and card descriptions, eyebrows, control hints or empty-state bodies.
+About 110 route and component files changed (733 lines removed, 192 added).
+Consequences, honesty disclosures, validation and status text, format and limit
+help, keyboard alternatives, scope and organiser content remain. A review of
+every removal restored two consequence notes: routing does not assign
+evaluators, and confirmation recomputes a communication's audience. A later
+review restored a third beside Add session: it emails a portal invitation to
+each speaker who has not accepted access. That notice describes production;
+demo and test runtimes deliberately send no invitation. A keyword scan of all
+removed copy found no other lost consequence. A further review restored the
+bulk speaker invitations' two-contact minimum, a limit hint the rules keep.
+Submitting one contact now also says so instead of the schema's generic
+array-size error. A scan of removed copy for limits and format help found no
+other loss.
+
+The speaker dashboard retains conditional guidance when tasks and resource
+acknowledgements are complete but profile or session preparation remains.
+A browser regression clears the task list with one session role still pending,
+checks the guidance at desktop and phone widths, then accepts the role and
+checks that the guidance disappears when preparation is complete. The new
+regression, existing speaker workflow and desktop/mobile dashboard visual
+checks passed (4 checks), as did 11 focused component tests, generated
+TypeScript, Biome and the production build. Both new-state screenshots were
+visually inspected. The complete gate was not rerun for this follow-up.
+
+Side effects found and fixed:
+- Seven page headers had relied on a lede's width to place their actions. A
+  before/after sweep of 46 pages at desktop and phone widths found five, a
+  scan of the changed header markup found the other two, and all seven now
+  put their actions in the trailing `.page-actions` group.
+- The branding commit action kept its trailing position once its note was gone.
+- Five now-unused CSS rules were removed.
+- Four launch-film focus rings over changed screenshots were realigned and
+  checked in rendered frames.
+
+Biome, generated TypeScript, CSS hygiene, design-system adoption and
+story-state validation passed, as did 496 affected unit and Worker tests. The
+five-shard browser suite ran 270 checks: 265 passed and two opt-in performance
+checks were skipped. The three event-website failures were refreshed snapshots
+and a layout test that had depended on panel length; after the fix the spec
+passed 6 of 6. The evaluation browser suite passed 12 of 12. Four browser specs
+that asserted removed text were updated. The 40 visual and 6 public-site
+baselines that changed were regenerated and inspected, with their film pins.
+The complete gate was not run.
+
+## Status colour roles — 22 October 2026
+
+**Local presentation and test change; not deployed.** Copper is now limited to
+brand, primary actions, links and selection. In-progress and informational
+statuses, including status badges and in-progress speaker stages, use a muted
+steel blue. Failure moved from a 0° red to crimson (about 345°) on near-neutral
+rose surfaces; the warning solid is a clearer amber-gold; healthy incomplete
+Command Centre meters are neutral. Field errors and notification counts use the
+failure tokens. All new text pairs meet 4.5:1 and graphical marks 3:1.
+
+These colour changes fell inside the visual tests' 1% tolerance, so 25 affected
+baselines were regenerated and inspected, with their 15 film pins. That also
+captured existing Form Builder canvas drift the tolerance had hidden. Key
+operational pages now allow at most 16 differing pixels. Three fresh runs of the
+visual suite passed with a zero-pixel key-page budget. Temporarily restoring
+copper to in-progress statuses failed the Applications check with 78 differing
+pixels, a change the 1% ratio would have accepted.
+
+Visual, axe and keyboard accessibility, data grid, schedule, responsive and
+Firefox/WebKit smoke specs, generated TypeScript, Biome, CSS hygiene,
+design-system adoption and story-state validation passed. One data grid assertion
+was updated to the new crimson values. The complete gate was not run.
+
+A later review found that three rules still named copper directly instead of
+the state tokens: the evaluation results' Moderation draft flag, the default
+(informational) status notice, and untoned `.progress` meters (review queue
+progress, rubric weights). They now use the steel-blue information tokens and
+neutral ink, which computed styles confirm in the browser. A sweep of state and
+tone selectors that still use brand tokens found only selection, current-item,
+primary-action and loading-indicator rules, which copper still owns. Four
+visual baselines and two film pins changed; the visual suite passed 32 of 32.
+
 ## Interface refinement and visual evaluation — 20–22 October 2026
 
 **Local presentation changes, one data-integrity fix and evaluator tooling; not

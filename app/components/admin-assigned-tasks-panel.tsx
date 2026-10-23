@@ -4,6 +4,7 @@ import { Form, Link } from "react-router";
 import { Button, ButtonAnchor } from "~/components/ui/button";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EventDateTime } from "~/components/ui/event-date-time";
+import { impactLabel } from "~/components/ui/readiness-weighting";
 import type { AdminTasksData } from "~/routes/admin-tasks";
 
 function dateLabel(epoch: number | null, timezone: string) {
@@ -111,7 +112,7 @@ export function AdminAssignedTasksPanel({
                   {task.dueAt ? (
                     <div className="pc-record-stack">
                       <span className={`impact ${task.impact}`}>
-                        {task.impact}
+                        {impactLabel(task.impact)}
                       </span>
                       <EventDateTime
                         epochSeconds={task.dueAt}
@@ -137,7 +138,7 @@ export function AdminAssignedTasksPanel({
                   ) : (
                     <div className="pc-record-stack">
                       <span className={`impact ${task.impact}`}>
-                        {task.impact}
+                        {impactLabel(task.impact)}
                       </span>
                       <span>No due date</span>
                     </div>
@@ -287,155 +288,159 @@ export function AdminAssignedTasksPanel({
                   data-label="Administrator action"
                   className="pc-record-action-cell"
                 >
-                  <Form method="post" className="task-admin-actions">
-                    <input type="hidden" name="taskId" value={task.id} />
-                    <input
-                      type="hidden"
-                      name="revision"
-                      value={task.revision}
-                    />
-                    {task.status === "submitted" &&
-                    !task.isSessionDetailsReview ? (
-                      <button
-                        type="submit"
-                        className="task-ghost is-action"
-                        name="intent"
-                        value="approve"
-                        formNoValidate
-                        disabled={busy}
-                      >
-                        Approve
-                      </button>
-                    ) : null}
-                    {!task.isSessionDetailsReview &&
-                    !["completed", "waived", "submitted"].includes(
-                      task.status,
-                    ) ? (
-                      <button
-                        type="submit"
-                        className="task-ghost is-action"
-                        name="intent"
-                        value="complete"
-                        formNoValidate
-                        disabled={busy}
-                      >
-                        Complete
-                      </button>
-                    ) : ["completed", "waived"].includes(task.status) ? (
-                      <button
-                        type="submit"
-                        className="task-ghost"
-                        name="intent"
-                        value="reopen"
-                        formNoValidate
-                        disabled={busy}
-                      >
-                        Reopen
-                      </button>
-                    ) : null}
-                    {!["completed", "waived"].includes(task.status) ? (
-                      <details>
-                        <summary className="task-ghost">Waive task</summary>
-                        <label className="label">
-                          Reason
-                          <input
-                            className="field"
-                            name="reason"
-                            minLength={5}
-                            required
-                          />
-                        </label>
-                        <Button
+                  <div className="task-admin-action-row">
+                    <Form method="post" className="task-admin-actions">
+                      <input type="hidden" name="taskId" value={task.id} />
+                      <input
+                        type="hidden"
+                        name="revision"
+                        value={task.revision}
+                      />
+                      {task.status === "submitted" &&
+                      !task.isSessionDetailsReview ? (
+                        <button
                           type="submit"
-                          variant="danger"
-                          size="small"
+                          className="task-ghost is-action"
                           name="intent"
-                          value="waive"
+                          value="approve"
+                          formNoValidate
                           disabled={busy}
                         >
-                          Confirm waiver
-                        </Button>
+                          Approve
+                        </button>
+                      ) : null}
+                      {!task.isSessionDetailsReview &&
+                      !["completed", "waived", "submitted"].includes(
+                        task.status,
+                      ) ? (
+                        <button
+                          type="submit"
+                          className="task-ghost is-action"
+                          name="intent"
+                          value="complete"
+                          formNoValidate
+                          disabled={busy}
+                        >
+                          Complete
+                        </button>
+                      ) : ["completed", "waived"].includes(task.status) ? (
+                        <button
+                          type="submit"
+                          className="task-ghost"
+                          name="intent"
+                          value="reopen"
+                          formNoValidate
+                          disabled={busy}
+                        >
+                          Reopen
+                        </button>
+                      ) : null}
+                      {!["completed", "waived"].includes(task.status) ? (
+                        <details>
+                          <summary className="task-ghost">Waive task</summary>
+                          <label className="label">
+                            Reason
+                            <input
+                              className="field"
+                              name="reason"
+                              minLength={5}
+                              required
+                            />
+                          </label>
+                          <Button
+                            type="submit"
+                            variant="danger"
+                            size="small"
+                            name="intent"
+                            value="waive"
+                            disabled={busy}
+                          >
+                            Confirm waiver
+                          </Button>
+                        </details>
+                      ) : null}
+                    </Form>
+                    {task.targetType === "speaker" &&
+                    task.dueAt !== null &&
+                    !["completed", "waived"].includes(task.status) ? (
+                      <details>
+                        <summary className="task-ghost">
+                          Extend deadline
+                        </summary>
+                        <Form method="post" className="stack mt">
+                          <input
+                            type="hidden"
+                            name="intent"
+                            value="extend-deadline"
+                          />
+                          <input type="hidden" name="taskId" value={task.id} />
+                          <input
+                            type="hidden"
+                            name="revision"
+                            value={task.revision}
+                          />
+                          <label className="label">
+                            New deadline ({data.eventTimezone})
+                            <input
+                              className="field"
+                              type="date"
+                              name="dueDate"
+                              required
+                            />
+                          </label>
+                          <label className="label">
+                            Reason for deadline extension
+                            <input
+                              className="field"
+                              name="reason"
+                              minLength={5}
+                              maxLength={1_000}
+                              required
+                            />
+                          </label>
+                          <Button type="submit" size="small" disabled={busy}>
+                            Confirm extension
+                          </Button>
+                        </Form>
                       </details>
                     ) : null}
-                  </Form>
-                  {task.targetType === "speaker" &&
-                  task.dueAt !== null &&
-                  !["completed", "waived"].includes(task.status) ? (
                     <details>
-                      <summary className="task-ghost">Extend deadline</summary>
+                      <summary className="task-ghost">Task details</summary>
+                      <p className="help">{task.description}</p>
+                      <p className="help">
+                        {task.taskType.replaceAll("_", " ")} · Revision{" "}
+                        {task.revision}
+                      </p>
+                    </details>
+                    <details>
+                      <summary className="task-ghost">Add comment</summary>
                       <Form method="post" className="stack mt">
+                        <input type="hidden" name="intent" value="comment" />
                         <input
                           type="hidden"
-                          name="intent"
-                          value="extend-deadline"
+                          name="intentId"
+                          value={`${data.intentId}:${task.id}`}
                         />
                         <input type="hidden" name="taskId" value={task.id} />
-                        <input
-                          type="hidden"
-                          name="revision"
-                          value={task.revision}
-                        />
                         <label className="label">
-                          New deadline ({data.eventTimezone})
-                          <input
-                            className="field"
-                            type="date"
-                            name="dueDate"
+                          Message
+                          <textarea
+                            className="textarea"
+                            name="body"
                             required
+                            maxLength={2_000}
                           />
                         </label>
-                        <label className="label">
-                          Reason for deadline extension
-                          <input
-                            className="field"
-                            name="reason"
-                            minLength={5}
-                            maxLength={1_000}
-                            required
-                          />
+                        <label className="speaker-confirm">
+                          <input type="checkbox" name="administratorOnly" />{" "}
+                          Keep this note administrator-only
                         </label>
                         <Button type="submit" size="small" disabled={busy}>
-                          Confirm extension
+                          Send comment
                         </Button>
                       </Form>
                     </details>
-                  ) : null}
-                  <details>
-                    <summary className="task-ghost">Task details</summary>
-                    <p className="help">{task.description}</p>
-                    <p className="help">
-                      {task.taskType.replaceAll("_", " ")} · Revision{" "}
-                      {task.revision}
-                    </p>
-                  </details>
-                  <details>
-                    <summary className="task-ghost">Add comment</summary>
-                    <Form method="post" className="stack mt">
-                      <input type="hidden" name="intent" value="comment" />
-                      <input
-                        type="hidden"
-                        name="intentId"
-                        value={`${data.intentId}:${task.id}`}
-                      />
-                      <input type="hidden" name="taskId" value={task.id} />
-                      <label className="label">
-                        Message
-                        <textarea
-                          className="textarea"
-                          name="body"
-                          required
-                          maxLength={2_000}
-                        />
-                      </label>
-                      <label className="speaker-confirm">
-                        <input type="checkbox" name="administratorOnly" /> Keep
-                        this note administrator-only
-                      </label>
-                      <Button type="submit" size="small" disabled={busy}>
-                        Send comment
-                      </Button>
-                    </Form>
-                  </details>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -445,9 +450,6 @@ export function AdminAssignedTasksPanel({
                   <div className="pc-empty-state">
                     <ListChecks aria-hidden className="pc-state-icon" />
                     <h3>No assigned work matches these filters</h3>
-                    <p className="subtle">
-                      Clear or change the filters to see other event tasks.
-                    </p>
                   </div>
                 </td>
               </tr>

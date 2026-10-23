@@ -374,10 +374,6 @@ export default function ParticipantApplications({
       <div className="page-head">
         <div>
           <h1>Applications</h1>
-          <p>
-            Track proposals you submitted and applications that include you as a
-            co-speaker.
-          </p>
         </div>
         <p className="speaker-work-count">
           <b className="pc-num">{loaderData.applications.length}</b>
@@ -406,7 +402,6 @@ export default function ParticipantApplications({
                 <ClipboardList aria-hidden className="pc-index-icon" />
                 <span className="speaker-resource-link-copy">
                   <strong>{form.name}</strong>
-                  <small>Start a new application</small>
                 </span>
                 <ExternalLink aria-hidden size={14} />
               </Link>

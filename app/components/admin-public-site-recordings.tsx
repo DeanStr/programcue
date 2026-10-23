@@ -205,7 +205,7 @@ export function AdminPublicSiteRecordings({
 
       <SitePanelHeading
         title="Session recordings"
-        help="Only external HTTPS recordings are supported in this slice. Saving never implies upload or publication."
+        help="External HTTPS recordings only. Saving does not upload or publish."
       />
       {blockedReason ? (
         <p className="validation-item warn" role="status">

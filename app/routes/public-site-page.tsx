@@ -136,7 +136,6 @@ export default function PublicSitePage(props: Route.ComponentProps) {
         activePage={page}
       />
       <main id="main" className="public-site-page" tabIndex={-1}>
-        <p className="pc-page-eyebrow">{site.event.name}</p>
         <h1>{site.configuration.pages[page].title}</h1>
         <PublicSitePageContent
           event={site.event}

@@ -175,7 +175,6 @@ export default function SpeakerTasks({ loaderData }: Route.ComponentProps) {
       <div className="page-head">
         <div>
           <h1>Tasks</h1>
-          <p>Complete event requirements and keep the team informed.</p>
         </div>
         <p className="speaker-work-count">
           <b className="pc-num">{finished}</b>

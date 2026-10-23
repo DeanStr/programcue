@@ -107,12 +107,10 @@ export default function AdminEventFields({ loaderData }: Route.ComponentProps) {
       <div className="page-head">
         <div>
           <h1>Participant &amp; session fields</h1>
-          <p>
-            Control the standard participant profile and add a small set of
-            event-owned typed fields.
-          </p>
         </div>
-        <ButtonLink to="/admin/event">Event settings</ButtonLink>
+        <div className="page-actions">
+          <ButtonLink to="/admin/event">Event settings</ButtonLink>
+        </div>
       </div>
 
       {actionData ? (
@@ -128,14 +126,12 @@ export default function AdminEventFields({ loaderData }: Route.ComponentProps) {
       <section className="card pad mb" aria-labelledby="standard-fields-title">
         <div className="card-title">
           <div>
-            <span className="pc-section-kicker">Participant portal</span>
             <h2 id="standard-fields-title">Standard profile access</h2>
           </div>
         </div>
         <p className="help">
-          Hidden fields are omitted from the portal. Read-only fields remain
-          visible but can only be changed by an organiser. These rules are
-          enforced on the server as well as in the form.
+          Hidden fields are omitted from the portal. Read-only fields stay
+          visible, but only organisers can change them.
         </p>
         <Form method="post" className="stack mt">
           <input type="hidden" name="intent" value="save-policies" />
@@ -162,7 +158,6 @@ export default function AdminEventFields({ loaderData }: Route.ComponentProps) {
       <section className="card pad mb" aria-labelledby="reusable-fields-title">
         <div className="card-title">
           <div>
-            <span className="pc-section-kicker">Event-owned metadata</span>
             <h2 id="reusable-fields-title">Reusable fields</h2>
           </div>
           <span className="pill">{activeDefinitions.length} active</span>
@@ -206,9 +201,6 @@ export default function AdminEventFields({ loaderData }: Route.ComponentProps) {
       <section className="card pad" aria-labelledby="new-field-title">
         <div className="card-title">
           <div>
-            <span className="pc-section-kicker">
-              No formulas or dependencies
-            </span>
             <h2 id="new-field-title">Add one typed field</h2>
           </div>
         </div>

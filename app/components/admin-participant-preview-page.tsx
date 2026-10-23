@@ -55,9 +55,11 @@ export function AdminParticipantPreviewPage({ preview }: { preview: Preview }) {
             <p className="eyebrow">Participant support preview</p>
             <h1>{preview.person.name}</h1>
           </div>
-          <ButtonLink to={backHref}>
-            <ArrowLeft aria-hidden size={15} /> {backLabel}
-          </ButtonLink>
+          <div className="page-actions">
+            <ButtonLink to={backHref}>
+              <ArrowLeft aria-hidden size={15} /> {backLabel}
+            </ButtonLink>
+          </div>
         </div>
         <div className="empty-state">
           <UserRound aria-hidden size={24} />
@@ -80,13 +82,12 @@ export function AdminParticipantPreviewPage({ preview }: { preview: Preview }) {
         <div>
           <p className="eyebrow">Participant support preview</p>
           <h1>{participantName}</h1>
-          <p>
-            Read-only view of the data this participant can currently access.
-          </p>
         </div>
-        <ButtonLink to={backHref}>
-          <ArrowLeft aria-hidden size={15} /> {backLabel}
-        </ButtonLink>
+        <div className="page-actions">
+          <ButtonLink to={backHref}>
+            <ArrowLeft aria-hidden size={15} /> {backLabel}
+          </ButtonLink>
+        </div>
       </div>
 
       <div className="validation-item info" role="status">

@@ -266,9 +266,6 @@ export function AccessPanel({
       {form.allowAnonymousDrafts && accepting ? (
         <div className="cfp-returning">
           <h3 className="cfp-returning-heading">Resume an application</h3>
-          <p className="help">
-            Recover verified applications on this or another device.
-          </p>
           {recoverForm}
         </div>
       ) : (
@@ -422,10 +419,7 @@ export function SpeakerProfilePanel({
   return (
     <details className="card pad mb">
       <summary>
-        <strong>Your claimed speaker profile</strong>{" "}
-        <span className="subtle">
-          {canEdit ? "Update the details you own" : "View your details"}
-        </span>
+        <strong>Your claimed speaker profile</strong>
       </summary>
       <Form method="post" action={action} className="stack mt">
         <input type="hidden" name="_intent" value="update_profile" />
@@ -823,15 +817,7 @@ export function AuthenticatedApplicationWorkspace({
                 </Link>
               ))}
             </div>
-          ) : (
-            <p className="subtle">
-              {applicant.claimOnly
-                ? "Your claim link grants access only to your speaker profile. Sign in to view or manage applications."
-                : historicalPortal
-                  ? "No applications are available for this account on the closed form."
-                  : "Create a draft to begin. You can maintain more than one application."}
-            </p>
-          )}
+          ) : null}
         </aside>
         <section className="card pad">
           {selected ? (
@@ -910,9 +896,7 @@ export function AuthenticatedApplicationWorkspace({
                 >
                   Continue to sign in
                 </ButtonLink>
-              ) : historicalPortal ? (
-                <p className="help">This form is closed to new applications.</p>
-              ) : (
+              ) : historicalPortal ? null : (
                 <Form method="post" action={claimScopedAction}>
                   <input type="hidden" name="_intent" value="create_draft" />
                   <input

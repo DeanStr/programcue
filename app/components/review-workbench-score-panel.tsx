@@ -517,11 +517,11 @@ export function ReviewScorePanel() {
             <div className="score-summary">
               <div>
                 <span className="score-summary-label">Weighted score</span>
-                <small className="subtle">
-                  {weightedScore === null
-                    ? "Appears once every scored criterion has a value."
-                    : "Weighted by the relative criterion weights in this round."}
-                </small>
+                {weightedScore === null ? (
+                  <small className="subtle">
+                    Appears once every scored criterion has a value.
+                  </small>
+                ) : null}
               </div>
               <strong
                 className={`score-summary-value pc-num${weightedScore === null ? " is-pending" : ""}`}
@@ -601,7 +601,7 @@ export function ReviewScorePanel() {
               label="Applicant feedback"
               scope="shared"
               scopeLabel="Shared with the applicant"
-              help="Sent to the applicant when administrators publish this decision. Write it to be read by the person who wrote the proposal."
+              help="Sent to the applicant when administrators publish this decision."
               defaultValue={workspace.review?.submitterFeedback ?? ""}
               length={recoveryPayload.submitterFeedback.length}
               disabled={readOnly}
@@ -709,11 +709,7 @@ export function ReviewWorkspaceState() {
   const { workspace } = useReviewWorkbenchModel();
   return !workspace.selected || !workspace.submission ? (
     <section className="card pad">
-      <EmptyState
-        title="No assigned reviews"
-        description="Open assignments and completed scoring records appear here. If you have finished a review, it should stay in this queue even after the round closes."
-        headingLevel={2}
-      />
+      <EmptyState title="No assigned reviews" headingLevel={2} />
     </section>
   ) : (
     <div className="review-layout">

@@ -644,18 +644,12 @@ export function EventAccessPanels({
 
       <div className="event-setup-group">
         <h4 className="event-setup-group-title">Submission access</h4>
-        <p className="help">
-          How applicants reach the form, and what it may collect first.
-        </p>
         <div className="event-setup-settings">
           <div className="event-setup-setting">
             <div className="event-setup-setting-copy">
               <label htmlFor="event-setup-submission-access">
                 Public form access
               </label>
-              <p className="help">
-                Required identity before a submission can be completed.
-              </p>
             </div>
             <select
               id="event-setup-submission-access"
@@ -673,10 +667,6 @@ export function EventAccessPanels({
               <span className="event-setup-setting-title">
                 Anonymous start and draft recovery
               </span>
-              <span className="help">
-                Applicants can begin without an account and recover a draft
-                later.
-              </span>
             </span>
             <span className="toggle">
               <input
@@ -691,9 +681,6 @@ export function EventAccessPanels({
             <span className="event-setup-setting-copy">
               <span className="event-setup-setting-title">
                 Duplicate-person warnings
-              </span>
-              <span className="help">
-                Flag likely matches when a person already exists on this event.
               </span>
             </span>
             <span className="toggle">

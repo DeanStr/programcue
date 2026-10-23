@@ -385,10 +385,6 @@ export default function AdminContent({ loaderData }: Route.ComponentProps) {
       <div className="page-head pc-page-header">
         <div>
           <h1>Session content &amp; files</h1>
-          <p>
-            Review session copy, restore attributed revisions and collect
-            released speaker files.
-          </p>
         </div>
         <div className="page-actions">
           <Link className="content-text-action" to="/admin/tasks">
@@ -484,10 +480,8 @@ export default function AdminContent({ loaderData }: Route.ComponentProps) {
         {loaderData.files.length ? (
           <>
             <p className="content-files-note">
-              Quarantined and historical metadata remains visible. Library and
-              ZIP export actions use only current released, signature-valid and
-              clean versions; retained clean and released versions remain
-              individually downloadable from version history.
+              Library and ZIP export actions use only current released,
+              signature-valid and clean versions.
             </p>
             <Form method="post" className="stack">
               <input type="hidden" name="intent" value="preview-zip" />
@@ -656,7 +650,6 @@ export default function AdminContent({ loaderData }: Route.ComponentProps) {
         <section className="card pad mt" aria-labelledby="zip-preview-title">
           <div className="card-title">
             <div>
-              <span className="pc-section-kicker">Exact current versions</span>
               <h2 id="zip-preview-title">Confirm ZIP export</h2>
             </div>
             <span className="pill">
@@ -713,7 +706,6 @@ export default function AdminContent({ loaderData }: Route.ComponentProps) {
         <section className="card pad mt" aria-labelledby="zip-progress-title">
           <div className="card-title">
             <div>
-              <span className="pc-section-kicker">Stored archive</span>
               <h2 id="zip-progress-title">ZIP export</h2>
             </div>
           </div>

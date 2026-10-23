@@ -319,12 +319,7 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
       {dialog}
       <div className="page-head pc-page-header settings-page-head">
         <div>
-          <span className="pc-page-eyebrow">Developer access</span>
           <h1>API &amp; webhooks</h1>
-          <p>
-            Event-scoped credentials with the minimum permissions an integration
-            needs.
-          </p>
         </div>
         <div className="page-actions">
           <ButtonLink to="/api/docs">API reference</ButtonLink>
@@ -525,9 +520,7 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
             })}
           </ul>
         ) : (
-          <p className="settings-empty">
-            No API keys. Create a narrowly scoped key for a trusted integration.
-          </p>
+          <p className="settings-empty">No API keys.</p>
         )}
       </section>
 
@@ -535,10 +528,6 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
         <header className="settings-section-head">
           <div>
             <h2 id="settings-webhooks">Webhooks</h2>
-            <p>
-              Program Cue signs each HTTPS request with a per-endpoint HMAC
-              secret. Provider work is never simulated.
-            </p>
           </div>
         </header>
         <Form method="post" className="settings-rows">
@@ -720,10 +709,7 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
             ))}
           </ul>
         ) : (
-          <p className="settings-empty">
-            No outbound webhooks. Create an endpoint to deliver signed event
-            notifications.
-          </p>
+          <p className="settings-empty">No outbound webhooks.</p>
         )}
       </section>
     </div>

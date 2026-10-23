@@ -100,14 +100,12 @@ export default function AdminCrmPipeline({ loaderData }: Route.ComponentProps) {
       <div className="page-head pc-page-header">
         <div>
           <h1>Speaker sourcing pipeline</h1>
-          <p className="crm-caption">
-            Move reusable contacts from identification through confirmed or
-            declined outcomes. Every transition is timestamped.
-          </p>
         </div>
-        <ButtonLink to="/admin/crm">
-          <ArrowLeft aria-hidden size={15} /> Speaker directory
-        </ButtonLink>
+        <div className="page-actions">
+          <ButtonLink to="/admin/crm">
+            <ArrowLeft aria-hidden size={15} /> Speaker directory
+          </ButtonLink>
+        </div>
       </div>
       {actionData ? (
         <div className="validation-item error crm-notice" role="alert">

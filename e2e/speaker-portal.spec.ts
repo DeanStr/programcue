@@ -224,6 +224,94 @@ test("speaker profile, sessions and D1 task state render through the production 
   );
 });
 
+test("a clear task list still points to unfinished speaker preparation", async ({
+  page,
+  request,
+}, testInfo) => {
+  await resetDemoEvent(request);
+  await useDemoEvent(page);
+  try {
+    await page.context().addCookies([
+      {
+        name: "program_cue_demo_identity",
+        value: "speaker",
+        domain: "127.0.0.1",
+        path: "/",
+      },
+    ]);
+    await page.goto("/participant/resources");
+    await page.locator("body[data-hydrated='true']").waitFor();
+    await page
+      .getByLabel("I have read and understood this published resource")
+      .check();
+    await page.getByRole("button", { name: "Acknowledge version" }).click();
+    await expect(
+      page.getByText("You acknowledged this exact published version."),
+    ).toBeVisible();
+
+    await page.context().addCookies([
+      {
+        name: "program_cue_demo_identity",
+        value: "administrator",
+        domain: "127.0.0.1",
+        path: "/",
+      },
+    ]);
+    await page.goto("/admin/tasks");
+    await page.locator("body[data-hydrated='true']").waitFor();
+    const slides = page
+      .getByRole("row")
+      .filter({ hasText: "Upload presentation slides" });
+    await slides.getByText("Waive task", { exact: true }).click();
+    await slides
+      .getByLabel("Reason", { exact: true })
+      .fill("Slides not needed");
+    await slides.getByRole("button", { name: "Confirm waiver" }).click();
+    await expect(slides).toHaveCount(0);
+
+    await page.context().addCookies([
+      {
+        name: "program_cue_demo_identity",
+        value: "speaker",
+        domain: "127.0.0.1",
+        path: "/",
+      },
+    ]);
+    await page.goto("/participant/dashboard");
+    const hero = page.locator(".speaker-next-hero");
+    const guidance = hero.getByText(
+      "Check the preparation stages below for remaining profile or session steps.",
+    );
+    await expect(hero).toContainText("3 of 3 requirements complete");
+    await expect(page.locator(".speaker-stepper")).toContainText(
+      "3 of 4 roles accepted",
+    );
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 1000 });
+      await expect(guidance).toBeVisible();
+      await page.screenshot({
+        path: testInfo.outputPath(`unfinished-preparation-${width}.png`),
+      });
+    }
+
+    await page.goto("/participant/sessions");
+    await page
+      .getByRole("button", {
+        name: "Accept Speaker role in Designing inclusive event technology",
+      })
+      .click();
+    await acceptConfirm(page);
+    await expect(page.getByRole("status")).toContainText(
+      "Speaker role accepted",
+    );
+    await page.goto("/participant/dashboard");
+    await expect(hero).toContainText("You are ready for the event");
+    await expect(guidance).toHaveCount(0);
+  } finally {
+    await resetDemoEvent(request);
+  }
+});
+
 test.describe("optional session-details review", () => {
   test.beforeEach(async ({ page, request }) => {
     await page.context().addCookies([

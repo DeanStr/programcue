@@ -36,10 +36,6 @@ export function SpeakerProfileHistory({
       <div className="card-title">
         <div>
           <h3 id="profile-history-title">Public profile history</h3>
-          <p className="subtle">
-            Read-only evidence. Restoring an old identity or headshot is not
-            available yet.
-          </p>
         </div>
         <span className="pill right">{revisions.length}</span>
       </div>

@@ -115,10 +115,6 @@ export default function SpeakerAvailability({
       <div className="page-head">
         <div>
           <h1>Availability</h1>
-          <p>
-            Tell organisers when you cannot be scheduled. Times use the event
-            timezone, {portal.event.timezone}.
-          </p>
         </div>
         <p className="speaker-work-count">
           <b className="pc-num">{loaderData.windows.length}</b>

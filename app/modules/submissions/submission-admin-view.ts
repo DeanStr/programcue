@@ -56,6 +56,66 @@ function optionalParameter<T>(
   return parsed.data;
 }
 
+function parseOptionalColumns(value: string | undefined) {
+  const columns =
+    value === undefined
+      ? [...ADMIN_SUBMISSION_OPTIONAL_COLUMNS]
+      : value === ""
+        ? []
+        : value.split(",").map((column) => {
+            const parsed = optionalColumnSchema.safeParse(column);
+            if (!parsed.success) {
+              throw new Response("Invalid submissions parameter: columns", {
+                status: 400,
+              });
+            }
+            return parsed.data;
+          });
+  if (new Set(columns).size !== columns.length) {
+    throw new Response("Invalid submissions parameter: columns", {
+      status: 400,
+    });
+  }
+  return columns;
+}
+
+/** The grid's own view controls as `search` requests them. */
+export function adminSubmissionViewControls(search: URLSearchParams) {
+  const density = densitySchema.safeParse(
+    search.get("density") || "comfortable",
+  );
+  if (!density.success) {
+    throw new Response("Invalid submissions parameter: density", {
+      status: 400,
+    });
+  }
+  return {
+    columns: parseOptionalColumns(search.get("columns") ?? undefined),
+    density: density.data,
+  };
+}
+
+/** Shows or hides one optional column in `search`, keeping every other
+ * parameter. Columns keep their canonical order, and the full set is the
+ * default, so it leaves no parameter. */
+export function withAdminSubmissionColumn(
+  search: URLSearchParams,
+  column: AdminSubmissionOptionalColumn,
+  visible: boolean,
+) {
+  const shown = parseOptionalColumns(search.get("columns") ?? undefined);
+  const columns = ADMIN_SUBMISSION_OPTIONAL_COLUMNS.filter((candidate) =>
+    candidate === column ? visible : shown.includes(candidate),
+  );
+  const next = new URLSearchParams(search);
+  if (columns.length === ADMIN_SUBMISSION_OPTIONAL_COLUMNS.length) {
+    next.delete("columns");
+  } else {
+    next.set("columns", columns.join(","));
+  }
+  return next;
+}
+
 export function parseAdminSubmissionView(url: URL): AdminSubmissionView {
   const pageValue = singleParameter(url, "page") ?? "1";
   if (!/^[1-9]\d*$/.test(pageValue)) {
@@ -80,30 +140,9 @@ export function parseAdminSubmissionView(url: URL): AdminSubmissionView {
     });
   }
 
-  const columnsValue = singleParameter(url, "columns");
-  const columns =
-    columnsValue === undefined
-      ? [...ADMIN_SUBMISSION_OPTIONAL_COLUMNS]
-      : columnsValue === ""
-        ? []
-        : columnsValue.split(",").map((column) => {
-            const parsed = optionalColumnSchema.safeParse(column);
-            if (!parsed.success) {
-              throw new Response("Invalid submissions parameter: columns", {
-                status: 400,
-              });
-            }
-            return parsed.data;
-          });
-  if (new Set(columns).size !== columns.length) {
-    throw new Response("Invalid submissions parameter: columns", {
-      status: 400,
-    });
-  }
-
   return {
     page,
-    columns,
+    columns: parseOptionalColumns(singleParameter(url, "columns")),
     density: optionalParameter(url, "density", densitySchema) ?? "comfortable",
     filters: {
       status: optionalParameter(url, "status", statusSchema) ?? "",

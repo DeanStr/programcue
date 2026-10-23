@@ -180,13 +180,8 @@ export default function IntegrationsAdmin({
       {dialog}
       <div className="page-head pc-page-header integ-page-head">
         <div>
-          <span className="pc-page-eyebrow">External providers</span>
           <h1>Integrations</h1>
-          <p>
-            Preview the exact record changes, then export them to Accelevents. A
-            preview never writes. Which system owns your event data is set in
-            Event settings.
-          </p>
+          <p>A preview never writes to Accelevents.</p>
         </div>
         <div className="page-actions">
           <ButtonLink to="/admin/operations">
@@ -228,9 +223,7 @@ export default function IntegrationsAdmin({
             <div>
               <h2 id="integ-accelevents">Accelevents</h2>
               <p>
-                One-way programme export. The event identifier and API key are
-                verified before anything is stored. Saving replaces the prior
-                event-scoped credential.
+                One-way programme export. Saving replaces the stored credential.
               </p>
             </div>
           </div>
@@ -335,10 +328,7 @@ export default function IntegrationsAdmin({
         </Form>
 
         {loaderData.connections.length ? null : (
-          <p className="integ-empty">
-            No provider connected. Verify Accelevents to preview mappings and
-            run audited one-way exports.
-          </p>
+          <p className="integ-empty">No provider connected.</p>
         )}
 
         {selected && preview ? (
@@ -556,9 +546,7 @@ export default function IntegrationsAdmin({
             ))}
           </ul>
         ) : (
-          <p className="integ-runs-empty">
-            No exports yet. Recorded previews and live exports appear here.
-          </p>
+          <p className="integ-runs-empty">No exports yet.</p>
         )}
       </section>
     </div>

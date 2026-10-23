@@ -116,8 +116,7 @@ export function AdminTaskPlanPanel({
           <p className="subtle">
             Optionally ask active session participants to review the shared
             title, description, format, duration and track. Any one of them may
-            complete the task for the session; corrections use the existing task
-            comments instead of a parallel proposal workflow.
+            complete the task for the session.
           </p>
           {sessionDetailsReviewReady ? (
             <p className="status success">Optional preset ready</p>
@@ -157,15 +156,13 @@ export function AdminTaskPlanPanel({
           <div className="card-title">
             <h2>Speaker travel onboarding</h2>
           </div>
-          <p className="subtle">
-            Create the hotel-stay and flight-reimbursement forms confirmed as
-            the minimum speaker onboarding workflow. Both are due seven days
-            after acceptance and assigned automatically.
-          </p>
           <ul className="help">
             <li>Hotel stay requirements</li>
             <li>Flight reimbursement</li>
           </ul>
+          <p className="subtle">
+            Both are due seven days after acceptance and assigned automatically.
+          </p>
           {data.travelOnboardingReady ? (
             <div className="tasks-preset-ready">
               <p className="status success">Travel onboarding ready</p>
@@ -575,11 +572,6 @@ export function AdminTaskPlanPanel({
                     </option>
                   ))}
                 </select>
-                <span className="help">
-                  {compatibleEvidenceModes.length > 1
-                    ? `Choose an accepted evidence type for ${taskType.replaceAll("_", " ")} tasks.`
-                    : `Required evidence type for ${taskType.replaceAll("_", " ")} tasks.`}
-                </span>
               </label>
             </div>
             <label className="label">

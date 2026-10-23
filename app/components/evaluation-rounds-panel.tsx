@@ -348,9 +348,6 @@ export function EvaluationRoundsPanel() {
             <div className="card-title">
               <div>
                 <h3>Reviewer progress</h3>
-                <p className="help">
-                  Round-scoped completion updates as reviews are submitted.
-                </p>
               </div>
             </div>
             {loaderData.reviewerProgress.some(

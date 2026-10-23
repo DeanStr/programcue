@@ -112,14 +112,12 @@ export function EvaluationPlanState() {
     <AdminPageSection
       id="evaluation-setup"
       label="Create the evaluation plan"
-      description="First review round, rubric and decision authority"
       defaultExpandedOnMobile
     >
       <section className="card pad">
         <h2>Create the evaluation plan</h2>
         <p className="subtle">
-          Configure the first review round and its weighted rubric. Active round
-          rubrics become protected once assignments exist.
+          Active round rubrics become protected once assignments exist.
         </p>
         <Form method="post" className="stack">
           <input type="hidden" name="intent" value="create-plan" />

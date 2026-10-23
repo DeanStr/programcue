@@ -55,7 +55,6 @@ export function ScheduleDraftDialog({
   return (
     <Dialog
       title="Edit next version?"
-      description="Your published schedule stays unchanged."
       onClose={close}
       dismissible={!creating}
       footer={
@@ -210,7 +209,7 @@ export function AutoPlacementPreviewDialog({
       <div className="stack" data-testid="auto-placement-preview">
         <p>
           {intro ??
-            "Suggested placements for this draft schedule, based on what is already scheduled. Nothing is published by this action, and you can change any placement afterwards."}
+            "Nothing is published by this action, and you can change any placement afterwards."}
         </p>
         {applyDisabledReason ? (
           <div className="validation-item warn" role="status">

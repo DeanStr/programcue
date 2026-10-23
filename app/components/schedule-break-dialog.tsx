@@ -48,7 +48,6 @@ export function ScheduleBreakDialog({
   return (
     <Dialog
       title="Create break"
-      description="Add a break to the unscheduled sessions, then choose its slot."
       dismissible={!busy}
       onClose={() => {
         if (committed && error) onCreated({ message: error, warning: true });

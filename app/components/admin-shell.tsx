@@ -133,10 +133,10 @@ export type AdminShellNotification = {
   count: number;
   href: string;
   severity: "danger" | "warning";
-  /* What is actually true of this condition. Deriving one sentence from
-     severity alone told an operator that overdue tasks block publication,
-     which only blocking schedule conflicts do. */
-  detail: string;
+  /* Only a consequence the label does not already state. Deriving one
+     sentence from severity alone told an operator that overdue tasks block
+     publication, which only blocking schedule conflicts do. */
+  detail?: string;
 };
 
 export type AdminShellCommandPalette = {

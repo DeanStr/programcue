@@ -483,10 +483,6 @@ export function ApplicantPreviewPanel({
                     >
                       Validate test submission
                     </Button>
-                    <small className="help">
-                      Test values stay in this preview. No applicant or
-                      submission record is saved.
-                    </small>
                   </>
                 ) : null}
               </div>

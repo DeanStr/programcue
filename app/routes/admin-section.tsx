@@ -236,10 +236,6 @@ export default function AdminSection({ loaderData }: Route.ComponentProps) {
       <div className="page-head pc-page-header">
         <div>
           <h1>Public programme & embeds</h1>
-          <p>
-            Inspect the programme that is available to attendees and continue
-            editing in the schedule planner.
-          </p>
           <nav className="programme-header-links" aria-label="Related">
             <Link to="/admin/sessions/new?from=programme">Add session</Link>
             <Link

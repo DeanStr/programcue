@@ -105,8 +105,7 @@ export function AddRoomDialog({
             {hasUnsavedChanges ? (
               <p className="help mt">
                 Save or discard the current Event Setup changes before adding a
-                room. The server refreshes the canonical room list after this
-                command.
+                room.
               </p>
             ) : null}
           </form>
@@ -221,11 +220,8 @@ export function EventRepositoryDialogs({
             <input type="hidden" name="_intent" value="configure_airtable" />
             <p className="help">
               The token must be able to read and write records and read and
-              change base schema. Managed schema v3 validates or provisions 36
-              tables covering event setup, forms, submissions, evaluations,
-              sessions, schedules, tasks and the versioned published programme.
-              The credential is encrypted only after every managed table passes
-              validation.
+              change base schema. The credential is encrypted only after every
+              managed table passes validation.
             </p>
             <label className="label mt">
               Airtable base ID

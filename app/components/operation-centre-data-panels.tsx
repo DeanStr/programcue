@@ -191,12 +191,10 @@ export function DataImportPanel({
     <section className="card pad mb" aria-labelledby="event-imports-heading">
       <div className="card-title">
         <h2 id="event-imports-heading">CSV import</h2>
-        <span className="help right">Preview → validate → confirm</span>
       </div>
       <p>
-        Upload up to 200 records. Program Cue reconciles stable email,
-        reference, slug or name keys and makes no changes until every row is
-        valid and you confirm the preview.
+        Up to 200 records. Nothing changes until every row is valid and you
+        confirm the preview.
       </p>
       <Form method="post" encType="multipart/form-data" className="grid grid-3">
         <input type="hidden" name="intent" value="preview-import" />

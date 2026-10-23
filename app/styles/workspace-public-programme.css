@@ -605,12 +605,6 @@
   flex: 1 1 auto;
   min-width: 0;
 }
-.public-surface-kicker {
-  margin: 0 0 var(--space-2);
-  color: var(--muted-on-surface);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-semibold);
-}
 .public-surface-heading h1 {
   margin: 0 0 var(--space-2);
   font-size: var(--text-2xl);
@@ -1878,13 +1872,6 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-3);
-}
-.itinerary-kicker {
-  margin: 0 0 3px;
-  color: var(--accent-ink);
-  font-size: var(--text-2xs);
-  font-weight: var(--weight-semibold);
-  letter-spacing: var(--tracking-snug);
 }
 .itinerary-head h2 {
   margin: 0;

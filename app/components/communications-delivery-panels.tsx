@@ -124,9 +124,6 @@ export function DeliveryConfiguration({
     <section className="card pad">
       <div className="card-title">
         <h2>Sender profiles and test sends</h2>
-        <span className="help right">
-          Provider verification is authoritative
-        </span>
       </div>
       <div className="grid grid-2">
         <div className="stack">
@@ -411,11 +408,7 @@ export function CommunicationAutomation({
             {loaderData.triggers.length}
           </span>
         </div>
-        <p className="help">
-          The scheduled Worker marks expired tasks overdue, evaluates each
-          trigger once per UTC day and records every resulting send durably
-          before Queue dispatch.
-        </p>
+        <p className="help">Triggers are evaluated once per UTC day.</p>
         <Form method="post" className="stack">
           <input type="hidden" name="intent" value="save-trigger" />
           <div className="form-row">

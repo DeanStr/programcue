@@ -31,11 +31,12 @@ export function AdminSpeakerNextSteps({
           >
             {inactive ? "Review roster status" : "Invite to speaker portal"}
           </ButtonLink>
-          <p className="help">
-            {inactive
-              ? `Restore an active roster status before sending a portal invitation. This speaker is ${speaker.workflowStatus}.`
-              : "Review and confirm the invitation email on their roster record."}
-          </p>
+          {inactive ? (
+            <p className="help">
+              Restore an active roster status before sending a portal
+              invitation. This speaker is {speaker.workflowStatus}.
+            </p>
+          ) : null}
         </li>
         <li>
           <ButtonLink

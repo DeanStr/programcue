@@ -441,8 +441,8 @@ export function ApplicantVideoUpload({
         <strong>Pitch video</strong>
         <p className="help">
           Upload an MP4 or WebM file of up to {maximumMegabytes(maximumBytes)}{" "}
-          MB. Only the review team can see it. Large uploads resume where they
-          left off, and your video stays quarantined until it has been scanned.
+          MB. Only the review team can see it, and it stays quarantined until it
+          has been scanned.
         </p>
       </div>
       <input

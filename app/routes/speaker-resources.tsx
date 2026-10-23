@@ -92,10 +92,6 @@ export default function SpeakerResources({ loaderData }: Route.ComponentProps) {
       <div className="page-head">
         <div>
           <h1>Resources</h1>
-          <p>
-            Published guidance selected for your participant identity and
-            sessions.
-          </p>
         </div>
         <p className="speaker-work-count">
           <b className="pc-num">{workspace.pages.length}</b>
@@ -237,9 +233,6 @@ export default function SpeakerResources({ loaderData }: Route.ComponentProps) {
           <section className="pc-empty-state">
             <BookOpenCheck aria-hidden className="pc-state-icon" />
             <h2>No resources published</h2>
-            <p className="subtle">
-              The event team has not published anything for your audience yet.
-            </p>
           </section>
         )}
       </div>

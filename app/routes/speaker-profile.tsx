@@ -83,10 +83,6 @@ export default function SpeakerProfile(_props: Route.ComponentProps) {
       <div className="page-head">
         <div>
           <h1>Profile</h1>
-          <p>
-            Manage the identity and biography used for your applications and
-            published sessions.
-          </p>
         </div>
       </div>
       <SpeakerActionNotice notice={actionData} />

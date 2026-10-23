@@ -42,8 +42,6 @@ export function RecentCommunications({
                   {communicationCategoryLabel(item.kind || "communication")}
                 </strong>
                 <small>
-                  {item.id}
-                  {" · "}
                   {formatCommunicationListDate(
                     item.createdAt,
                     loaderData.eventTimezone,
@@ -51,8 +49,6 @@ export function RecentCommunications({
                   {item.scheduledAt
                     ? ` · Scheduled ${formatCommunicationListDate(item.scheduledAt, loaderData.eventTimezone)}`
                     : ""}
-                  {` · ${item.sentCount}/${item.recipientCount} sent`}
-                  {item.failedCount ? ` · ${item.failedCount} failed` : ""}
                 </small>
               </div>
               <div className="comms-activity-meta">
@@ -137,7 +133,6 @@ export function RecentCommunications({
           className="comms-empty"
           icon={Send}
           title="No sends have been confirmed"
-          description="Confirmed and scheduled communications appear here with their delivery progress."
           action={
             <ButtonLink variant="primary" to="/admin/communications/compose">
               Compose a communication
@@ -440,10 +435,6 @@ export function CommunicationDeliveryHealth({
                 No active provider suppressions or complaints.
               </p>
             )}
-            <p className="help mt">
-              Bounces remain delivery outcomes above; they are not presented as
-              recipient unsubscribe choices.
-            </p>
           </section>
         </div>
       ) : (

@@ -583,14 +583,16 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
               Speaker invitations awaiting acceptance
             </h2>
             <p className="subtle">
-              Access remains unavailable until each person signs in and
-              explicitly accepts an unexpired event invitation.
-              {activePendingInvitationCount
-                ? ` ${activePendingInvitationCount} pending`
-                : ""}
-              {expiredInvitationCount
-                ? ` · ${expiredInvitationCount} expired`
-                : ""}
+              {[
+                activePendingInvitationCount
+                  ? `${activePendingInvitationCount} pending`
+                  : null,
+                expiredInvitationCount
+                  ? `${expiredInvitationCount} expired`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
             </p>
             <div className="crm-pending-list">
               {pendingInvitations.map((invitation) => (

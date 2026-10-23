@@ -211,10 +211,6 @@ export function SpeakerDashboardOverview({
           <h1>
             Welcome back, {portal.profile.name?.split(/\s+/)[0] || "there"}
           </h1>
-          <p className="subtle">
-            Everything the event team needs from you, with clear privacy and
-            review states.
-          </p>
         </div>
       </div>
       <section className="card next-action speaker-next-hero mt">
@@ -239,19 +235,20 @@ export function SpeakerDashboardOverview({
                 ? "You are ready for the event"
                 : "No outstanding requirements")}
           </h2>
-          <p className="subtle">
-            {taskAction
-              ? waitingOnTeam
+          {taskAction ? (
+            <p className="subtle">
+              {waitingOnTeam
                 ? taskAction.status === "submitted"
                   ? "Submitted for administrator review. No further action is required until the event team responds."
                   : "This requirement is waiting for its prerequisites to be completed."
-                : taskAction.description
-              : resourceAction
-                ? "Read and acknowledge the current published resource."
-                : preparationComplete
-                  ? "There are no outstanding requirements right now."
-                  : "Your task list is clear. Check the preparation stages below for remaining profile, session or resource status."}
-          </p>
+                : taskAction.description}
+            </p>
+          ) : !resourceAction && !preparationComplete ? (
+            <p className="subtle">
+              Check the preparation stages below for remaining profile or
+              session steps.
+            </p>
+          ) : null}
           {taskAction ? (
             <ButtonLink
               variant="primary"

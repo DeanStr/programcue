@@ -42,7 +42,7 @@
 
 .branding-preview-toolbar .active {
   border-color: var(--event-accent, var(--brand-600));
-  background: var(--state-info-surface);
+  background: var(--brand-50);
 }
 
 .branding-identity,
@@ -505,6 +505,11 @@
 
 .branding-preview-commit .help {
   margin: 0;
+}
+/* The commit action stays at the trailing edge whether or not a note
+   precedes it. */
+.branding-preview-commit > .btn {
+  margin-left: auto;
 }
 
 @media (max-width: 1000px) {

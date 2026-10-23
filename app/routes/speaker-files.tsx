@@ -84,11 +84,6 @@ export default function SpeakerFiles(_props: Route.ComponentProps) {
       <div className="page-head">
         <div>
           <h1>Files</h1>
-          <p>
-            Manage your headshot and inspect files submitted through your
-            assigned tasks. Session deliverables stay attached to the exact task
-            and session that requested them.
-          </p>
         </div>
         <p className="speaker-work-count">
           <b className="pc-num">{portal.files.length}</b>

@@ -227,10 +227,6 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
             Organisation-wide · all events
           </span>
           <h1>Speaker directory</h1>
-          <p className="crm-caption">
-            Reusable profiles, private relationship context, and sourcing
-            prospects into events without re-entering data.
-          </p>
         </div>
         <div className="page-actions">
           <ButtonLink to="/admin/crm/pipeline">Sourcing pipeline</ButtonLink>
@@ -661,7 +657,6 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
               className="crm-empty"
               icon={UsersRound}
               title="No matching contacts"
-              description="Clear the filters or add a reusable speaker contact."
               action={
                 filtersActive ? (
                   <ButtonLink to="/admin/crm">

@@ -493,11 +493,6 @@ export function ScheduleSourcePanel({
                 ? "No matching sessions"
                 : "No sessions yet"
             }
-            description={
-              workspace.activeFilter || normalisedSessionQuery
-                ? "No sessions match the current source filters."
-                : "Accepted and direct sessions will appear here."
-            }
           />
         ) : null}
       </div>

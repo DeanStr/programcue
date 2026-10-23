@@ -428,9 +428,7 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
               </small>
               <ChevronRight aria-hidden size={18} />
             </Link>
-          ) : (
-            <p className="help">Choose a work queue to continue.</p>
-          )}
+          ) : null}
         </div>
         <div className="command-work-counts">
           {[
@@ -541,10 +539,6 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
           <div className="command-score-track" aria-hidden>
             <span style={{ width: `${loaderData.readiness.percentage}%` }} />
           </div>
-          <p className="command-score-caption">
-            Equal weight across {loaderData.workflows.length} workflows, capped
-            by programme setup.
-          </p>
           <details className="command-score-method">
             <summary>How this is scored</summary>
             <p>{loaderData.readiness.explanation}</p>
@@ -703,11 +697,7 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
                 </table>
               </section>
             ) : (
-              <EmptyState
-                title="No delivery activity"
-                description="Nothing has been sent for this event yet."
-                icon={Send}
-              />
+              <EmptyState title="No delivery activity" icon={Send} />
             )}
           </section>
         </div>
@@ -777,11 +767,7 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
               ))}
             </div>
           ) : (
-            <EmptyState
-              title="No upcoming sessions"
-              description="No future sessions exist in the current published schedule."
-              icon={Clock3}
-            />
+            <EmptyState title="No upcoming sessions" icon={Clock3} />
           )}
         </section>
 
@@ -833,11 +819,7 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
               ))}
             </ul>
           ) : (
-            <EmptyState
-              title="Nothing running"
-              description="Bulk sends, publications and provider work appear here while they are in progress."
-              icon={Activity}
-            />
+            <EmptyState title="Nothing running" icon={Activity} />
           )}
         </section>
       </section>

@@ -35,11 +35,7 @@ export default function SponsorIndex({ loaderData: d }: Route.ComponentProps) {
               <Link to={`/sponsor/${s.eventId}/${s.id}`}>
                 {s.name} · {s.eventName}
               </Link>
-              <p>
-                {s.acceptedAt
-                  ? "Open company workspace"
-                  : "Invitation awaiting your acceptance"}
-              </p>
+              {s.acceptedAt ? null : <p>Invitation awaiting your acceptance</p>}
             </li>
           ))}
         </ul>

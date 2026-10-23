@@ -18,7 +18,7 @@ export function EmptyState({
   className,
 }: {
   title: string;
-  description: ReactNode;
+  description?: ReactNode;
   action?: ReactNode;
   icon?: LucideIcon;
   tone?: "neutral" | "positive";
@@ -39,7 +39,7 @@ export function EmptyState({
         <Glyph aria-hidden size={20} />
       </span>
       <Heading className="pc-empty-state-title">{title}</Heading>
-      <p>{description}</p>
+      {description ? <p>{description}</p> : null}
       {action ? <div className="pc-state-action">{action}</div> : null}
     </section>
   );

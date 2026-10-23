@@ -235,9 +235,7 @@ export default function SponsorPortal({
           />
           <section className="stack" aria-label="Your sponsored sessions">
             <h2>Your sessions</h2>
-            {!d.proposals.length && (
-              <p>No sessions yet. Add your first proposal below.</p>
-            )}
+            {!d.proposals.length && <p>No sessions yet.</p>}
             {d.proposals.map((p) => (
               <article className="card pad" key={p.id}>
                 <h3>{p.details.title}</h3>

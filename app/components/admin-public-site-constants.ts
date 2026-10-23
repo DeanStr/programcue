@@ -43,14 +43,6 @@ export const publicSiteStatisticLabels: Record<
   days: "Days",
 };
 
-export const publicSitePageDescriptions: Record<PublicSitePageType, string> = {
-  about: "Editorial context beyond the event introduction.",
-  faq: "An optional introduction followed by the canonical FAQ entries.",
-  venue: "Arrival or accessibility notes followed by canonical venue details.",
-  "code-of-conduct": "The attendee-facing behavior and reporting policy.",
-  sponsors: "An optional introduction followed by structured sponsor records.",
-};
-
 export const publicSitePageLabels: Record<PublicSitePageType, string> = {
   about: "About",
   faq: "FAQ",

@@ -68,6 +68,16 @@
 .speaker-dashboard-layout > :only-child {
   grid-column: 1 / -1;
 }
+.speaker-calendar-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+/* One line tall, so the icon centres on the first line when the note wraps. */
+.speaker-calendar-note > svg {
+  flex: none;
+  height: 1lh;
+}
 .speaker-rail {
   display: grid;
   gap: var(--space-3);
@@ -129,9 +139,9 @@
   color: var(--state-good-text);
 }
 .speaker-stage[data-state="in_progress"] .speaker-stage-marker {
-  border-color: var(--brand-600);
-  background: var(--brand-50);
-  color: var(--brand-700);
+  border-color: var(--state-info-solid);
+  background: var(--state-info-surface);
+  color: var(--state-info-text);
 }
 .speaker-stage-copy {
   display: grid;

@@ -204,18 +204,14 @@ export const SPARSE_SPEAKER_SEARCH = 6;
  * fixture is long enough that a visitor would look for them.
  */
 export function SurfaceHeading({
-  kicker,
   title,
   id,
-  description,
   count,
   children,
   sparse = false,
 }: {
-  kicker?: string;
   title: string;
   id: string;
-  description?: string;
   count?: string;
   children?: ReactNode;
   sparse?: boolean;
@@ -231,9 +227,7 @@ export function SurfaceHeading({
   return (
     <div className={`public-surface-heading${sparse ? " is-sparse" : ""}`}>
       <div className="public-surface-heading-copy">
-        {kicker ? <p className="public-surface-kicker">{kicker}</p> : null}
         <h1 id={id}>{title}</h1>
-        {description ? <p className="subtle">{description}</p> : null}
       </div>
       {aside ? (
         <div className="public-surface-heading-aside">{aside}</div>

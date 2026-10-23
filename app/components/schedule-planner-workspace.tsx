@@ -596,11 +596,9 @@ export function SchedulePlannerWorkspace({
                 >
                   Notes and session content
                 </h2>
-                <p className="help">
-                  {quickSession
-                    ? quickSession.title
-                    : "Schedule notes and the selected session"}
-                </p>
+                {quickSession ? (
+                  <p className="help">{quickSession.title}</p>
+                ) : null}
               </div>
               {/* No read-only marker here. The page-level bar stays on screen
                   in this fixed-height layout, each editor below carries its own

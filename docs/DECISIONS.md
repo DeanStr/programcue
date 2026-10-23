@@ -1825,7 +1825,19 @@ The public site and every application shell use the same restrained
 ink-and-copper product palette: warm canvas and paper surfaces, tinted
 elevation, and copper for product emphasis. Event-branded public programme and
 application surfaces continue to derive their accent exclusively from the
-published event brand; the product palette must not overwrite it. Operational
+published event brand; the product palette must not overwrite it. Copper is
+reserved for brand, primary actions, links and selection; no state borrows it.
+States use separate hues: steel blue for in-progress and informational states
+(Submitted, Assigned, Queued, Running, Draft), gold for risk, forest green for
+completion and crimson (hue ~345°) for failure. The earlier 0° red sat 14° from
+copper, and copper also painted info badges, in-progress steps and healthy
+progress meters, so actions, routine progress and failures read as one signal.
+Healthy incomplete meters are neutral ink; colour is spent only where a workflow
+needs attention. State styles use the `--state-*` tokens, never brand tokens
+directly, so an informational notice, flag or badge follows the state palette. Failure surfaces are near-neutral rose, so the crimson rail
+and text carry the signal, and the warning solid is a clear amber-gold
+(`#a67700`) that paints marks only. Text pairs meet 4.5:1 and graphical marks
+3:1. Operational
 shells use the self-hosted Inter variable face for headings as well as body
 copy, controls and data, so dense working views keep a single scanning rhythm.
 Ordinary page titles in the administrator and participant shells share one
@@ -2804,6 +2816,51 @@ including a global revocation performed from another event. Ordinary task-owner
 rules remain available to ordinary task commands. A refused readiness approval
 retires the stale preview rather than substituting a different owner.
 
+## Secondary copy — 22 October 2026
+
+Let the layout do the explaining. Page titles, section headings, labels,
+buttons, table headers and status badges carry the meaning, so pages do not add
+a lede that restates their title, section or card descriptions that restate a
+heading, eyebrows that repeat the breadcrumb, hints for standard controls, or
+empty-state text that repeats the empty-state title. `PageHeader`,
+`AdminPageSection` and `EmptyState` therefore take an optional description.
+
+Secondary text stays when it carries something the layout cannot:
+consequences (publication, visibility, irreversibility, privacy, retention,
+security), honesty disclosures (simulation, dry run, preview-only, unavailable
+provider), validation and status messages, format and limit help, keyboard
+alternatives for pointer-only interactions, scope and other data, and
+organiser-authored content. Shorten such text to its consequence rather than
+removing it.
+
+The speaker dashboard distinguishes task completion from overall preparation.
+Once tasks and resource acknowledgements are resolved, conditional guidance
+still points to the preparation stages while profile or session steps remain.
+
+Header actions sit in a `.page-actions` group so they stay at the trailing
+edge; several pages had relied on a lede's width to push them right.
+
+## Displayed values and action rows — 22 October 2026
+
+Statuses and priorities render through their presentation labels
+(`DomainStatusBadge`, `statusPresentation`, `impactLabel`), never as raw enum
+values, so one state reads the same on every page. Internal identifiers such as
+session slugs and communication record ids are not secondary text; public
+references such as submission references stay. A save state appears once per
+viewport: the review workbench header drops it where the action bar is always
+in view.
+
+`.page-actions` is a flex row with a gap wherever it appears. Render one only
+when it has content: an empty flex row no longer lets its margin collapse.
+
+Grid view controls (columns, density) show a change at once and build each
+further change, and the filter form's view fields, on the pending request
+rather than the rendered URL; the URL changes only after the loader finishes,
+so otherwise a second change or Apply drops the first. The pending view belongs
+to the location it was requested from and is discarded on any committed
+navigation (its own, Clear, Back), so the grid never keeps showing a view that
+did not load.
+
 ## Evidence-led interface refinement — 21–22 October 2026
 
 Prioritise visual/UI craft while keeping the current Program Cue brand:
@@ -2811,6 +2868,14 @@ typography, spacing, alignment, surfaces, colour balance, icons and control
 geometry. Browser behavior, accessibility and responsive containment remain
 independent constraints that a visual verdict cannot override. A refreshed
 screenshot baseline records a regression expectation, not aesthetic approval.
+
+Key operational pages (Command Centre, Applications, Form Builder, review
+workbench, Communications, speaker dashboard, Schedule planner and Tasks &
+readiness) allow at most 16 differing pixels; other visual baselines keep the
+suite-wide 1% ratio. On a full page, 1% let a recoloured status label (78
+pixels) and stale Form Builder canvas styling pass. Fresh runs of the key pages
+differ by zero pixels, so the budget absorbs only isolated anti-aliasing.
+Refresh a key-page baseline only after inspecting the change it records.
 
 ### Visual evaluation method
 

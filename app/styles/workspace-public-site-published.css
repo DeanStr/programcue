@@ -55,13 +55,6 @@
    every section heading on the page rendered as a label. The container query
    below states a plain value, which is why the same headings were correct on a
    phone and wrong on every desktop. */
-.public-site-section-kicker {
-  margin: 0;
-  color: var(--accent-ink);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-semibold);
-  letter-spacing: var(--tracking-snug);
-}
 .public-site-section-heading h2 {
   margin: 0;
   font-size: clamp(var(--text-2xl), 3.1cqw, var(--text-3xl));
@@ -93,9 +86,6 @@
 }
 .public-site-introduction .public-site-section-heading {
   margin-bottom: 0;
-}
-.public-site-introduction .public-site-section-kicker {
-  display: none;
 }
 .public-site-introduction .public-site-section-heading h2 {
   font-size: var(--text-base);
@@ -547,9 +537,6 @@ a.public-site-feature-card:focus-visible .public-site-speaker-profile-cue {
    rounded boxes. The browser's default triangle was the one piece of unstyled
    chrome left on the page; the plus is drawn from two hairlines instead of
    typeset, so it stays crisp at any size and takes the row's colour. */
-.public-site-faq-section .public-site-section-kicker {
-  max-width: 28ch;
-}
 .public-site-faq {
   display: grid;
   max-width: 920px;
@@ -645,9 +632,6 @@ a.public-site-feature-card:focus-visible .public-site-speaker-profile-cue {
 }
 /* Sponsors are a credits lockup. Names without marks sit on a ruled band —
    a magazine credit, not a field of missing logos. */
-.public-site-sponsor-strip .public-site-section-kicker {
-  max-width: 24ch;
-}
 .public-site-sponsor-strip.is-credits {
   padding-block: var(--space-6);
   border-block: 1px solid var(--border-editorial);

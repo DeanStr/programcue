@@ -169,13 +169,7 @@ export default function AdminFileRetention({
     <>
       <div className="page-head pc-page-header">
         <div>
-          <span className="pc-page-eyebrow">Privacy operations</span>
           <h1>Data retention</h1>
-          <p>
-            Permanently erase private files and anonymise participant data after
-            the configured event retention period, or stop both workflows under
-            a legal or operational hold.
-          </p>
         </div>
       </div>
       {result ? (

@@ -321,7 +321,6 @@ function ResourcePreviewPanel() {
     >
       <div className="card-title">
         <div>
-          <span className="pc-section-kicker">Live speaker view</span>
           <h3>Resource preview</h3>
         </div>
         <fieldset
@@ -389,9 +388,6 @@ function ResourceEditorActions() {
   const { navigation, pendingIntent, recovery } = useResourceAdminModel();
   return (
     <div className="sticky-actions">
-      <span className="subtle">
-        Saving creates a new immutable draft version.
-      </span>
       <DraftRecoveryStatus state={recovery.state} />
       <span className="spacer" />
       <Button
@@ -673,9 +669,7 @@ function ResourceAdminHeader() {
   } = useResourceAdminModel();
   return (
     <PageHeader
-      eyebrow="Speaker knowledge"
       title="Resource pages"
-      description="Author versioned guidance with a constrained editor, private attachments, optional video or map blocks and audience-scoped publication."
       actions={
         <>
           <ButtonLink

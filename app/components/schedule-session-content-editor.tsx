@@ -407,7 +407,6 @@ function SessionContentFieldsPanel() {
     >
       <div className="card-title">
         <div>
-          <span className="pc-page-eyebrow">Revisioned content</span>
           <h2 id="session-content-title">Session editor</h2>
           <span className="schedule-editor-metadata">
             <DomainStatusBadge

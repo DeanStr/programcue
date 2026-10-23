@@ -16,6 +16,9 @@ import {
 import { CrmStateError } from "./crm-errors";
 import { crmPersonIdSchema } from "./crm-schema";
 
+const TWO_CONTACTS_REQUIRED =
+  "Choose at least two different contacts for speaker invitations.";
+
 type ContactSummary = {
   name: string;
   email: string;
@@ -143,7 +146,10 @@ export class CrmOutreachService {
   async createDraft(viewer: OrganisationAdministrator, rawInput: unknown) {
     const input = z
       .object({
-        personIds: z.array(crmPersonIdSchema).min(2).max(500),
+        personIds: z
+          .array(crmPersonIdSchema)
+          .min(2, TWO_CONTACTS_REQUIRED)
+          .max(500),
         eventId: z.string().trim().min(1).max(128),
         idempotencyKey: z
           .string()
@@ -156,10 +162,7 @@ export class CrmOutreachService {
       .parse(rawInput);
     const uniquePersonIds = [...new Set(input.personIds)];
     if (uniquePersonIds.length < 2) {
-      throw new CrmStateError(
-        "Choose at least two different contacts for speaker invitations.",
-        422,
-      );
+      throw new CrmStateError(TWO_CONTACTS_REQUIRED, 422);
     }
     const event = await this.env.DB.prepare(
       `SELECT name, venue_name AS venueName, city FROM events

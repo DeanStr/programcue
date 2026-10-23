@@ -432,8 +432,8 @@ export function SpeakerTasksPanel({
                       }
                       description={
                         task.status === "submitted"
-                          ? "The replacement becomes the next version of this exact deliverable. Earlier versions remain retained and downloadable after clean scanning."
-                          : "Upload directly to Program Cue's private file store. The exact completed file is attached to this task and remains quarantined until malware scanning passes."
+                          ? "Earlier versions remain retained and downloadable after clean scanning."
+                          : "Stored privately and quarantined until malware scanning passes."
                       }
                       onCompleted={(upload) =>
                         attachTaskEvidence(task.id, upload)
@@ -655,9 +655,6 @@ export function SpeakerTasksPanel({
           <div className="pc-empty-state">
             <CheckCircle2 aria-hidden className="pc-state-icon" />
             <h2>No onboarding tasks</h2>
-            <p className="subtle">
-              The event team has not assigned any requirements.
-            </p>
           </div>
         )}
       </div>

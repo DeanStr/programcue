@@ -19,13 +19,6 @@ export function ReviewWorkbenchHeader() {
     <div className="page-head review-page-head pc-page-header-compact">
       <div>
         <h1>Review workbench</h1>
-        <p>
-          {workspace.selected
-            ? readOnly
-              ? "Inspect the submitted scoring record without losing queue context."
-              : "Score the open assignment without losing queue context."
-            : "Assigned reviews appear here when an organiser gives you work."}
-        </p>
       </div>
       <div className="page-actions">
         <span className="review-head-status">

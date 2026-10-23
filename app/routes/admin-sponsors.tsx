@@ -270,12 +270,11 @@ export default function Sponsors({
       <div className="page-head pc-page-header">
         <div>
           <h1>Sponsors</h1>
-          <p>
-            Company contacts, session allowances and sponsored session review.
-          </p>
         </div>
-        <ButtonLink to="/admin/sponsors">Add sponsor</ButtonLink>
-        <ButtonLink to="/sponsor">Sponsor portal</ButtonLink>
+        <div className="page-actions">
+          <ButtonLink to="/admin/sponsors">Add sponsor</ButtonLink>
+          <ButtonLink to="/sponsor">Sponsor portal</ButtonLink>
+        </div>
       </div>
       {actionData && (
         <p role={actionData.ok ? "status" : "alert"}>{actionData.message}</p>
@@ -422,17 +421,19 @@ export default function Sponsors({
           filePolicy={d.filePolicy}
         />
       )}
-      <nav className="page-actions mb" aria-label="Event sponsors">
-        {d.sponsors.map((s) => (
-          <ButtonLink
-            key={s.id}
-            to={`?sponsor=${s.id}`}
-            aria-current={w?.sponsor.id === s.id ? "page" : undefined}
-          >
-            {s.name} · {s.sessionsUsed}/{s.sessionLimit}
-          </ButtonLink>
-        ))}
-      </nav>
+      {d.sponsors.length ? (
+        <nav className="page-actions mb" aria-label="Event sponsors">
+          {d.sponsors.map((s) => (
+            <ButtonLink
+              key={s.id}
+              to={`?sponsor=${s.id}`}
+              aria-current={w?.sponsor.id === s.id ? "page" : undefined}
+            >
+              {s.name} · {s.sessionsUsed}/{s.sessionLimit}
+            </ButtonLink>
+          ))}
+        </nav>
+      ) : null}
       <div className="grid grid-2">
         <section className="card pad">
           <h2>{w ? w.sponsor.name : "Add sponsor"}</h2>

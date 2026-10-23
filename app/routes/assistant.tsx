@@ -508,7 +508,6 @@ function StreamingAssistantWorkspace({
             </label>
             <p className="help">
               The assistant sees only records returned by event-scoped tools.
-              Provider or validation failures are reported explicitly.
             </p>
             <Button
               variant="primary"
@@ -637,9 +636,7 @@ export default function AssistantRoute() {
   return (
     <div className="pc-assist">
       <PageHeader
-        eyebrow="Authorised event tools"
         title="Event Assistant"
-        description={`Ask about ${loaderData.eventName}, inspect the exact source records and preview safe actions before approval.`}
         actions={
           <ButtonLink to="/admin/command">Open Command Centre</ButtonLink>
         }
@@ -790,9 +787,6 @@ export default function AssistantRoute() {
           <div className="pc-assist-empty">
             <CheckCircle2 aria-hidden size={18} />
             <h2>No proposals awaiting approval</h2>
-            <p className="subtle">
-              Your previous requests and action results are available below.
-            </p>
           </div>
         )}
       </section>

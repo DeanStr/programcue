@@ -104,7 +104,6 @@ export function FieldSettingsPanel({
             <summary>
               <span>
                 <strong>Form properties</strong>
-                <small>Name, public URL, access, landing page</small>
               </span>
             </summary>
             <div className="fb-disclosure-fields">{formProperties}</div>
@@ -161,9 +160,6 @@ export function FieldSettingsPanel({
                   value={selected.help}
                   onChange={(event) => patchField({ help: event.target.value })}
                 />
-                <span className="help">
-                  Explain why the organiser asks for this information.
-                </span>
               </label>
               <label className="label mt">
                 Example answer

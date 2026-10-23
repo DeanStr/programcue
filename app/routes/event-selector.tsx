@@ -171,11 +171,6 @@ export default function EventSelector({ loaderData }: Route.ComponentProps) {
               ? "No event access yet"
               : "Choose an event"}
           </h1>
-          <p>
-            {loaderData.events.length === 0
-              ? "An organiser must invite this account before a private workspace can open."
-              : "Select the event that subsequent private pages and changes should use."}
-          </p>
         </header>
         {loaderData.events.length === 0 ? (
           <div className="pc-event-select-empty" role="status">

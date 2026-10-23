@@ -132,10 +132,7 @@ export default function AdminCreateApplication({
             ← Back to applications
           </Link>
           <h1>Create application record</h1>
-          <p>
-            Preserve an application for participants who have already accepted
-            their event invitations.
-          </p>
+          <p>Participants must have accepted their event invitations.</p>
         </div>
       </div>
       <ActionNotice result={actionData} />

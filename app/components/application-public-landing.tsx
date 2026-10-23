@@ -220,9 +220,6 @@ export function PublicApplicationLanding({
                     ? "A verified Program Cue account protects every saved draft."
                     : "Your verified email protects every saved draft."}
               </li>
-              <li>
-                Maintain multiple applications and return without losing work.
-              </li>
               <li>{speakerLimit(form)}</li>
             </ul>
           </aside>

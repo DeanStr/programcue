@@ -190,9 +190,6 @@ describe("public programme speaker surfaces", () => {
       'aria-label="Open details for The Future of Attendee Engagement"',
     );
     expect(markup).not.toContain('aria-haspopup="dialog"');
-    expect(markup).toContain(
-      "Open a session to see the details included in this timetable.",
-    );
     expect(markup).not.toContain(
       "/public/programme/future-of-events-2027/sessions?session=session-1",
     );
@@ -249,9 +246,6 @@ describe("public programme speaker surfaces", () => {
     );
 
     expect(markup).toContain(">Day-by-day schedule<");
-    expect(markup).toContain(
-      "Browse the published programme in chronological order, with the details included in this view.",
-    );
     expect(markup).toContain('class="public-itinerary-card"');
     expect(markup).toContain("A published session description.");
     expect(markup).toContain("Director of Experience Design · EventLab");

@@ -54,9 +54,6 @@ export function ProgrammeEmbedBuilder({
           <h2 id="programme-embed-title" ref={builderHeadingRef} tabIndex={-1}>
             Embed builder
           </h2>
-          <p className="help">
-            Configure, preview and copy a stateless published-programme embed.
-          </p>
         </div>
         <EmbedConfigurationWorkflow
           workflow={configurationWorkflow}

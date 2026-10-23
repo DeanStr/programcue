@@ -216,11 +216,6 @@ test("adding a speaker hands off to portal access, a session and onboarding", as
   await expect(
     page.getByRole("heading", { name: "Add session", level: 1 }),
   ).toBeVisible();
-  await expect(
-    page.getByText(
-      "For invited talks, keynotes and other sessions that don’t need CFP review.",
-    ),
-  ).toBeVisible();
   await expect(page.getByLabel("Speaker 1 name")).toHaveValue(name);
   await expect(page.getByLabel("Email", { exact: true })).toHaveValue(email);
   await expect(page.getByRole("textbox", { name: /^Biography/ })).toHaveValue(
@@ -504,6 +499,7 @@ test("organization CRM covers directory, relationship, pipeline, handoff and out
   await expect(
     page.getByRole("heading", { name: "Bulk speaker invitations" }),
   ).toBeVisible();
+  await expect(page.getByText("Select at least two contacts.")).toBeVisible();
   await page.getByLabel("Subject").fill("Speak at DevFlow Conf 2027?");
   await page
     .getByLabel("Email footer physical address")

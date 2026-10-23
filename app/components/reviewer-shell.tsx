@@ -38,7 +38,6 @@ export function ReviewerShell({
         </Link>
         <div className="review-context">
           <strong>{eventName}</strong>
-          <small>Evaluation workspace</small>
         </div>
         <div className="review-session-actions">
           <ButtonLink size="small" to={eventSelectionHref} reloadDocument>

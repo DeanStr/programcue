@@ -97,12 +97,8 @@ export function PublicSpeakersSurface({
       aria-labelledby="public-speakers-title"
     >
       <SurfaceHeading
-        kicker="The people on stage"
         title="Speakers"
         id="public-speakers-title"
-        description={
-          sparse ? undefined : "Meet the people presenting this event."
-        }
         count={
           sparse ? undefined : `${model.directorySpeakers.length} speakers`
         }
@@ -321,12 +317,8 @@ export function PublicSpeakerGallerySurface({
       aria-labelledby="speaker-gallery-title"
     >
       <SurfaceHeading
-        kicker="The people on stage"
         title="Speaker Gallery"
         id="speaker-gallery-title"
-        description={
-          sparse ? undefined : "Published portraits from this event."
-        }
         count={sparse ? undefined : `${model.gallerySpeakers.length} speakers`}
         sparse={sparse}
       >

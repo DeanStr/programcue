@@ -151,7 +151,6 @@ export function SubmissionAdminDetailPanel({
         <section className="card pad">
           <div className="card-title">
             <h2>Application snapshot</h2>
-            <span className="subtle right">Immutable source answers</span>
           </div>
           <div className="stack">
             {answerSections.map((section) => (
@@ -256,9 +255,7 @@ export function SubmissionAdminDetailPanel({
             )}
             {submission.routingExplanation.source.kind !== "form_draft" ? (
               <p className="subtle">
-                Review-team routing records the intended review destination.
-                Individual evaluators are assigned separately in Review
-                administration.
+                Routing does not assign evaluators; assign them in Review.
               </p>
             ) : null}
             <p>
@@ -343,7 +340,6 @@ export function SubmissionAdminDetailPanel({
         <section className="card pad">
           <div className="card-title">
             <h2>Status history</h2>
-            <span className="subtle right">Immutable audit evidence</span>
           </div>
           {submission.statusTimeline.length ? (
             <ol className="timeline">
@@ -757,15 +753,8 @@ export function AdminCreationForm(props: AdminCreationFormProps) {
             }}
           >
             <p className="help">
-              For invited talks, keynotes and other sessions that don’t need CFP
-              review.
-            </p>
-            <p className="help">
-              Sessions start in the unscheduled programme. Speakers already on
-              this event’s active roster can be added before they accept portal
-              access. Speaker invitations are handled when you add the session;
-              speakers must confirm participation before it can be published.
-              Choose its slot in the schedule planner after saving.
+              Speakers must confirm participation before the session can be
+              published.
             </p>
             <input type="hidden" name="_intent" value="create_direct_session" />
             <input
@@ -860,6 +849,10 @@ export function AdminCreationForm(props: AdminCreationFormProps) {
               result={actionResult}
               intent="create_direct_session"
             />
+            <p className="help">
+              Adding the session emails a portal invitation to each speaker who
+              has not accepted access.
+            </p>
             <Button
               variant="primary"
               type="submit"

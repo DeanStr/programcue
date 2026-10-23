@@ -4,87 +4,87 @@
   "binaryAnchors": [
     {
       "path": "e2e/public-site.spec.ts-snapshots/public-site-home-desktop-dark-desktop-chromium-linux.png",
-      "sha256": "cf2d4edc768a22e2d9b3afa8a1df6672d06495d12b6059618314cd73091fd789"
+      "sha256": "a25dc13b1e840fdba83bc24672b4091d1655a6cabee59404510cc3f1de8e5385"
     },
     {
       "path": "e2e/public-site.spec.ts-snapshots/public-site-home-desktop-desktop-chromium-linux.png",
-      "sha256": "ce01c5d4bec106ff64122b9d369d6e7c35be97be17badf522a82a3f559618dda"
+      "sha256": "42f4e98550ec4d2c4041832bb0a6f935d00f3497ec18a103a107d3637f4a5178"
     },
     {
       "path": "e2e/public-site.spec.ts-snapshots/published-public-site-mobile-desktop-chromium-linux.png",
-      "sha256": "d6a6097c1791da8296bc7ae59cf046eb393e7d412045a97ceefc12eeb7d37593"
+      "sha256": "92be5832230405dc05f68b9f4d8c8c3d09c5ed3287cccd18d400e9958aac440a"
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/branding-desktop-chromium-linux.png",
-      "sha256": "96b6976bbc1122983daa099ef6e08b2e043f6e10432d7af36b3886b11fbe4341"
+      "sha256": "d1a570f994a0b205a99d918d640a9c85ac2a8b2212bd35b47c553cb75da95703"
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/branding-preview-mobile-chromium-linux.png",
-      "sha256": "e335bba347ebf85a05150f421ef1015831a8f19928d0b2ee4a241d3175715ddb"
+      "sha256": "c57bea902f3b2230c5fc98c0eefae5ce6a2003d7a658cd3e9b0ff910c4f8fbce"
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/command-centre-desktop-chromium-linux.png",
-      "sha256": "2eef8e9bfab06adc45387c8116ce9afea3bd8d4ae67f096b64fd96bc68dc5af1"
+      "sha256": "1c550be7bd0bae3aab039fbc71793fe6e4ba7efef3728fc34918069c5960bcd8"
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/communications-desktop-chromium-linux.png",
-      "sha256": "5a073175f663d9a92326b6d8e2fdbc66125564e514fcbbcb89aedf4b7cc46399"
+      "sha256": "67ef91c73e6a32618486655ccdfdfbdc8f2ae1fb89884f0cf27d9761ec35f9f2"
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/communications-preview-laptop-chromium-linux.png",
-      "sha256": "6124c856b623a59f369d34ebb58edf256a81f422ee54b2b0c2b2907bbf7fa03f"
+      "sha256": "71b443393cd7f5c50bdbfad23db0421d46ff8c378c1330120648056b0b847baa"
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/evaluation-admin-desktop-chromium-linux.png",
-      "sha256": "bb781abe6ee7e300156de09fe30c12a758bd505b7ea5ad96267380c0b82914b8"
+      "sha256": "df494c3afd09b3409eefadbe61c2deb7d662845612f7a7e42ea81d9bd560c6f3"
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/event-setup-data-desktop-chromium-linux.png",
-      "sha256": "0b22590510606135292c627e7c257722e9e519402f2b0bee397a43c9b75399be"
+      "sha256": "78e1ec0a369dec73d2d75052e427906c384312ff5974c052e4c1ff153ba3aab4"
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/event-setup-desktop-chromium-linux.png",
-      "sha256": "61a5e5f6f5a7139ca83af45968695551b9d373e8bfa72099853f232abdad4a45"
+      "sha256": "69006798f7d0bb4e8eee7f2951f291aff3db4e359c0bce2e8b39b64e16630058"
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/form-builder-desktop-chromium-linux.png",
-      "sha256": "8ca8e4da89117d0ed3a3cbcb29120ef3b34899d0a5500bcb0afa6e6217874700"
+      "sha256": "6f2c44eca93149628e69c5b55fc2e89ae4d1117e6af60eb05e42bafed187f0e6"
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/form-builder-laptop-chromium-linux.png",
-      "sha256": "726ab8fcea6ff59a050115ef8c730e5b84c18a85a91df90511ebb78ce0cdc81c"
+      "sha256": "ad30ade90cf9f5a54e1115c4fc3813fbdd3db612f9cb580d37cf29ad1e00f632"
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/programme-admin-desktop-chromium-linux.png",
-      "sha256": "7b5903e08a9bb3088e1223ab184943d070a72f0bf02d151b75700eebaa9092e2"
+      "sha256": "fa70727bf9eaee82f9516849a72f34379bc80aa12edd1d437dab79674632aef7"
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/public-application-desktop-chromium-linux.png",
-      "sha256": "f84ec7ce0d27cdd13d69243ec152baf7220de6853086314cf4ba7ba65b1e114f"
+      "sha256": "0344b33df1451d02585abc8800f3ca7f2874335c42efaebf10493e0f060fd6f4"
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/public-application-mobile-chromium-linux.png",
-      "sha256": "20bf965db376697ea63afa445d398fdbe50dae606694c1c58e7b79e30617293b"
+      "sha256": "fc5d8dbd349b42c866f8e12e78b47b095cbeb67f194616b02fa2809fac0f378f"
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/public-programme-desktop-chromium-linux.png",
-      "sha256": "dcb0fc86e0c149a878d37880ab073c4b28c848b0964794170a7245e9ee241eaf"
+      "sha256": "56ca59abcd90ec0b1dfb1a31f2ef385eeec098bb44cec5650f64ae48d8cd80a7"
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/public-programme-mobile-chromium-linux.png",
-      "sha256": "5b96f46f165fb2c5a999e8734d69f88345f7741183431014c26ed85aafabef1c"
+      "sha256": "cb68caf3543e3879649910d379ace1161f6fb914f7819a494295ce6f841d35d7"
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/public-speaker-gallery-mobile-chromium-linux.png",
-      "sha256": "b146a4dbc22973fa8d279c362a22cf9fd05ba70b69e3b9ec1e5a6dd4aab4bc9a"
+      "sha256": "b005e6b283abe2314a0cb101e6cce88621fe4b174eaf00e5a62243a1f5c82009"
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/review-workbench-desktop-chromium-linux.png",
-      "sha256": "71846802c41d0d08c490a66e149e3cad1012bba3908c3ed10124b843a6e4832a"
+      "sha256": "bc968af89289524883f2a77685673761512c4181af6652963fe9c66d30d617d3"
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/review-workbench-mobile-chromium-linux.png",
-      "sha256": "6ba1436715412b94a2719ac71fd31b2b7277577801172a3b0cd0564312b726de"
+      "sha256": "69712845fbe6139183b9e76ac46c996cf4fbb691a7ac5162ae94e948504b2a32"
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/schedule-planner-laptop-chromium-linux.png",
@@ -92,19 +92,19 @@
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/speaker-dashboard-desktop-chromium-linux.png",
-      "sha256": "895f1c20601f52faf0d19bb533647c594ddf8e13123ae0d2c2dcd763b55f03eb"
+      "sha256": "6539c96aabd4734f2feb5ed7b59f22c937641529c30d88411643aff28cbef659"
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/speaker-dashboard-mobile-chromium-linux.png",
-      "sha256": "bb25cab853f47543259ca2edc99d098afd924f211a738f8f98fabb5aaa68280e"
+      "sha256": "865460c106901b7445c3c79a907696485d445a26a929fe882db8f128db2dcc2c"
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/speaker-profile-mobile-chromium-linux.png",
-      "sha256": "6f88c09311aef55dad0fbcdbd71b450f106c3b8f5f2bc92f7960866524fc161c"
+      "sha256": "b915d89e733e5413a69384db5b83aca5d666d959a86688fd2e4ea34e8093f158"
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/tasks-readiness-laptop-chromium-linux.png",
-      "sha256": "72798a4659d795d936fcaaaa7cd09429f2f9988423312f728f27084de09fade3"
+      "sha256": "d60ac3fb63c196cebf1f84f7785b72412198154115dd93157170ebd628c8d30b"
     }
   ],
   "anchors": [

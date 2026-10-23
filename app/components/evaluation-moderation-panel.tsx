@@ -14,10 +14,6 @@ export function EvaluationModerationPanel() {
       <div className="card-title">
         <div>
           <h2>Moderation and review control</h2>
-          <p className="subtle">
-            Compare submitted reviewer outcomes, record the chair's moderation
-            and explicitly reopen a locked review when a correction is required.
-          </p>
         </div>
         <span className="status info right">{activeRound.name}</span>
       </div>

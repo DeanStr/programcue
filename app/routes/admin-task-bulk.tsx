@@ -151,16 +151,6 @@ export async function action({ request, context }: Route.ActionArgs) {
 
 export const meta = () => [{ title: "Bulk tasks · Program Cue" }];
 
-function actionDescription(action: TaskBulkAction) {
-  if (action === "assign_template") {
-    return "Assign one plan to selected speakers, including missing prerequisites.";
-  }
-  if (action === "waive") {
-    return "Apply one explicit, audited waiver reason to selected open tasks.";
-  }
-  return "Return selected completed or waived tasks to an open state.";
-}
-
 export default function AdminTaskBulk({ loaderData }: Route.ComponentProps) {
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
@@ -196,12 +186,7 @@ export default function AdminTaskBulk({ loaderData }: Route.ComponentProps) {
     <>
       <div className="page-head pc-page-header">
         <div>
-          <span className="pc-page-eyebrow">Preview · confirm · audit</span>
           <h1>Bulk task operations</h1>
-          <p>
-            Select exact speakers or tasks, inspect every material change and
-            commit through the normal task rules.
-          </p>
         </div>
         <div className="page-actions">
           <ButtonLink to="/admin/tasks">Tasks &amp; readiness</ButtonLink>
@@ -255,7 +240,6 @@ export default function AdminTaskBulk({ loaderData }: Route.ComponentProps) {
                 <option value="waive">Waive requirements</option>
                 <option value="reopen">Reopen requirements</option>
               </select>
-              <span className="help">{actionDescription(bulkAction)}</span>
             </label>
             {bulkAction === "assign_template" ? (
               <label className="label">
@@ -300,11 +284,6 @@ export default function AdminTaskBulk({ loaderData }: Route.ComponentProps) {
               {!candidates.length ? (
                 <EmptyState
                   title="No eligible records"
-                  description={
-                    bulkAction === "assign_template"
-                      ? "Speakers appear here once they are visible in this event."
-                      : "Tasks appear here once they are in a state this action can change."
-                  }
                   action={
                     <ButtonLink to="/admin/tasks">
                       Tasks &amp; readiness
@@ -333,7 +312,6 @@ export default function AdminTaskBulk({ loaderData }: Route.ComponentProps) {
             <BellRing aria-hidden size={18} />
           </div>
           <p>
-            Open the Communications Centre with a deterministic task cohort.
             Recipient and content preview remains mandatory before delivery.
           </p>
           <div className="page-actions">
@@ -356,8 +334,7 @@ export default function AdminTaskBulk({ loaderData }: Route.ComponentProps) {
           <p>
             Programme, form and resource publication can notify calendars,
             change public data or reset acknowledgements. They stay in their
-            resource-specific preview and confirmation workflows instead of a
-            generic bulk switch.
+            resource-specific preview and confirmation workflows.
           </p>
           <div className="page-actions">
             <ButtonLink size="small" to="/admin/schedule">

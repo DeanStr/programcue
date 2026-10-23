@@ -32,7 +32,6 @@ export function CommunicationsSetupView({
       <AdminPageSection
         id="communications-delivery"
         label="Delivery configuration"
-        description="Sender profiles the provider will accept, and a real test send"
         defaultExpandedOnMobile
       >
         <section className="card pad mb">
@@ -41,8 +40,7 @@ export function CommunicationsSetupView({
               <h3>Organisation email-footer address</h3>
               <p className="help">
                 New templates copy this postal address into their editable
-                footer. Program Cue does not substitute an event venue or a
-                fictional address.
+                footer.
               </p>
             </div>
           </div>
@@ -89,7 +87,6 @@ export function CommunicationsSetupView({
       <AdminPageSection
         id="communications-automation"
         label="Automatic reminders"
-        description="Scheduled reminder and escalation policy"
       >
         <CommunicationAutomation
           loaderData={loaderData}
@@ -100,7 +97,6 @@ export function CommunicationsSetupView({
       <AdminPageSection
         id="communications-calendars"
         label="Calendar administration"
-        description="Connections and published-session invitations"
       >
         <CalendarAdministration
           loaderData={loaderData}
@@ -140,7 +136,6 @@ export function CommunicationsWorkView({
       <AdminPageSection
         id="communications-templates"
         label="Templates"
-        description="Versioned email content, and the published version every send uses"
         defaultExpandedOnMobile
       >
         <div className="comms-workbench">
@@ -167,11 +162,7 @@ export function CommunicationsWorkView({
         </div>
       </AdminPageSection>
 
-      <AdminPageSection
-        id="communications-history"
-        label="History"
-        description="Confirmed sends and calendar operations for this event"
-      >
+      <AdminPageSection id="communications-history" label="History">
         <CommunicationDeliveryHealth loaderData={loaderData} />
         <div className="comms-history comms-activity-grid">
           <RecentCommunications

@@ -72,10 +72,6 @@ export function EmbedConfigurationWorkflow({
   return (
     <>
       <div className="card-title programme-embed-builder-title">
-        <p className="help">
-          Choose the initial view, preview the published result, then copy
-          installation code.
-        </p>
         <Button size="small" type="button" onClick={reset}>
           <RotateCcw aria-hidden size={14} /> Reset
         </Button>
@@ -326,7 +322,6 @@ export function EmbedConfigurationWorkflow({
           <div className="card-title">
             <div>
               <h3>Live preview</h3>
-              <p className="help">The iframe uses the exact generated URL.</p>
             </div>
             <fieldset
               className="segmented pc-plain-fieldset"
@@ -372,9 +367,6 @@ export function EmbedConfigurationWorkflow({
             <div className="card-title">
               <div>
                 <h3>Install</h3>
-                <p className="help">
-                  The script widget adds safe automatic height updates.
-                </p>
               </div>
               <label className="label">
                 Installation format

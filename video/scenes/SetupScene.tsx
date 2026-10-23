@@ -318,7 +318,7 @@ export function SetupScene({ duration }: ProductSceneProps) {
           radius={7}
           width={779}
           x={181}
-          y={519 - 50 * publicIdentityPan}
+          y={486 - 50 * publicIdentityPan}
         />
       </BrowserWindow>
 
@@ -344,7 +344,7 @@ export function SetupScene({ duration }: ProductSceneProps) {
           radius={9}
           width={485}
           x={510}
-          y={244}
+          y={204}
         />
       </BrowserWindow>
 
@@ -550,7 +550,7 @@ export function SetupScene({ duration }: ProductSceneProps) {
             radius={7}
             width={515}
             x={494}
-            y={149}
+            y={130}
           />
           <FocusRing
             color={PALETTE.sageDeep}
@@ -559,7 +559,7 @@ export function SetupScene({ duration }: ProductSceneProps) {
             radius={7}
             width={110}
             x={898}
-            y={557}
+            y={538}
           />
         </BrowserWindow>
         <PhonePreview frame={frame} opacity={brand} start={515} />

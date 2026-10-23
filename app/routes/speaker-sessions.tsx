@@ -98,7 +98,6 @@ export default function SpeakerSessions(_props: Route.ComponentProps) {
       <div className="page-head">
         <div>
           <h1>My sessions</h1>
-          <p>Current session details and your role in each session.</p>
         </div>
         <p className="speaker-work-count">
           <b className="pc-num">{portal.sessions.length}</b>

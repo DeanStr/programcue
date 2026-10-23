@@ -24,7 +24,7 @@ const session = {
   format: "keynote",
   durationMinutes: 45,
   trackName: "Main stage",
-  status: "confirmed",
+  status: "scheduled",
   completedReviewCount: 1,
   assignmentCount: 1,
   averageScore: 4.5,

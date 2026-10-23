@@ -174,11 +174,12 @@ export default function AdminContentSession({
         <div className="page-head pc-page-header">
           <div>
             <h1>{current.title}</h1>
-            <p>This session is ready to enter programme planning.</p>
           </div>
-          <Link className="content-text-action" to="/admin/content">
-            Content &amp; files
-          </Link>
+          <div className="page-actions">
+            <Link className="content-text-action" to="/admin/content">
+              Content &amp; files
+            </Link>
+          </div>
         </div>
         <section className="card pad" aria-labelledby="start-content-title">
           <h2 id="start-content-title">Start a content draft</h2>
@@ -207,10 +208,6 @@ export default function AdminContentSession({
       <div className="page-head pc-page-header">
         <div>
           <h1>{current.title}</h1>
-          <p>
-            Review exact prior content, control public approval and restore
-            without rewriting history.
-          </p>
         </div>
         <div className="page-actions">
           <Link className="content-text-action" to="/admin/content">
@@ -337,7 +334,6 @@ export default function AdminContentSession({
       <section className="card pad" aria-labelledby="history-title">
         <div className="card-title">
           <div>
-            <span className="pc-section-kicker">Append-only evidence</span>
             <h2 id="history-title">Content history</h2>
           </div>
           <span className="pill">

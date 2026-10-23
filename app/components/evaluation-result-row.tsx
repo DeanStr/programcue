@@ -3,6 +3,7 @@ import { Form, Link } from "react-router";
 import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
 import { Button, ButtonSummary } from "~/components/ui/button";
 import { EventDateTime } from "~/components/ui/event-date-time";
+import { statusPresentation } from "~/components/ui/status-presentation";
 
 type EvaluationResult = ReturnType<
   typeof useEvaluationAdminModel
@@ -47,7 +48,9 @@ export function EvaluationResultRow({ result }: { result: EvaluationResult }) {
         <div className="pc-record-stack">
           <strong>{result.title}</strong>
           <small className="subtle">
-            {result.reference} · {result.targetType} · {humanise(result.state)}
+            {result.targetType === "proposal"
+              ? `${result.reference} · Proposal · ${statusPresentation("submission", result.state).label}`
+              : `Session · ${statusPresentation("session", result.state).label}`}
           </small>
         </div>
       </td>

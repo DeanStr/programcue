@@ -62,6 +62,58 @@ test("column changes preserve unapplied application filters", async ({
   await expect(header).toHaveCount(0);
 });
 
+test("rapid view changes keep every change", async ({ page }) => {
+  await page.goto("/admin/submissions");
+  await page.locator("body[data-hydrated='true']").waitFor();
+  // Hold each view request open so the second change lands while the first
+  // is still loading, which is when the rendered URL is stale.
+  await page.route(/\/admin\/submissions\.data/u, async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    await route.continue();
+  });
+  await page.getByText("Columns", { exact: true }).click();
+  const columns = page.getByRole("group", { name: "Visible columns" });
+  await columns.getByLabel("Submitter").uncheck();
+  await columns.getByLabel("Category route").uncheck();
+  await expect(page).toHaveURL(/columns=speakers%2Cstatus$/u);
+  await expect(
+    page.getByRole("columnheader", { name: "Submitter" }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("columnheader", { name: "Category route" }),
+  ).toHaveCount(0);
+
+  // Apply submits the filter form while the density change is still loading.
+  await page.getByLabel("Density").selectOption("compact");
+  await page.getByRole("button", { name: "Apply", exact: true }).click();
+  await expect(page).toHaveURL(/density=compact/u);
+  await expect(page).toHaveURL(/columns=speakers%2Cstatus/u);
+});
+
+test("a view change replaced before it loads leaves no stale view", async ({
+  page,
+}) => {
+  await page.goto("/admin/submissions");
+  await page.locator("body[data-hydrated='true']").waitFor();
+  await page.route(/\/admin\/submissions\.data/u, async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    await route.continue();
+  });
+  const density = page.getByLabel("Density");
+  await density.selectOption("compact");
+  await page.getByRole("link", { name: "Clear", exact: true }).click();
+  await expect(density).toHaveValue("comfortable");
+  await expect(page.locator(".pc-data-grid")).not.toHaveClass(/is-compact/u);
+
+  // The next change builds on what loaded, not on the abandoned request.
+  await page.getByText("Columns", { exact: true }).click();
+  await page
+    .getByRole("group", { name: "Visible columns" })
+    .getByLabel("Submitter")
+    .uncheck();
+  await expect(page).toHaveURL(/\?columns=route%2Cspeakers%2Cstatus$/u);
+});
+
 test("application Apply remains readable during keyboard activation", async ({
   page,
 }) => {
@@ -304,10 +356,11 @@ test("critical next actions keep their red rail at rest, on hover and on focus",
   await page.goto("/admin/command");
   await page.locator("body[data-hydrated='true']").waitFor();
   const action = page.locator(".command-top-action.is-danger");
-  const red = "rgb(220, 38, 38)";
+  // --state-bad-solid and --state-bad-text: crimson, distinct from copper.
+  const red = "rgb(190, 18, 60)";
   await expect(action).toHaveCSS("border-left-color", red);
   const score = page.locator(".command-score-reading strong");
-  await expect(score).toHaveCSS("color", "rgb(153, 27, 27)");
+  await expect(score).toHaveCSS("color", "rgb(159, 18, 57)");
   await expect(page.locator(".command-score-condition")).toHaveText(
     "1 critical condition",
   );
