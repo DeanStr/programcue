@@ -2,6 +2,7 @@ import { useSyncExternalStore } from "react";
 import { Form } from "react-router";
 
 import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
+import { Button } from "~/components/ui/button";
 
 function subscribeDesktopFilters(onChange: () => void) {
   const media = window.matchMedia("(min-width: 761px)");
@@ -78,9 +79,9 @@ export function EvaluationResultsToolbar() {
               <option value="title_asc">Title</option>
             </select>
           </label>
-          <button type="submit" className="pc-eval-text-action">
-            Apply
-          </button>
+          <Button type="submit" size="small">
+            Apply filters
+          </Button>
         </Form>
       </details>
       <div className="help pc-eval-results-meta">

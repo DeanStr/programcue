@@ -659,19 +659,21 @@
   flex-wrap: wrap;
   align-items: center;
 }
+/* Facets read as controls at rest: a surface fill and an editorial hairline.
+   They were transparent, and the `background` shorthand also cleared the
+   select chevron, so the filters read as plain text. Focus keeps the shared
+   field treatment. */
 .public-filters .select,
 .public-filters .field {
   min-height: 36px;
-  border-color: transparent;
-  background: transparent;
+  background-color: var(--surface);
   box-shadow: none;
 }
-.public-filters .select:hover,
-.public-filters .field:hover,
-.public-filters .select:focus,
-.public-filters .field:focus {
+.public-filters :is(.select, .field):not(:focus) {
   border-color: var(--border-editorial);
-  background: var(--surface);
+}
+.public-filters :is(.select, .field):hover:not(:focus) {
+  border-color: var(--muted-on-surface);
 }
 .public-search {
   position: relative;
@@ -702,12 +704,9 @@
 .public-filter-summary p {
   margin: 0;
   color: var(--text-tertiary);
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
 }
 .public-filter-summary .btn {
-  border: 0;
-  background: transparent;
-  color: var(--text-secondary);
   min-height: 32px;
 }
 

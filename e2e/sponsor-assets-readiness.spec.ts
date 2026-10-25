@@ -14,6 +14,10 @@ test("organisers request private assets and prepare filtered reminders; accepted
   await resetDemoEvent(request);
   await page.goto("/");
   await page.goto("/admin/sponsors");
+  await page
+    .locator("#main .page-actions")
+    .getByRole("link", { name: "Add sponsor", exact: true })
+    .click();
   const companyName = `Readiness company ${"x".repeat(121)}`;
   const companyDescription = "x".repeat(3000);
   await page.getByLabel("Company name", { exact: true }).fill(companyName);
@@ -75,7 +79,7 @@ test("organisers request private assets and prepare filtered reminders; accepted
     .getByRole("combobox", { name: "Readiness", exact: true })
     .selectOption("assets");
   await readiness
-    .getByRole("button", { name: "Filter sponsors", exact: true })
+    .getByRole("button", { name: "Apply filters", exact: true })
     .click();
   await expect(page).toHaveURL(/state=assets/);
   await readiness.getByRole("link", { name: "Clear", exact: true }).click();
@@ -182,7 +186,7 @@ test("organisers request private assets and prepare filtered reminders; accepted
       .getByRole("combobox", { name: "Readiness", exact: true })
       .selectOption("assets");
     await readiness
-      .getByRole("button", { name: "Filter sponsors", exact: true })
+      .getByRole("button", { name: "Apply filters", exact: true })
       .click();
     await expect(
       readiness.getByText("2 need sponsor action", { exact: false }),

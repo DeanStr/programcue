@@ -159,8 +159,6 @@
   color: var(--text-tertiary);
   font-size: var(--text-2xs);
   font-weight: var(--weight-semibold);
-  letter-spacing: 0.02em;
-  text-transform: lowercase;
 }
 .template-item-state[data-state="published"] {
   color: var(--state-good-text);

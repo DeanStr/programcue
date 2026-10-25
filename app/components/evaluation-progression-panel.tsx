@@ -33,31 +33,36 @@ export function EvaluationProgressionPanel() {
           <input type="hidden" name="intent" value="add-next-round" />
           <input type="hidden" name="planId" value={plan.id} />
           <input type="hidden" name="planRevision" value={plan.revision} />
-          <input
-            className="field"
-            name="name"
-            placeholder={`Round ${plan.rounds.length + 1} name`}
-            aria-label="Next round name"
-            required
-          />
-          <select
-            className="select"
-            name="cloneRoundId"
-            aria-label="Rubric to clone"
-            defaultValue={activeRound?.id ?? plan.rounds.at(-1)?.id}
-          >
-            {plan.rounds.map((round) => (
-              <option key={round.id} value={round.id}>
-                Clone {round.name}
-              </option>
-            ))}
-          </select>
+          <div className="grid grid-2">
+            <label className="label">
+              Next round name
+              <input
+                className="field"
+                name="name"
+                placeholder={`Round ${plan.rounds.length + 1}`}
+                required
+              />
+            </label>
+            <label className="label">
+              Rubric to clone
+              <select
+                className="select"
+                name="cloneRoundId"
+                defaultValue={activeRound?.id ?? plan.rounds.at(-1)?.id}
+              >
+                {plan.rounds.map((round) => (
+                  <option key={round.id} value={round.id}>
+                    {round.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
           <label className="label">
             Scorecard to use
             <select
               className="select"
               name="scorecardSelection"
-              aria-label="Scorecard to use"
               defaultValue=""
             >
               <option value="">Create a new scorecard (v1)</option>
@@ -88,6 +93,7 @@ export function EvaluationProgressionPanel() {
                 data-empty=""
                 onInput={bindEvalDateTime}
               />
+              <span className="help">Leave blank to open immediately.</span>
             </label>
             <label className="label">
               Closes ({loaderData.eventTimezone})
@@ -98,6 +104,7 @@ export function EvaluationProgressionPanel() {
                 data-empty=""
                 onInput={bindEvalDateTime}
               />
+              <span className="help">Leave blank for no closing date.</span>
             </label>
           </div>
           <label className="validation-item">
@@ -106,9 +113,11 @@ export function EvaluationProgressionPanel() {
               Hide author and co-author identity from reviewers in this round
             </span>
           </label>
-          <Button type="submit" disabled={navigation.state !== "idle"}>
-            Add next round
-          </Button>
+          <div className="page-actions">
+            <Button type="submit" disabled={navigation.state !== "idle"}>
+              Add next round
+            </Button>
+          </div>
         </Form>
       ) : null}
       {activeRound && nextRound ? (

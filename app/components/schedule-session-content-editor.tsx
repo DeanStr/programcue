@@ -38,6 +38,7 @@ import {
   useOnlineState,
   useScheduleAutosave,
 } from "./schedule-content-editor-shared";
+import { sessionFormatLabel } from "./schedule-planner-workspace-helpers";
 
 type SessionContentEditorProps = {
   workspace: ScheduleWorkspace;
@@ -676,28 +677,22 @@ function SessionContentPreviewPanel() {
           <span className="pc-page-eyebrow">Isolated live preview</span>
           <h2 id="content-preview-title">Session card and detail</h2>
         </div>
-        <div className="page-actions">
+        <fieldset className="pc-segmented" aria-label="Preview width">
           {(["desktop", "mobile"] as const).map((option) => (
-            <Button
-              size="small"
-              variant={viewport === option ? "primary" : undefined}
+            <button
               type="button"
               aria-pressed={viewport === option}
               key={option}
               onClick={() => setViewport(option)}
             >
               {option[0].toUpperCase() + option.slice(1)}
-            </Button>
+            </button>
           ))}
-        </div>
+        </fieldset>
       </div>
-      <fieldset
-        className="tabs mb pc-plain-fieldset"
-        aria-label="Preview surface"
-      >
+      <fieldset className="pc-segmented mb" aria-label="Preview surface">
         {(["card", "detail", "calendar"] as const).map((option) => (
           <button
-            className={`tab${surface === option ? " active" : ""}`}
             type="button"
             aria-pressed={surface === option}
             key={option}
@@ -722,7 +717,9 @@ function SessionContentPreviewPanel() {
       >
         {surface === "card" ? (
           <article>
-            <span className="pill">{draft.format}</span>
+            <span className="pill">
+              {sessionFormatLabel(workspace.sessionFormats, draft.format)}
+            </span>
             <h3>{draft.title || "Untitled session"}</h3>
             <p className="help">
               {session.speakerNames.join(", ") || "Speaker to be announced"}

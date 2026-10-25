@@ -19,6 +19,7 @@ import {
 import { Button, ButtonLink } from "~/components/ui/button";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { DerivedSlugField } from "~/components/ui/derived-slug-field";
+import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { PageHeader } from "~/components/ui/page-header";
 import { requireValue } from "~/lib/required-value";
 import { maximumMegabytes } from "~/modules/files/file-policy";
@@ -65,13 +66,6 @@ export async function readResourceAttachmentCompletion(response: Response) {
   return { message: result.message };
 }
 
-function statusClass(status: string) {
-  return status === "published"
-    ? "success"
-    : status === "archived"
-      ? "danger"
-      : "warning";
-}
 function ResourceSaveIntent() {
   return <input type="hidden" name="intent" value="save" />;
 }
@@ -106,9 +100,7 @@ function ResourceEditorHeader() {
         <h2>{editing?.title ?? "Untitled resource"}</h2>
       </div>
       {editing ? (
-        <span className={`status ${statusClass(editing.status)}`}>
-          {editing.status}
-        </span>
+        <DomainStatusBadge domain="content" status={editing.status} />
       ) : null}
     </div>
   );
@@ -314,37 +306,31 @@ function ResourcePreviewPanel() {
     setPreviewViewport,
     resourcePreview,
   } = useResourceAdminModel();
+  /* The editor already formats the page as it is written, so the speaker
+     preview, with its event chrome, embeds and device widths, opens on
+     request instead of repeating the whole page beneath it. */
   return (
-    <section
-      className="resource-live-preview mt"
-      aria-label="Live speaker resource preview"
-    >
-      <div className="card-title">
-        <div>
-          <h3>Resource preview</h3>
-        </div>
-        <fieldset
-          className="preview-viewport-controls right pc-plain-fieldset"
-          aria-label="Resource preview size"
+    <details className="pc-disclosure resource-live-preview mt">
+      <summary>Preview as speakers see it</summary>
+      <fieldset
+        className="pc-segmented resource-preview-size"
+        aria-label="Resource preview size"
+      >
+        <button
+          type="button"
+          aria-pressed={previewViewport === "mobile"}
+          onClick={() => setPreviewViewport("mobile")}
         >
-          <Button
-            size="small"
-            type="button"
-            aria-pressed={previewViewport === "mobile"}
-            onClick={() => setPreviewViewport("mobile")}
-          >
-            Mobile
-          </Button>
-          <Button
-            size="small"
-            type="button"
-            aria-pressed={previewViewport === "desktop"}
-            onClick={() => setPreviewViewport("desktop")}
-          >
-            Desktop
-          </Button>
-        </fieldset>
-      </div>
+          Mobile
+        </button>
+        <button
+          type="button"
+          aria-pressed={previewViewport === "desktop"}
+          onClick={() => setPreviewViewport("desktop")}
+        >
+          Desktop
+        </button>
+      </fieldset>
       {resourcePreview.error ? (
         <div className="validation-item error" role="alert">
           <strong>Preview unavailable</strong>
@@ -380,7 +366,7 @@ function ResourcePreviewPanel() {
         This preview is local to your browser. Saving creates the draft version
         of record; publishing controls what speakers can see.
       </p>
-    </section>
+    </details>
   );
 }
 
@@ -429,18 +415,6 @@ function ResourceEditorPanel() {
       </Form>
       {editing ? (
         <div className="resource-secondary-actions">
-          <Button
-            variant="primary"
-            type="button"
-            onClick={() => setPublishConfirmationOpen(true)}
-            disabled={
-              editing.versionStatus !== "draft" ||
-              dirty ||
-              navigation.state !== "idle"
-            }
-          >
-            <BookOpenCheck aria-hidden size={15} /> Publish current draft
-          </Button>
           {editing.versionId ? (
             <DirectMultipartUpload
               key={`${editing.versionId}:${editing.revision}`}
@@ -505,6 +479,20 @@ function ResourceEditorPanel() {
               ))}
             </div>
           ) : null}
+          <div className="page-actions resource-publish-action">
+            <Button
+              variant="primary"
+              type="button"
+              onClick={() => setPublishConfirmationOpen(true)}
+              disabled={
+                editing.versionStatus !== "draft" ||
+                dirty ||
+                navigation.state !== "idle"
+              }
+            >
+              <BookOpenCheck aria-hidden size={15} /> Publish current draft
+            </Button>
+          </div>
         </div>
       ) : null}
       {publishConfirmationOpen && editing ? (
@@ -631,9 +619,7 @@ function ResourceLibraryPanel() {
                   {page.category ?? "General"} · version{" "}
                   {page.versionNumber ?? "—"}
                 </small>
-                <span className={`status ${statusClass(page.status)}`}>
-                  {page.status}
-                </span>
+                <DomainStatusBadge domain="content" status={page.status} />
               </Link>
             </li>
           ))}
@@ -669,7 +655,7 @@ function ResourceAdminHeader() {
   } = useResourceAdminModel();
   return (
     <PageHeader
-      title="Resource pages"
+      title="Speaker resources"
       actions={
         <>
           <ButtonLink

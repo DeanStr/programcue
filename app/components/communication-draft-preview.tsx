@@ -105,25 +105,23 @@ export function CommunicationDraftPreview({
           <div className="card-title">
             <h3>Representative merged email</h3>
             <fieldset
-              className="preview-viewport-controls right pc-plain-fieldset"
+              className="preview-viewport-controls right pc-segmented"
               aria-label="Email preview size"
             >
-              <Button
-                size="small"
+              <button
                 type="button"
                 aria-pressed={viewport === "mobile"}
                 onClick={() => setViewport("mobile")}
               >
                 Mobile
-              </Button>
-              <Button
-                size="small"
+              </button>
+              <button
                 type="button"
                 aria-pressed={viewport === "desktop"}
                 onClick={() => setViewport("desktop")}
               >
                 Desktop
-              </Button>
+              </button>
             </fieldset>
           </div>
           <div className="email-preview-shell">

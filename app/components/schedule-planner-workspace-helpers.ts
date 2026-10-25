@@ -3,12 +3,7 @@ import type {
   AutoPlacementUnplaced,
 } from "~/modules/schedule/schedule-auto-placement";
 
-export function sessionFormatLabel(
-  formats: Array<{ key: string; label: string }>,
-  key: string,
-) {
-  return formats.find((format) => format.key === key)?.label ?? key;
-}
+export { sessionFormatLabel } from "~/modules/events/event-configuration";
 
 export function isHourMark(epoch: number, timezone: string) {
   const minute = new Intl.DateTimeFormat("en", {

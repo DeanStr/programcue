@@ -272,10 +272,7 @@ export function ScheduleCanvasPanel({
     placedFormatKeys.has(format.key),
   );
   const dayTabs = (
-    <fieldset
-      className="tabs schedule-day-tabs pc-plain-fieldset"
-      aria-label="Event day"
-    >
+    <fieldset className="schedule-day-tabs pc-segmented" aria-label="Event day">
       {eventDays.map((day) => {
         const date = eventBoundaryCalendarDate(day);
         const entryCount = workspace.entries.filter(
@@ -287,7 +284,6 @@ export function ScheduleCanvasPanel({
           <button
             key={day}
             type="button"
-            className={`tab${selectedDay === day ? " active" : ""}`}
             aria-pressed={selectedDay === day}
             onClick={() => setSelectedDay(day)}
           >
@@ -312,7 +308,7 @@ export function ScheduleCanvasPanel({
           </h2>
         </div>
         <fieldset
-          className="tabs schedule-view-tabs pc-plain-fieldset"
+          className="schedule-view-tabs pc-segmented"
           aria-label="Schedule view"
         >
           {(["room", "list", "day", "week", "track"] as const).map((name) => (
@@ -320,7 +316,6 @@ export function ScheduleCanvasPanel({
               key={name}
               type="button"
               aria-pressed={view === name}
-              className={`tab${view === name ? " active" : ""}`}
               onClick={() => setView(name)}
             >
               {name[0].toUpperCase() + name.slice(1)}

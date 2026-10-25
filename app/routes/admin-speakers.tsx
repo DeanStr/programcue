@@ -139,9 +139,6 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
           >
             Add speaker
           </Button>
-          <ButtonLink to="/admin/crm">Speaker directory</ButtonLink>
-          <ButtonLink to="/admin/resources">Resources</ButtonLink>
-          <ButtonLink to="/admin/tasks">Manage tasks</ButtonLink>
           {summary.pendingRoles ? (
             <ButtonLink to="/admin/communications/compose?audience=pending_participants">
               Remind pending participants
@@ -265,13 +262,11 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
               </select>
             </label>
             <div className="crm-filter-actions">
-              <button className="crm-text-action" type="submit">
-                Apply filters
-              </button>
+              <Button type="submit">Apply filters</Button>
               {filtersActive ? (
-                <Link className="crm-text-action" to="/admin/speakers">
+                <ButtonLink variant="ghost" to="/admin/speakers">
                   Clear
-                </Link>
+                </ButtonLink>
               ) : null}
             </div>
           </Form>

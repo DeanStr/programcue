@@ -3,7 +3,10 @@ export type PublishedSession = {
   slug: string;
   title: string;
   description: string;
+  /** Stored format key: filters, embeds and category styling use it. */
   format: string;
+  /** The event's configured label for `format`; what readers see. */
+  formatLabel: string;
   startsAt: number;
   endsAt: number;
   room: string;
@@ -13,6 +16,9 @@ export type PublishedSession = {
   speakerIds: string[];
   speakerNames: string[];
 };
+
+/** A published session as a repository reads it, before labels are applied. */
+export type PublishedSessionRecord = Omit<PublishedSession, "formatLabel">;
 
 export type PublishedSpeaker = {
   id: string;

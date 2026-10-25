@@ -19,6 +19,7 @@ import {
   PublicationSettingsFields,
 } from "~/components/form-builder-panels";
 import { FormBuilderVisualCanvas } from "~/components/form-builder-visual-canvas";
+import { AdminWorkspaceTabs } from "~/components/ui/admin-workspace-tabs";
 import { Button } from "~/components/ui/button";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { DerivedSlugField } from "~/components/ui/derived-slug-field";
@@ -306,25 +307,23 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
      same line, instead of stacking two rows of chrome above the content. */
   const dockSwitch = (
     <fieldset
-      className="fb-dock-switch pc-plain-fieldset"
+      className="fb-dock-switch pc-segmented"
       aria-label="Inspector pane"
     >
-      <Button
-        size="small"
+      <button
         type="button"
         aria-pressed={!previewOpen}
         onClick={() => setPreviewOpen(false)}
       >
         Settings
-      </Button>
-      <Button
-        size="small"
+      </button>
+      <button
         type="button"
         aria-pressed={previewOpen}
         onClick={() => setPreviewOpen(true)}
       >
         Preview
-      </Button>
+      </button>
     </fieldset>
   );
   const publishedPublicSlug =
@@ -566,7 +565,6 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
           </span>
           <span className="fb-toolbar-actions">
             <Button
-              size="small"
               type="submit"
               name="_intent"
               value="save"
@@ -576,7 +574,6 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
             </Button>
             <Button
               variant="primary"
-              size="small"
               type="button"
               onClick={() => setPublishOpen(true)}
               disabled={
@@ -643,35 +640,17 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
           ) : null}
         </div>
 
-        <fieldset
-          className="fb-mobile-surfaces pc-plain-fieldset"
-          aria-label="Editor surface"
-        >
-          <Button
-            size="small"
-            type="button"
-            aria-pressed={mobileSurface === "structure"}
-            onClick={() => setMobileSurface("structure")}
-          >
-            Structure
-          </Button>
-          <Button
-            size="small"
-            type="button"
-            aria-pressed={mobileSurface === "canvas"}
-            onClick={() => setMobileSurface("canvas")}
-          >
-            Canvas
-          </Button>
-          <Button
-            size="small"
-            type="button"
-            aria-pressed={mobileSurface === "settings"}
-            onClick={() => setMobileSurface("settings")}
-          >
-            Settings
-          </Button>
-        </fieldset>
+        <AdminWorkspaceTabs<"structure" | "canvas" | "settings">
+          className="fb-mobile-surfaces"
+          label="Editor surface"
+          panels={[
+            { id: "structure", label: "Structure" },
+            { id: "canvas", label: "Canvas" },
+            { id: "settings", label: "Settings" },
+          ]}
+          activePanel={mobileSurface}
+          onChange={setMobileSurface}
+        />
         <div
           className={`fb-workbench${previewOpen ? " is-previewing" : ""} fb-surface-${mobileSurface}`}
         >

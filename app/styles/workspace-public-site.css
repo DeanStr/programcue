@@ -850,8 +850,17 @@
 
 @media (max-width: 1180px) {
   .public-site-mobile-surfaces {
-    display: inline-flex;
+    display: block;
     margin: 0 0 var(--space-4);
+  }
+  .public-site-mobile-surfaces.pc-workspace-tabs > ul {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding-right: 0;
+    mask-image: none;
+  }
+  .public-site-mobile-surfaces button {
+    width: 100%;
   }
   .public-site-admin-workspace {
     grid-template-columns: 1fr;

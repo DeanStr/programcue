@@ -109,7 +109,7 @@ test("publishes speaker profiles and a read-only itinerary share link", async ({
   await expect(page.getByText("Saved ✓").first()).toBeVisible();
   const itineraryItem = page.locator(".itinerary-item").first();
   await expect(itineraryItem).toContainText(
-    "Main Stage · keynote · Leadership",
+    "Main Stage · Keynote · Leadership",
   );
   await expect(itineraryItem).toContainText("Priya Shah");
   const calendarExport = page.getByRole("link", { name: "Export itinerary" });

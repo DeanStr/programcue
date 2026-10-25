@@ -99,7 +99,7 @@ beforeEach(async () => {
   await ensureDemoData(workerEnv);
 });
 
-describe("Operation Centre Airtable recovery", () => {
+describe("Operation centre Airtable recovery", () => {
   it("lists only unleased, event-scoped projection failures", async () => {
     const visibleRunId = await seedProjectionRun();
     await seedProjectionRun({ leased: true });
@@ -150,7 +150,7 @@ describe("Operation Centre Airtable recovery", () => {
   });
 });
 
-describe("Operation Centre import presentation", () => {
+describe("Operation centre import presentation", () => {
   it("limits organisation activity to organisation-wide administrators", async () => {
     await expect(
       loader({

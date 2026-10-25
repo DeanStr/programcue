@@ -1,4 +1,5 @@
 import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
+import { sessionFormatLabelSql } from "~/modules/events/event-configuration";
 import {
   type EventFieldDefinitionValue,
   EventFieldService,
@@ -93,6 +94,7 @@ export type SessionRow = {
   title: string;
   description: string | null;
   format: string;
+  formatLabel: string;
   durationMinutes: number;
   status: string;
   roleLabel: string | null;
@@ -283,7 +285,9 @@ export class SpeakerPortalService {
         }>(),
       this.env.DB.prepare(
         `
-        SELECT s.id, s.title, s.description, s.format, s.duration_minutes AS durationMinutes,
+        SELECT s.id, s.title, s.description, s.format,
+               ${sessionFormatLabelSql("s.event_id", "s.format")} AS formatLabel,
+               s.duration_minutes AS durationMinutes,
                s.status, ss.role_label AS roleLabel,
                track.name AS trackName,
                ss.participation_status AS participationStatus,

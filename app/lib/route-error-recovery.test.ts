@@ -52,7 +52,7 @@ describe("routeErrorRecovery", () => {
     });
   });
 
-  it("does not send a public 404 to Command Centre", () => {
+  it("does not send a public 404 to Command centre", () => {
     expect(
       routeErrorRecovery({
         status: 404,
@@ -70,7 +70,7 @@ describe("routeErrorRecovery", () => {
         evaluation: false,
         adminContextLoaded: true,
       }),
-    ).toEqual({ href: "/admin/command", label: "Go to Command Centre" });
+    ).toEqual({ href: "/admin/command", label: "Go to Command centre" });
   });
 
   it("sends 401s to sign-in, or the persona guide in evaluation", () => {

@@ -4,7 +4,10 @@ import { data, Link, useLocation, useNavigate } from "react-router";
 import { ProgrammeEmbedBuilder } from "~/components/programme-embed-builder";
 import { AdminWorkspaceTabs } from "~/components/ui/admin-workspace-tabs";
 import { ButtonLink } from "~/components/ui/button";
-import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
+import {
+  DomainStatusBadge,
+  statusPresentation,
+} from "~/components/ui/domain-status-badge";
 import { EventDateTime } from "~/components/ui/event-date-time";
 import { EmptyState } from "~/components/ui/states";
 import { ProgrammeAdminService } from "~/modules/programme/programme-admin-service.server";
@@ -236,8 +239,7 @@ export default function AdminSection({ loaderData }: Route.ComponentProps) {
       <div className="page-head pc-page-header">
         <div>
           <h1>Public programme & embeds</h1>
-          <nav className="programme-header-links" aria-label="Related">
-            <Link to="/admin/sessions/new?from=programme">Add session</Link>
+          <nav className="programme-header-links" aria-label="Published pages">
             <Link
               to={`/public/programme/${loaderData.publicSlug}`}
               target="_blank"
@@ -254,13 +256,14 @@ export default function AdminSection({ loaderData }: Route.ComponentProps) {
               Speaker gallery <ExternalLink aria-hidden size={13} />
               <span className="sr-only">(opens in a new tab)</span>
             </Link>
-            <Link to="/admin/content#content-review-title">Content review</Link>
-            <Link to="/admin/content#content-files-title">File library</Link>
           </nav>
         </div>
         <div className="page-actions">
-          <ButtonLink variant="primary" to="/admin/schedule">
-            Open schedule planner
+          <ButtonLink to="/admin/sessions/bulk">
+            Bulk session updates
+          </ButtonLink>
+          <ButtonLink variant="primary" to="/admin/sessions/new?from=programme">
+            Add session
           </ButtonLink>
         </div>
       </div>
@@ -385,8 +388,9 @@ export default function AdminSection({ loaderData }: Route.ComponentProps) {
                       <td>{session.room ?? "—"}</td>
                       <td>
                         {session.startsAt === null
-                          ? `Not published · ${session.visibility} when scheduled`
-                          : session.visibility}
+                          ? `Not published · ${statusPresentation("visibility", session.visibility).label} when scheduled`
+                          : statusPresentation("visibility", session.visibility)
+                              .label}
                       </td>
                       <td>
                         <DomainStatusBadge

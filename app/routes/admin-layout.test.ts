@@ -54,12 +54,12 @@ describe("admin layout role routing", () => {
     for (const status of [400, 403, 428]) {
       expect(adminErrorReturn(status, true)).toEqual({
         href: "/admin/command",
-        label: "Go to Command Centre",
+        label: "Go to Command centre",
       });
     }
   });
 
-  it("returns 401s to sign-in instead of Command Centre", () => {
+  it("returns 401s to sign-in instead of Command centre", () => {
     expect(adminErrorReturn(401, true, { pathname: "/admin/command" })).toEqual(
       {
         href: "/sign-in",
@@ -99,11 +99,11 @@ describe("admin layout role routing", () => {
   it("returns unexpected failures to the administrator home", () => {
     expect(adminErrorReturn(500, false)).toEqual({
       href: "/admin/command",
-      label: "Go to Command Centre",
+      label: "Go to Command centre",
     });
     expect(adminErrorReturn(null, false)).toEqual({
       href: "/admin/command",
-      label: "Go to Command Centre",
+      label: "Go to Command centre",
     });
   });
 

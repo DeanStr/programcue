@@ -256,7 +256,7 @@
   }
 }
 
-/* Record-backed Command Centre interactions. */
+/* Record-backed Command centre interactions. */
 .command-metric-link {
   display: block;
   color: inherit;
@@ -764,17 +764,6 @@ body.dark-mode .program-cue-api-reference .scalar-api-reference {
 .application-choice-field > .stack {
   margin-top: 2px;
 }
-.btn:disabled,
-.icon-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-  box-shadow: none;
-}
-.btn:disabled:hover,
-.icon-btn:disabled:hover {
-  filter: none;
-}
-
 /* The dragged card lifts out of the layout and settles on drop. */
 .session-card.is-dragging {
   display: grid;

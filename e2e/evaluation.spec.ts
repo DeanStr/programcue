@@ -517,7 +517,7 @@ test("evaluation administration exposes onboarding and consequential previews", 
     "Incomplete reviews",
   );
   await page.getByLabel("Coverage filter").selectOption("unassigned");
-  await page.getByRole("button", { name: "Apply" }).click();
+  await page.getByRole("button", { name: "Apply filters" }).click();
   await expect(page).toHaveURL(/(?:\?|&)filter=unassigned(?:&|$)/u);
   await expect(reviewTargetMetric.locator(".value")).toHaveText("6");
   await expect(reviewTargetMetric.locator(".detail")).toHaveText(
@@ -526,7 +526,7 @@ test("evaluation administration exposes onboarding and consequential previews", 
   await expect(unifiedResults.locator("tbody > tr")).toHaveCount(6);
 
   await page.getByLabel("Coverage filter").selectOption("");
-  await page.getByRole("button", { name: "Apply" }).click();
+  await page.getByRole("button", { name: "Apply filters" }).click();
   await expect(page).toHaveURL(/(?:\?|&)filter=(?:&|$)/u);
   await expect(reviewTargetMetric.locator(".value")).toHaveText("8");
   await openEvaluationView(page, "Assignments");

@@ -27,7 +27,6 @@
   flex: 0 0 auto;
 }
 
-.content-header-links,
 .programme-header-links {
   display: flex;
   flex-wrap: wrap;
@@ -35,7 +34,6 @@
   margin-top: var(--space-2);
 }
 
-.content-header-links a,
 .programme-header-links a {
   color: var(--text-tertiary);
   font-size: var(--text-xs);
@@ -43,8 +41,6 @@
   text-decoration: none;
 }
 
-.content-header-links a:hover,
-.content-header-links a:focus-visible,
 .programme-header-links a:hover,
 .programme-header-links a:focus-visible {
   color: var(--brand-700);
@@ -407,15 +403,6 @@ a.content-review-title:focus-visible {
   margin: 0;
   font-size: var(--text-sm);
   font-weight: var(--weight-semibold);
-}
-.programme-embed-output .segmented {
-  display: flex;
-  gap: var(--space-1);
-}
-.programme-embed-output .segmented .active {
-  border-color: var(--brand-600);
-  background: var(--brand-50);
-  color: var(--brand-700);
 }
 .programme-embed-preview {
   display: flex;

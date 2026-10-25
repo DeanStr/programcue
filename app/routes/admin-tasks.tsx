@@ -18,7 +18,7 @@ import { getCloudflareContext } from "~/platform/cloudflare-context";
 import { recordRouteChange } from "~/platform/realtime/route-realtime.server";
 import type { Route } from "./+types/admin-tasks";
 
-export const meta = () => [{ title: "Tasks & Readiness · Program Cue" }];
+export const meta = () => [{ title: "Tasks & readiness · Program Cue" }];
 
 const taskFiltersSchema = z
   .object({
@@ -61,6 +61,8 @@ function exactSearchValue(search: URLSearchParams, key: string) {
   }
   return values[0] ?? "";
 }
+
+type TaskFilters = z.infer<typeof taskFiltersSchema>;
 
 export function parseTaskFilters(search: URLSearchParams) {
   const parsed = taskFiltersSchema.safeParse({
@@ -141,33 +143,48 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const readinessTasks = workspace.tasks.filter(
     (task) => task.readinessRelevant,
   );
+  const matchesState = (
+    task: (typeof workspace.tasks)[number],
+    state: TaskFilters["state"],
+  ) =>
+    !state ||
+    (state === "open"
+      ? open.has(task.status)
+      : state === "overdue"
+        ? isOverdue(task)
+        : state === "due_soon"
+          ? isDueSoon(task)
+          : task.status === state);
+  const matchesOtherFilters = (task: (typeof workspace.tasks)[number]) =>
+    (!filters.owner || taskHasParticipantOwner(task)) &&
+    (!filters.impact ||
+      (filters.impact === "non_critical"
+        ? task.impact !== "critical"
+        : task.impact === filters.impact)) &&
+    (!filters.target || task.targetType === filters.target) &&
+    (!filters.type || task.taskType === filters.type);
   const tasks = workspace.tasks
-    .filter((task) => {
-      const stateMatches =
-        !filters.state ||
-        (filters.state === "open"
-          ? open.has(task.status)
-          : filters.state === "overdue"
-            ? isOverdue(task)
-            : filters.state === "due_soon"
-              ? isDueSoon(task)
-              : task.status === filters.state);
-      const impactMatches =
-        !filters.impact ||
-        (filters.impact === "non_critical"
-          ? task.impact !== "critical"
-          : task.impact === filters.impact);
-      return (
+    .filter(
+      (task) =>
         (!filters.task || task.id === filters.task) &&
-        (!filters.owner || taskHasParticipantOwner(task)) &&
-        stateMatches &&
-        impactMatches &&
-        (!filters.target || task.targetType === filters.target) &&
-        (!filters.type || task.taskType === filters.type)
-      );
-    })
+        matchesOtherFilters(task) &&
+        matchesState(task, filters.state),
+    )
     .map((task) => ({ ...task, isOverdue: isOverdue(task) }));
-  /* Summary tiles describe the event, not whichever rows happen to match the
+  /* Quick-filter links clear the task focus while retaining the other
+     filters. Count that destination, rather than the focused record. */
+  const countState = (state: TaskFilters["state"]) =>
+    workspace.tasks.filter(
+      (task) => matchesOtherFilters(task) && matchesState(task, state),
+    ).length;
+  const quickFilterCounts = {
+    open: countState("open"),
+    overdue: countState("overdue"),
+    submitted: countState("submitted"),
+    blocked: countState("blocked"),
+    all: countState(""),
+  };
+  /* Readiness describes the event, not whichever rows happen to match the
      current table filter. In particular, an empty filter result must not turn
      a partially ready event into a 100% one. */
   const taskSummary = {
@@ -180,13 +197,6 @@ export async function loader({ request, context }: Route.LoaderArgs) {
           : task.readinessPercent,
       })),
     ).percentage,
-    outstanding: readinessTasks.filter(
-      (task) => !["completed", "waived"].includes(task.status),
-    ).length,
-    evidenceReview: readinessTasks.filter((task) => task.status === "submitted")
-      .length,
-    blocked: readinessTasks.filter((task) => task.status === "blocked").length,
-    overdue: readinessTasks.filter(isOverdue).length,
   };
   const filterSignature = JSON.stringify(filters);
   return {
@@ -198,6 +208,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     focusedTaskId: requestedTaskId || null,
     focusedSpeakerId,
     totalTaskCount: workspace.tasks.length,
+    quickFilterCounts,
     taskSummary,
     /* Due distances are rendered from the server clock so the first paint and
        the hydrated tree agree. */

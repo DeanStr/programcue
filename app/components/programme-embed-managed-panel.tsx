@@ -2,6 +2,7 @@ import { ExternalLink } from "lucide-react";
 import { Form } from "react-router";
 import { Button } from "~/components/ui/button";
 import { DerivedSlugField } from "~/components/ui/derived-slug-field";
+import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EventDateTime } from "~/components/ui/event-date-time";
 import type { ProgrammeEmbedBuilderController } from "./use-programme-embed-builder";
 
@@ -248,7 +249,10 @@ export function ManagedEmbedWorkflow({
                       <div className="help">{embed.slug}</div>
                     </td>
                     <td>
-                      <span className="status info">{embed.status}</span>
+                      <DomainStatusBadge
+                        domain="managedEmbed"
+                        status={embed.status}
+                      />
                     </td>
                     <td>{embed.revision}</td>
                     <td>{embed.installationNote ?? "—"}</td>

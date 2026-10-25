@@ -112,9 +112,7 @@ export function ActivityTimelinePanel({
           />
         </label>
         <div className="page-actions">
-          <Button variant="primary" type="submit">
-            Filter activity
-          </Button>
+          <Button type="submit">Apply filters</Button>
         </div>
       </Form>
       {loaderData.canExportData && loaderData.activityScope === "event" ? (
@@ -432,7 +430,7 @@ export function OperationDetailPanel({
       >
         <div className="card-title">
           <h2 id="operation-items-heading">Record-level results</h2>
-          <span className="status info">
+          <span className="pc-count right">
             {loaderData.operationDetail.items.length} item
             {loaderData.operationDetail.items.length === 1 ? "" : "s"}
           </span>

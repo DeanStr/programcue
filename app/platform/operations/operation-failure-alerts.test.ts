@@ -321,10 +321,10 @@ describe("non-actionable operation failure alerts", () => {
     ).rejects.toThrow("Operation not found");
     await expect(
       service.acknowledgeFailure(viewer, retryableId),
-    ).rejects.toThrow("no retry or cancel action in the Operation Centre");
+    ).rejects.toThrow("no retry or cancel action in the Operation centre");
     await expect(
       service.acknowledgeFailure(viewer, cancellableId),
-    ).rejects.toThrow("no retry or cancel action in the Operation Centre");
+    ).rejects.toThrow("no retry or cancel action in the Operation centre");
     await expect(
       testEnv.DB.prepare(
         `SELECT COUNT(*) AS count FROM operation_jobs

@@ -651,10 +651,10 @@ export async function action({ request, context }: Route.ActionArgs) {
           webhook.warning
         ) {
           const calendarMessage = publication.calendar.dispatchError
-            ? " Calendar invitations could not be sent. Retry them from the Operation Centre."
+            ? " Calendar invitations could not be sent. Retry them from the Operation centre."
             : "";
           const notificationMessage = publication.notification.dispatchError
-            ? " Participant change emails could not be queued. Retry them from the Operation Centre."
+            ? " Participant change emails could not be queued. Retry them from the Operation centre."
             : "";
           return data(
             {

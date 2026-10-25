@@ -85,6 +85,7 @@ type ProgrammeEmbedSourceSession = {
   visibility: string;
   track: string | null;
   format: string;
+  formatLabel: string;
   room: string | null;
 };
 
@@ -136,7 +137,14 @@ export function programmeEmbedFilterOptions(
       ),
     ),
     tracks: distinct(published.map((session) => session.track)),
-    formats: distinct(published.map((session) => session.format)),
+    formats: [
+      ...new Map(
+        published.map((session) => [
+          session.format,
+          { value: session.format, label: session.formatLabel },
+        ]),
+      ).values(),
+    ].sort((left, right) => left.label.localeCompare(right.label)),
     rooms: distinct(published.map((session) => session.room)),
   };
 }

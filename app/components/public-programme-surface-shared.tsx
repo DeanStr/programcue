@@ -220,7 +220,7 @@ export function SurfaceHeading({
     children
   ) : count || children ? (
     <>
-      {count ? <span className="status info">{count}</span> : null}
+      {count ? <span className="pc-count">{count}</span> : null}
       {children}
     </>
   ) : null;

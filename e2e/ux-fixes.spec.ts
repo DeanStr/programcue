@@ -106,7 +106,7 @@ test("mobile administration sections reveal linked content without overflow", as
   ]);
   await waitForInterface(page, "/admin/command");
   await expect(
-    page.getByRole("heading", { name: "Command Centre" }),
+    page.getByRole("heading", { name: "Command centre" }),
   ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Overall readiness" }),
@@ -122,7 +122,15 @@ test("mobile administration sections reveal linked content without overflow", as
   await expect(
     page.getByRole("heading", { name: "Event activity timeline" }),
   ).toBeVisible();
-  await expect(page.getByLabel("Scope")).toHaveCount(0);
+  // Opening the CRM grants the demo administrator organisation access. This
+  // layout check must also work when a prior spec has initialised that fixture.
+  const activityScope = page.getByRole("combobox", {
+    name: "Scope",
+    exact: true,
+  });
+  if (await activityScope.count()) {
+    await expect(activityScope).toHaveValue("event");
+  }
   await expect(page.getByLabel("Find actors")).toBeVisible();
   await expectNoHorizontalPageOverflow(page);
 
@@ -137,8 +145,7 @@ test("mobile administration sections reveal linked content without overflow", as
   });
   await expect(calendars).toHaveAttribute("aria-expanded", "false");
   await page
-    .getByRole("navigation", { name: "Delivery settings sections" })
-    .getByRole("link", { name: "Automation" })
+    .getByRole("button", { name: "Expand Automatic reminders", exact: true })
     .click();
   await expect(
     page.getByRole("heading", { name: "Schedule-change email" }),
@@ -194,6 +201,9 @@ test("mobile administration sections reveal linked content without overflow", as
   ).toBeTruthy();
   await page.reload();
   await page.locator("body[data-hydrated='true']").waitFor();
+  await page
+    .getByRole("button", { name: "Expand Automatic reminders", exact: true })
+    .click();
 
   const scheduleEmail = page.locator("section").filter({
     has: page.getByRole("heading", { name: "Schedule-change email" }),
@@ -218,18 +228,12 @@ test("mobile administration sections reveal linked content without overflow", as
     .click();
   await expect(scheduleEmail.getByText("Off", { exact: true })).toBeVisible();
   await expect(notificationCheckbox).not.toBeChecked();
-  await page
-    .getByRole("navigation", { name: "Delivery settings sections" })
-    .getByRole("link", { name: "Calendars" })
-    .click();
+  await calendars.click();
   await expect(calendars).toHaveAttribute("aria-expanded", "true");
   await expectNoHorizontalPageOverflow(page);
   await expectNoContrastViolations(page, "Delivery settings");
 
   await waitForInterface(page, "/admin/communications");
-  await expect(
-    page.getByRole("navigation", { name: "Communications Centre sections" }),
-  ).toBeVisible();
   // Templates is the centre's primary work and opens with the page; History
   // starts closed and opens directly from its keyboard-accessible disclosure.
   await page
@@ -249,7 +253,7 @@ test("mobile administration sections reveal linked content without overflow", as
   await expect(page.getByText("Current event · event lifetime")).toBeVisible();
   await expect(page.getByRole("link", { name: "Last 90 days" })).toBeVisible();
   await expectNoHorizontalPageOverflow(page);
-  await expectNoContrastViolations(page, "Communications Centre");
+  await expectNoContrastViolations(page, "Communications");
 
   await waitForInterface(page, "/admin/review");
   await page

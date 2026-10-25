@@ -319,55 +319,9 @@
   margin: 2px 0 0;
 }
 
-.branding-preview-devices,
-.branding-preview-surfaces {
-  display: inline-flex;
-  align-items: stretch;
-  min-width: 0;
-  margin: 0;
-  padding: 3px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--surface-sunken);
-}
-
 .branding-preview-surfaces {
   display: flex;
   width: max-content;
-  max-width: 100%;
-}
-
-.branding-preview-devices button,
-.branding-preview-surfaces button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-1);
-  min-height: 30px;
-  margin: 0;
-  padding: 0 var(--space-3);
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--text-secondary);
-  font: inherit;
-  font-size: var(--text-2xs);
-  font-weight: var(--weight-semibold);
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.branding-preview-devices button.is-active,
-.branding-preview-surfaces button.is-active {
-  background: var(--surface);
-  color: var(--text-primary);
-  box-shadow: var(--elev-1);
-}
-
-.branding-preview-devices button:focus-visible,
-.branding-preview-surfaces button:focus-visible {
-  outline: var(--focus-width) solid var(--focus-ring);
-  outline-offset: var(--focus-halo-width);
 }
 
 .branding-preview-stage {
@@ -521,6 +475,8 @@
   .branding-mobile-surfaces.pc-workspace-tabs > ul {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding-right: 0;
+    mask-image: none;
   }
 
   .branding-mobile-surfaces li,
@@ -552,9 +508,9 @@
     flex-direction: column;
   }
 
-  .branding-preview-devices button,
-  .branding-preview-surfaces button {
-    padding-inline: var(--space-2);
+  .branding-preview-devices > button,
+  .branding-preview-surfaces > button {
+    padding-inline: calc(var(--space-2) - 1px);
   }
 
   .branding-identity-actions {
@@ -577,14 +533,7 @@
 @media (forced-colors: active) {
   .branding-accent-control,
   .branding-dropzone,
-  .branding-preview,
-  .branding-preview-devices,
-  .branding-preview-surfaces {
+  .branding-preview {
     border: 1px solid CanvasText;
-  }
-
-  .branding-preview-devices button.is-active,
-  .branding-preview-surfaces button.is-active {
-    border: 1px solid Highlight;
   }
 }

@@ -1,5 +1,9 @@
 import { AirtableProgrammeRepository } from "~/modules/airtable/airtable-programme-repository.server";
 import { publicEventBrandAssetPath } from "~/modules/events/event-branding";
+import {
+  parseSessionFormatsConfiguration,
+  sessionFormatLabel,
+} from "~/modules/events/event-configuration";
 import { eventBoundaryCalendarDate } from "~/modules/schedule/schedule-time";
 import { parsePublicApplicationProjection } from "~/modules/submissions/submission-availability";
 import { ensureDemoProgramme } from "~/platform/demo/seed.server";
@@ -12,6 +16,7 @@ import type {
   PublishedProgramme,
   PublishedProgrammeVersion,
   PublishedSession,
+  PublishedSessionRecord,
   PublishedSpeaker,
   PublishedSpeakerPreview,
 } from "./public-programme-types";
@@ -30,6 +35,7 @@ export type {
   PublishedProgramme,
   PublishedProgrammeVersion,
   PublishedSession,
+  PublishedSessionRecord,
   PublishedSpeaker,
   PublishedSpeakerPreview,
 } from "./public-programme-types";
@@ -231,6 +237,7 @@ async function publicContentRevision(
         session.title,
         session.description,
         session.format,
+        session.formatLabel,
         session.startsAt,
         session.endsAt,
         session.room,
@@ -500,6 +507,7 @@ export class PublicProgrammeService {
              brand_banner_asset_id AS bannerAssetId,
              participant_logo_url AS legacyLogoUrl,
              participant_support_url AS supportUrl,
+             session_formats_json AS sessionFormatsJson,
              (
                SELECT json_object(
                         'url', '/apply/' || form.public_slug,
@@ -550,9 +558,17 @@ export class PublicProgrammeService {
           bannerAssetId: string | null;
           legacyLogoUrl: string | null;
           applicationJson: string | null;
+          sessionFormatsJson: string;
         }
       >();
     if (!eventRow) return null;
+    const sessionFormats = parseSessionFormatsConfiguration(
+      eventRow.sessionFormatsJson,
+    );
+    const labelled = (session: PublishedSessionRecord): PublishedSession => ({
+      ...session,
+      formatLabel: sessionFormatLabel(sessionFormats, session.format),
+    });
     const application = parsePublicApplicationProjection(
       eventRow.applicationJson,
     );
@@ -596,7 +612,7 @@ export class PublicProgrammeService {
       return withPublicContentRevision({
         event,
         version,
-        sessions: snapshot.sessions,
+        sessions: snapshot.sessions.map(labelled),
         speakers: await this.headshots.withPublishedHeadshotUrls(
           event,
           version,
@@ -607,7 +623,7 @@ export class PublicProgrammeService {
     }
     type SnapshotIntegrityRow = { missingContent: number };
     type PublishedSessionRow = Omit<
-      PublishedSession,
+      PublishedSessionRecord,
       "speakerIds" | "speakerNames"
     > & {
       speakerIds: string | null;
@@ -771,21 +787,23 @@ export class PublicProgrammeService {
     return withPublicContentRevision({
       event,
       version,
-      sessions: rows.map((row) => ({
-        ...row,
-        speakerIds: parsePublishedSpeakerArray(
-          version.id,
-          row.id,
-          "speaker IDs",
-          row.speakerIds,
-        ),
-        speakerNames: parsePublishedSpeakerArray(
-          version.id,
-          row.id,
-          "speaker names",
-          row.speakerNames,
-        ),
-      })),
+      sessions: rows.map((row) =>
+        labelled({
+          ...row,
+          speakerIds: parsePublishedSpeakerArray(
+            version.id,
+            row.id,
+            "speaker IDs",
+            row.speakerIds,
+          ),
+          speakerNames: parsePublishedSpeakerArray(
+            version.id,
+            row.id,
+            "speaker names",
+            row.speakerNames,
+          ),
+        }),
+      ),
       speakers: await this.headshots.withPublishedHeadshotUrls(
         event,
         version,

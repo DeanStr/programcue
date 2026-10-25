@@ -1,5 +1,5 @@
 import type {
-  PublishedSession,
+  PublishedSessionRecord,
   PublishedSpeaker,
 } from "~/modules/programme/public-programme-service.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
@@ -61,7 +61,7 @@ type ProgrammeSource = {
   speakers: PublishedSpeaker[];
   sessions: Array<
     Omit<
-      PublishedSession,
+      PublishedSessionRecord,
       "startsAt" | "endsAt" | "room" | "building" | "level"
     >
   >;
@@ -75,7 +75,7 @@ type ProgrammeSource = {
 };
 
 export type AirtablePublishedSnapshot = {
-  sessions: PublishedSession[];
+  sessions: PublishedSessionRecord[];
   speakers: PublishedSpeaker[];
   freshness: {
     source: "airtable";
@@ -111,7 +111,7 @@ export class AirtableProgrammeRepository {
     );
   }
 
-  private cloneSessions(sessions: PublishedSession[]) {
+  private cloneSessions(sessions: PublishedSessionRecord[]) {
     return sessions.map((session) => ({
       ...session,
       speakerIds: [...session.speakerIds],
@@ -935,7 +935,7 @@ export class AirtableProgrammeRepository {
         track: session.track,
         speakerIds: session.speakerIds,
         speakerNames: session.speakerNames,
-      } satisfies PublishedSession;
+      } satisfies PublishedSessionRecord;
     });
     if (publishedSessions.length !== sessions.length) {
       const scheduled = new Set(entries.map((entry) => entry.sessionId));

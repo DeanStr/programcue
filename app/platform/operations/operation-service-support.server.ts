@@ -8,7 +8,7 @@ import type { Viewer } from "~/platform/auth/authorize.server";
 export class OperationQueueUnavailableError extends Error {
   constructor(readonly operationId: string) {
     super(
-      "This work was saved but could not be started. Retry it from the Operation Centre.",
+      "This work was saved but could not be started. Retry it from the Operation centre.",
     );
     this.name = "OperationQueueUnavailableError";
   }

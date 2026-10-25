@@ -146,7 +146,8 @@ export function AdminSpeakerSessionsPanel({
                     <span className="pc-record-identity">
                       <strong>{session.title}</strong>
                       <small>
-                        {session.format} · {session.durationMinutes} minutes
+                        {session.formatLabel} · {session.durationMinutes}{" "}
+                        minutes
                       </small>
                     </span>
                   </td>

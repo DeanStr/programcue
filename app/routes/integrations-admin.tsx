@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, ExternalLink } from "lucide-react";
+import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import { data, Form, Link, useActionData, useNavigation } from "react-router";
 import { ZodError } from "zod";
 import { Button, ButtonLink } from "~/components/ui/button";
@@ -184,8 +184,8 @@ export default function IntegrationsAdmin({
           <p>A preview never writes to Accelevents.</p>
         </div>
         <div className="page-actions">
-          <ButtonLink to="/admin/operations">
-            Operation history <ExternalLink aria-hidden size={13} />
+          <ButtonLink to="/admin/operations?type=integration.accelevents.export">
+            Operation history
           </ButtonLink>
         </div>
       </div>

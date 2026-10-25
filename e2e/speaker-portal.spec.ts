@@ -262,11 +262,15 @@ test("a clear task list still points to unfinished speaker preparation", async (
     const slides = page
       .getByRole("row")
       .filter({ hasText: "Upload presentation slides" });
-    await slides.getByText("Waive task", { exact: true }).click();
-    await slides
+    await slides.getByRole("button", { name: "More actions" }).click();
+    const slideActions = page.getByRole("region", {
+      name: "Actions for Upload presentation slides",
+    });
+    await slideActions.getByText("Waive task", { exact: true }).click();
+    await slideActions
       .getByLabel("Reason", { exact: true })
       .fill("Slides not needed");
-    await slides.getByRole("button", { name: "Confirm waiver" }).click();
+    await slideActions.getByRole("button", { name: "Confirm waiver" }).click();
     await expect(slides).toHaveCount(0);
 
     await page.context().addCookies([
@@ -349,10 +353,10 @@ test.describe("optional session-details review", () => {
     const preset = page.locator("section.tasks-plan-block").filter({
       has: page.getByRole("heading", { name: "Session-detail review" }),
     });
-    await preset.getByRole("checkbox").check();
     await preset
       .getByRole("button", { name: "Create session review task" })
       .click();
+    await acceptConfirm(page);
     const actionNotice = page.locator(".pc-status-notice[role='status']");
     await expect(actionNotice).toContainText(
       "The optional session-details review task is ready",
@@ -404,7 +408,7 @@ test.describe("optional session-details review", () => {
     await expect(task).toContainText(
       "Practical patterns for accessible, calm and effective attendee experiences.",
     );
-    await expect(task).toContainText("presentation · 45 minutes");
+    await expect(task).toContainText("Presentation · 45 minutes");
     await expect(task).toContainText("No track assigned");
     await expect(task.locator("details")).toHaveAttribute("open", "");
     await expect(task.getByLabel("Message")).toBeFocused();

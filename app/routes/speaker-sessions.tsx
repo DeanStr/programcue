@@ -155,7 +155,7 @@ export default function SpeakerSessions(_props: Route.ComponentProps) {
                             "Speaker"}
                         </span>
                         <span aria-hidden="true"> · </span>
-                        <span>{session.format}</span>
+                        <span>{session.formatLabel}</span>
                         <span aria-hidden="true"> · </span>
                         <span>{session.trackName ?? "No track assigned"}</span>
                         <span aria-hidden="true"> · </span>

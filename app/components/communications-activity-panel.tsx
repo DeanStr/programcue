@@ -29,7 +29,7 @@ export function RecentCommunications({
       {dialog}
       <div className="card-title">
         <h2>Recent communications</h2>
-        <span className="status info right">
+        <span className="pc-count right">
           {loaderData.communications.length}
         </span>
       </div>
@@ -232,7 +232,7 @@ export function CommunicationDeliveryHealth({
           </p>
         </div>
         <div className="page-actions right">
-          <span className="status info">
+          <span className="pc-count">
             {health.summary.total} deliver
             {health.summary.total === 1 ? "y" : "ies"}
           </span>
@@ -253,20 +253,23 @@ export function CommunicationDeliveryHealth({
                 Event summary
               </ButtonLink>
             </>
-          ) : eventPeriod === "lifetime" ? (
-            <ButtonLink
-              size="small"
-              to="/admin/communications#communications-health"
-            >
-              Last 90 days
-            </ButtonLink>
           ) : (
-            <ButtonLink
-              size="small"
-              to="/admin/communications?deliveryPeriod=lifetime#communications-health"
-            >
-              Event lifetime
-            </ButtonLink>
+            <nav className="pc-segmented" aria-label="Delivery health period">
+              <Link
+                to="/admin/communications#communications-health"
+                aria-current={eventPeriod === "lifetime" ? undefined : "page"}
+                preventScrollReset
+              >
+                Last 90 days
+              </Link>
+              <Link
+                to="/admin/communications?deliveryPeriod=lifetime#communications-health"
+                aria-current={eventPeriod === "lifetime" ? "page" : undefined}
+                preventScrollReset
+              >
+                Event lifetime
+              </Link>
+            </nav>
           )}
         </div>
       </div>

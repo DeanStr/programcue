@@ -46,7 +46,9 @@ test("column changes preserve unapplied application filters", async ({
   await expect(filters.getByLabel("Search", { exact: true })).toHaveValue(
     "inclusive",
   );
-  await page.getByRole("button", { name: "Apply", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Apply filters", exact: true })
+    .click();
   await expect(page).toHaveURL(/query=inclusive/);
   await expect(page.getByRole("table").locator("tbody tr")).toHaveCount(1);
   await page.reload();
@@ -85,7 +87,9 @@ test("rapid view changes keep every change", async ({ page }) => {
 
   // Apply submits the filter form while the density change is still loading.
   await page.getByLabel("Density").selectOption("compact");
-  await page.getByRole("button", { name: "Apply", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Apply filters", exact: true })
+    .click();
   await expect(page).toHaveURL(/density=compact/u);
   await expect(page).toHaveURL(/columns=speakers%2Cstatus/u);
 });
@@ -124,7 +128,10 @@ test("application Apply remains readable during keyboard activation", async ({
     .getByLabel("Search", { exact: true })
     .fill("inclusive");
   await page.mouse.move(0, 0);
-  const apply = page.getByRole("button", { name: "Apply", exact: true });
+  const apply = page.getByRole("button", {
+    name: "Apply filters",
+    exact: true,
+  });
   await apply.focus();
   await page.keyboard.down("Space");
   try {
@@ -200,7 +207,7 @@ test("the submissions grid keeps server filters authoritative while managing the
   await expect(page).toHaveURL(/density=compact/u);
   await expect(table).toHaveClass(/is-compact/);
   await expect(density).toBeFocused();
-  await page.getByRole("button", { name: "Apply" }).click();
+  await page.getByRole("button", { name: "Apply filters" }).click();
   await expect(page).toHaveURL(/density=compact/u);
   await page.getByText("Columns", { exact: true }).click();
   const visibleColumns = page.getByRole("group", {

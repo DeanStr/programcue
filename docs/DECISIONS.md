@@ -2945,3 +2945,112 @@ Use the locked Vite 8.2.4 for this release, the
 Retain the existing high-severity dependency gate for subsequent updates, and
 record remaining lower-severity findings with the complete release validation
 evidence.
+
+## Shared controls, counts and format labels — 23 October 2026
+
+- Three switch controls, each with one look (revised 24 October; see
+  *Navigation, page headers and filters*). `.pc-workspace-tabs`
+  (`AdminWorkspaceTabs`, or links with `aria-current` when the URL holds the
+  view) switches between the distinct jobs on one page, including the mobile
+  Edit/Preview and Structure/Canvas/Settings pane switches of Branding, the
+  event-site editor and Form Builder. `.pc-filter-chips` narrows one list.
+  `.pc-segmented` switches views of the same content: device width, preview
+  surface, calendar view and day, a reporting period. Items are plain buttons
+  with `aria-pressed` or links with `aria-current`; pages may arrange items
+  (width, grid, flex) but do not restyle the chrome. Per-page copies of the
+  segmented chrome are gone, including the borderless desktop variant in the
+  Schedule planner. Mobile schedule action labels may wrap inside their grid
+  cells; icons retain their intended size. The schedule view toggle stays on
+  one row and tightens its padding instead.
+- A selected segment carries a `--muted-2` border (4.6:1 against the track)
+  over the white fill; unselected labels are tertiary at the same weight, so
+  switching does not shift the row. A white fill alone measured 1.05:1. In
+  forced colours both switch controls mark the selection with the system
+  Highlight fill, leaving the outline for focus.
+- One primary action per page; other actions are bordered buttons; links only
+  navigate. A page's commit action uses the default size, because small
+  primaries deliberately render as secondary; this includes the compact Event
+  settings Save. Task rows show one decision (Approve, Mark complete or Reopen)
+  and a More actions toggle. It controls a full-width panel below the row, so
+  opening it moves neither control; waiver, extension, details and comments
+  are chevron disclosures inside it.
+- Disabled keeps a button's shape and drops its colour: bordered and danger
+  buttons keep a light `--line` outline with muted text, a filled primary
+  becomes a neutral `--track` well, and a ghost stays bare. A grey well on a
+  bordered button outweighed its enabled neighbour. A pending button keeps its
+  variant. A control that is inert most of the time, such as public Clear
+  filters, is a ghost.
+- A tally beside a heading is a `.pc-count`; the dotted `.status` means state.
+  A signed-in role is identity and renders as plain text.
+- Applicants see one review stage. Assigned, in review and decision ready all
+  read "Under review" on participant pages (`applicantSubmission`); the
+  administrator vocabulary keeps the distinct stages.
+- Session formats are stored as keys and shown as the event's configured
+  label. Published sessions carry `formatLabel` beside `format` (REST
+  `PublicSession.formatLabel`); filters, embeds and category styling keep using
+  the key. A key the event no longer configures displays unchanged.
+- Secondary text has three tiers: descriptions under headings and empty states
+  at 14px with colour carrying the hierarchy, help, errors and record metadata
+  at 13px, and 12px only for badges, counts, column headers, timestamps and
+  keyboard hints. `<small>` steps one pixel below its context, never under the
+  12px floor; the browser default rendered it at 11.7px.
+
+## Navigation, page headers and filters — 24 October 2026
+
+- Workspace tabs are underlined text on the page, not a raised card with an
+  ink-filled pill. The pill was the heaviest element on most pages after the
+  primary action, and a segmented filter directly beneath it read as a second
+  tab row. On phones the row scrolls with a fading edge instead of wrapping a
+  tab onto its own line. Button-based workspace tabs also show previous/next
+  arrows when views are hidden. An arrow reveals and focuses a tab without
+  activating it; keyboard users can then choose it normally.
+- Quick filters over one list are `.pc-filter-chips`: separate pills, each
+  with the count of rows it would show under the other active filters. The
+  active chip is an ink outline with a light tint. Tasks replaced its
+  segmented state filter and the stats line that repeated the same numbers;
+  readiness stays beside the chips because it describes the event, not the
+  filter. Chip labels match the Status options (Outstanding, Needs review).
+  Task-chip counts omit the focused task because their links clear that focus,
+  while retaining owner, impact, scope and task-type filters.
+- A task's secondary actions occupy a separate row spanning the table, keeping
+  the requirement and action controls in place while a form is open. The row
+  stays mounted but hidden when closed, preserving unfinished input.
+- Each control has one job. The sidebar lists places; tabs switch views
+  within a page; the page header holds that page's actions, links to its own
+  sub-pages and links to its own filtered history. A header never repeats a
+  destination the sidebar lists or the breadcrumb already links. The
+  primary button is an action; when a page has no main action it has no
+  primary. "On this page" anchor rows are removed: the pages that used them
+  are single scrolls with section headings, and mobile sections keep their
+  disclosures.
+- The specification requires organisation/event breadcrumbs (§11.5), so the
+  breadcrumb keeps both even though the event switcher also names the event.
+- Sidebar groups: Event work (Command centre, Event assistant, Applications,
+  Event speakers, Sponsors, Tasks & readiness, Schedule planner,
+  Communications), Organisation (Speaker directory) and Administration. A
+  child appears under a parent only when it is part of the parent's job.
+  Sponsors are their own event workflow, the assistant answers across every
+  workflow, and the directory spans the organisation's events.
+- A page title matches its sidebar label, in sentence case. The specification
+  names a command centre and an operation centre, so those two keep the word;
+  Communications drops it. Bulk task actions and Speaker deliverables use one
+  name across button, breadcrumb and title. Interface copy uses Australian
+  spelling (organisation).
+- Filters keep an explicit "Apply filters" bordered button and a ghost
+  "Clear". Selects do not submit on change: a closed select fires a change on
+  every arrow key, and the remounting filter forms would discard text typed
+  while a navigation was in flight. Changing that needs controlled filter
+  forms first.
+- Form Builder, the reviewer workbench and the Schedule planner keep their
+  compact titles for canvas height. Command centre now uses the standard
+  title, and its section headings match the other admin sections.
+- A consequential preset (session review, travel forms) opens a confirmation
+  that names the templates it creates, instead of a required checkbox beside
+  the button. A create form opens on request (Sponsors) rather than sitting
+  permanently under the list, and an empty list shows an empty state with
+  the action instead of an empty table header.
+- `.list-clean` is defined: no markers, a record's name over its metadata,
+  and a control row's actions on the right. A `.stack` no longer stretches its
+  buttons to full width. A heading written straight into an admin card renders
+  at card-title size. A row header's bottom border no longer doubles the table
+  wrapper's edge.

@@ -811,7 +811,7 @@ test.describe
       await page.goto("/admin/submissions");
       const filters = page.getByRole("search");
       await filters.getByLabel("Search", { exact: true }).fill(title);
-      await filters.getByRole("button", { name: "Apply" }).click();
+      await filters.getByRole("button", { name: "Apply filters" }).click();
       await expect(page.getByRole("link", { name: title })).toBeVisible();
       await page.getByRole("link", { name: title }).click();
       await expect(page.getByRole("heading", { name: title })).toBeVisible();
@@ -874,7 +874,9 @@ test.describe
       await routingFilters
         .getByLabel("Routing")
         .selectOption("missing_automatic");
-      await routingFilters.getByRole("button", { name: "Apply" }).click();
+      await routingFilters
+        .getByRole("button", { name: "Apply filters" })
+        .click();
       const filteredSubmissionRow = page.getByRole("row").filter({
         has: page.getByRole("link", { name: title }),
       });
@@ -948,7 +950,7 @@ test.describe
 
       await page.getByLabel("Sort").selectOption("title-asc");
       await page.getByLabel("Density").selectOption("compact");
-      await page.getByRole("button", { name: "Apply" }).click();
+      await page.getByRole("button", { name: "Apply filters" }).click();
       await expect(page).toHaveURL(/sort=title-asc/u);
       await expect(page).toHaveURL(/density=compact/u);
       const columns = page.locator(".pc-data-grid-columns");

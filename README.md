@@ -53,7 +53,7 @@ The populated showcase journeys and clean SBEK personas are described in the
 
 Other entry points:
 
-- [Command Centre](http://127.0.0.1:5173/admin/command)
+- [Command centre](http://127.0.0.1:5173/admin/command)
 - [Sponsor administration](http://127.0.0.1:5173/admin/sponsors) and [company portal](http://127.0.0.1:5173/sponsor)
 - [Speaker deliverables matrix](http://127.0.0.1:5173/admin/tasks/deliverables)
 - [Participant workspace](http://127.0.0.1:5173/participant/dashboard)

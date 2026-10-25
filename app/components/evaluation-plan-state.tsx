@@ -69,7 +69,9 @@ function ReviewerAiSettingCard() {
     return null;
   return (
     <section className="card pad pc-eval-setting">
-      <h2>Reviewer AI suggestions</h2>
+      <div className="card-title">
+        <h2>Reviewer AI suggestions</h2>
+      </div>
       <p className="subtle">
         Event opt-in. Reviewers must request suggestions after saving an initial
         rubric response. Suggestions remain advisory and cannot submit a review
@@ -115,7 +117,6 @@ export function EvaluationPlanState() {
       defaultExpandedOnMobile
     >
       <section className="card pad">
-        <h2>Create the evaluation plan</h2>
         <p className="subtle">
           Active round rubrics become protected once assignments exist.
         </p>
@@ -299,23 +300,28 @@ function EvaluationAdminViews() {
   return (
     <>
       <EvaluationMetrics />
-      <nav className="pc-eval-switcher" aria-label="Evaluation views">
-        {(
-          [
-            ["results", "Results"],
-            ["assignments", "Assignments"],
-            ["setup", "Setup"],
-          ] as const
-        ).map(([key, label]) => (
-          <Link
-            key={key}
-            to={{ search: withViewParam(location.search, key) }}
-            className={view === key ? "is-current" : undefined}
-            aria-current={view === key ? "page" : undefined}
-          >
-            {label}
-          </Link>
-        ))}
+      <nav
+        className="pc-workspace-tabs pc-eval-switcher"
+        aria-label="Evaluation views"
+      >
+        <ul>
+          {(
+            [
+              ["results", "Results"],
+              ["assignments", "Assignments"],
+              ["setup", "Setup"],
+            ] as const
+          ).map(([key, label]) => (
+            <li key={key}>
+              <Link
+                to={{ search: withViewParam(location.search, key) }}
+                aria-current={view === key ? "page" : undefined}
+              >
+                {label}
+              </Link>
+            </li>
+          ))}
+        </ul>
       </nav>
       {view === "results" ? (
         <div id="evaluation-results" className="pc-eval-view">

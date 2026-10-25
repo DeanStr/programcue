@@ -386,14 +386,6 @@ export default function AdminContent({ loaderData }: Route.ComponentProps) {
         <div>
           <h1>Session content &amp; files</h1>
         </div>
-        <div className="page-actions">
-          <Link className="content-text-action" to="/admin/tasks">
-            Deliverable tasks
-          </Link>
-          <ButtonLink variant="primary" to="/admin/schedule">
-            Open schedule
-          </ButtonLink>
-        </div>
       </div>
 
       {actionData && !actionData.ok ? (

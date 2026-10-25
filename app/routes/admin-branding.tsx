@@ -301,11 +301,10 @@ function BrandingPreview({
             </span>
           </div>
           <fieldset
-            className="branding-preview-devices pc-plain-fieldset"
+            className="branding-preview-devices pc-segmented"
             aria-label="Preview viewport"
           >
             <button
-              className={!compact ? "is-active" : undefined}
               type="button"
               aria-pressed={!compact}
               onClick={() => onViewportChange(false)}
@@ -314,7 +313,6 @@ function BrandingPreview({
               Desktop
             </button>
             <button
-              className={compact ? "is-active" : undefined}
               type="button"
               aria-pressed={compact}
               onClick={() => onViewportChange(true)}
@@ -325,12 +323,11 @@ function BrandingPreview({
           </fieldset>
         </div>
         <fieldset
-          className="branding-preview-surfaces pc-plain-fieldset"
+          className="branding-preview-surfaces pc-segmented"
           aria-label="Brand preview surface"
         >
           {surfaces.map((item) => (
             <button
-              className={surface === item.id ? "is-active" : undefined}
               key={item.id}
               type="button"
               aria-pressed={surface === item.id}

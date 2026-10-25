@@ -1,9 +1,9 @@
 import { Form, Link } from "react-router";
-
 import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
 import { Button } from "~/components/ui/button";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EmptyState } from "~/components/ui/states";
+import { statusPresentation } from "~/components/ui/status-presentation";
 import { availableEvaluationAssignmentTargets } from "~/modules/evaluations/evaluation-assignment-availability";
 
 export function EvaluationSessionQueue() {
@@ -70,8 +70,7 @@ export function EvaluationSessionQueue() {
                       <div className="pc-record-stack">
                         <strong>{session.title}</strong>
                         <small className="subtle">
-                          {session.format.replaceAll("_", " ")} ·{" "}
-                          {session.durationMinutes} min
+                          {session.formatLabel} · {session.durationMinutes} min
                         </small>
                         {session.trackName ? (
                           <small className="subtle">{session.trackName}</small>
@@ -129,11 +128,12 @@ export function EvaluationSessionQueue() {
                             >
                               <small>
                                 <strong>{assignment.evaluatorName}</strong> ·{" "}
-                                {assignment.status
-                                  .replaceAll("_", " ")
-                                  .replace(/^./, (letter) =>
-                                    letter.toUpperCase(),
-                                  )}
+                                {
+                                  statusPresentation(
+                                    "review",
+                                    assignment.status,
+                                  ).label
+                                }
                                 {(assignment.reviewStatus === "submitted" ||
                                   assignment.reviewStatus === "locked") &&
                                 assignment.weightedScore !== null
@@ -202,11 +202,11 @@ export function EvaluationSessionQueue() {
                               ) : null;
                             })}
                           </select>
-                          <button type="submit" className="pc-eval-text-action">
+                          <Button type="submit" size="small">
                             {sessionAssignments.length
                               ? "Add another reviewer"
                               : "Assign"}
-                          </button>
+                          </Button>
                         </Form>
                       ) : (
                         <span className="help">

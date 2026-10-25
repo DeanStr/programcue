@@ -1,10 +1,10 @@
 import { FileText } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Form, Link } from "react-router";
-
 import { DraftRecoveryStatus } from "~/components/draft-recovery-feedback";
 import { Button, ButtonLink } from "~/components/ui/button";
 import { EmptyState } from "~/components/ui/states";
+import { statusPresentation } from "~/components/ui/status-presentation";
 import {
   type MergeValues,
   mergeTemplateVariables,
@@ -41,9 +41,7 @@ export function TemplateVersionList({
     <aside className="card pad template-column">
       <div className="card-title">
         <h2>Template versions</h2>
-        <span className="status info right">
-          <span className="pc-num">{loaderData.templates.length}</span>
-        </span>
+        <span className="pc-count right">{loaderData.templates.length}</span>
       </div>
       <ButtonLink to="?new=1" size="small">
         New template
@@ -68,7 +66,7 @@ export function TemplateVersionList({
               >
                 {template.versionStatus === "published"
                   ? "Live"
-                  : template.versionStatus}
+                  : statusPresentation("version", template.versionStatus).label}
               </span>
             </Link>
           ))
@@ -158,7 +156,7 @@ export function TemplateEditor({
             className={`status ${selected.versionStatus === "published" ? "success" : "warning"} right`}
           >
             <span className="pc-num">v{selected.versionNumber}</span> ·{" "}
-            {selected.versionStatus}
+            {statusPresentation("version", selected.versionStatus).label}
           </span>
         ) : null}
       </div>

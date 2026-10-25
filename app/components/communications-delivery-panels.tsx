@@ -1,5 +1,6 @@
 import { Form } from "react-router";
 import { Button, ButtonLink, ButtonSummary } from "~/components/ui/button";
+import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import type { CommunicationsCentreLoaderData } from "~/routes/communications-centre";
 import {
   communicationCategoryLabel as categoryLabel,
@@ -194,11 +195,10 @@ export function DeliveryConfiguration({
                         </small>
                       </td>
                       <td data-label="Status">
-                        <span
-                          className={`status ${sender.status === "verified" ? "success" : sender.status === "disabled" ? "info" : "warning"}`}
-                        >
-                          {sender.status}
-                        </span>
+                        <DomainStatusBadge
+                          domain="sender"
+                          status={sender.status}
+                        />
                       </td>
                       <td
                         className="pc-record-action-cell"
@@ -404,9 +404,7 @@ export function CommunicationAutomation({
       <section className="card pad">
         <div className="card-title">
           <h2>Reminder triggers</h2>
-          <span className="status info right">
-            {loaderData.triggers.length}
-          </span>
+          <span className="pc-count right">{loaderData.triggers.length}</span>
         </div>
         <p className="help">Triggers are evaluated once per UTC day.</p>
         <Form method="post" className="stack">

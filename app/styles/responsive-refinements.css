@@ -132,12 +132,6 @@
   .builder-layout > .preview-panel {
     grid-column: auto;
   }
-  .tasks-summary {
-    grid-template-columns: 1.3fr 1fr 1fr;
-  }
-  .tasks-summary > *:nth-child(n + 4) {
-    display: none;
-  }
   .preview-diff-confirm {
     grid-template-columns: 1fr;
   }
@@ -566,12 +560,6 @@
   }
   .drawer {
     top: 0;
-  }
-  .tasks-summary {
-    grid-template-columns: 1fr 1fr;
-  }
-  .tasks-summary > :first-child {
-    grid-column: span 2;
   }
   .review-layout {
     display: block;

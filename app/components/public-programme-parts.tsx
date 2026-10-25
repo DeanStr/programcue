@@ -195,7 +195,7 @@ export function SessionTags({
         <span className="pill track">{session.track}</span>
       ) : null}
       {showFormat ? (
-        <span className="pill format">{session.format}</span>
+        <span className="pill format">{session.formatLabel}</span>
       ) : null}
     </span>
   );

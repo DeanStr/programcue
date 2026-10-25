@@ -26,7 +26,7 @@ test("assistant fails explicitly when the OpenAI credential is unavailable", asy
   expect(response?.ok()).toBeTruthy();
   await page.locator("body[data-hydrated='true']").waitFor();
   await expect(
-    page.getByRole("heading", { name: "Event Assistant" }),
+    page.getByRole("heading", { name: "Event assistant" }),
   ).toBeVisible();
   const navigation = page.getByRole("complementary", {
     name: "Primary navigation",
@@ -34,9 +34,10 @@ test("assistant fails explicitly when the OpenAI credential is unavailable", asy
   await expect(
     navigation.getByRole("link", { name: "Event assistant" }),
   ).toHaveAttribute("aria-current", "page");
+  // The assistant is its own rail entry, so no parent claims its family.
   await expect(
-    navigation.getByRole("link", { name: "Home", exact: true }),
-  ).toHaveAttribute("data-family-current", "");
+    navigation.getByRole("link", { name: "Command centre", exact: true }),
+  ).not.toHaveAttribute("data-family-current", "");
   await page.getByRole("button", { name: /Search or run a command/ }).click();
   const commandDialog = page.getByRole("dialog", {
     name: "Search or run a command",
@@ -331,9 +332,10 @@ test("assistant task preview requires confirmation and executes through the real
   await expect(page).toHaveURL(/\/admin\/tasks\?task=/);
   await expect(
     page
-      .getByRole("region", { name: "Assigned work", exact: true })
-      .getByText(/^Showing 1 of \d+ tasks$/u),
+      .getByRole("navigation", { name: "Task state" })
+      .getByRole("link", { name: /^All \d+$/u }),
   ).toBeVisible();
+  await expect(page.locator(".tasks-assigned tbody tr[id]")).toHaveCount(1);
   await expect(
     page
       .getByRole("region", { name: "Assigned speaker work" })
@@ -458,7 +460,7 @@ test("assistant reminder preview can be edited and queues exactly once only afte
   await operationLink.click();
   await expect(page).toHaveURL(/\/admin\/operations\?operation=/);
   await expect(
-    page.getByRole("heading", { name: "Operation Centre" }),
+    page.getByRole("heading", { name: "Operation centre" }),
   ).toBeVisible();
   await expect(
     page.getByRole("link", { name: "Communication send" }),

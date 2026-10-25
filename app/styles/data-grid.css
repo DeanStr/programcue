@@ -79,7 +79,9 @@
 .data-table tr.pc-focused-record {
   scroll-margin-top: 96px;
 }
-.data-table tr:last-child td {
+/* The wrapper draws the bottom edge. A row header kept its own rule, which
+   doubled the edge under the first column only. */
+.data-table tr:last-child :is(td, th[scope="row"]) {
   border-bottom: 0;
 }
 .pc-data-grid-toolbar {
@@ -102,7 +104,7 @@
 }
 .pc-data-grid-hint {
   color: var(--text-tertiary);
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
 }
 .pc-data-grid-density {
   display: inline-flex;
@@ -260,11 +262,17 @@
      scroll overflow. Contain the control without clipping Columns below. */
   overflow: hidden;
 }
+/* A wrapping row places items at their basis before anything shrinks, so the
+   bases, not the minimums, decide whether the actions fit on the first row. */
 .submissions-filter:first-of-type {
-  flex: 1 1 13rem;
+  flex: 1 1 11rem;
   width: auto;
-  min-width: min(11rem, 100%);
+  min-width: min(9rem, 100%);
   max-width: 18rem;
+}
+/* Sized by its longest option otherwise; a long selected route truncates. */
+.submissions-filter-routing {
+  max-width: 13rem;
 }
 .submissions-filter > span:not(.sr-only) {
   color: var(--text-tertiary);
@@ -310,20 +318,6 @@
   :is(.select, .btn):not(:hover):not(:focus-visible) {
   border-color: var(--line);
 }
-.submissions-filter-actions .btn.primary {
-  border-color: var(--brand-600);
-  background: var(--brand-600);
-  color: var(--text-inverse);
-  font-weight: var(--weight-semibold);
-}
-.submissions-filter-actions .btn.primary:hover {
-  background: var(--brand-700);
-  color: var(--text-inverse);
-}
-.submissions-filter-actions .btn.primary:active {
-  background: var(--brand-900);
-  color: var(--text-inverse);
-}
 .submissions-pager {
   display: flex;
   align-items: center;
@@ -352,7 +346,7 @@
 .pc-record-meta {
   display: block;
   color: var(--text-tertiary);
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
 }
 .submissions-board :is(.pc-record-person, .pc-record-route) {
   color: var(--text-secondary);
@@ -360,7 +354,7 @@
 }
 .submissions-board :is(.pc-record-meta, .pc-record-email) {
   color: var(--text-tertiary);
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
 }
 .pc-record-ref {
   font-variant-numeric: tabular-nums;

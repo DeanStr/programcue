@@ -213,11 +213,10 @@ export function AdminPublicSitePreview({
               </div>
             </div>
             <fieldset
-              className="branding-preview-devices pc-plain-fieldset"
+              className="branding-preview-devices pc-segmented"
               aria-label="Event website preview controls"
             >
               <button
-                className={!mobilePreview ? "is-active" : undefined}
                 type="button"
                 aria-pressed={!mobilePreview}
                 onClick={() => setMobilePreview(false)}
@@ -225,7 +224,6 @@ export function AdminPublicSitePreview({
                 <Monitor aria-hidden size={15} /> Desktop
               </button>
               <button
-                className={mobilePreview ? "is-active" : undefined}
                 type="button"
                 aria-pressed={mobilePreview}
                 onClick={() => setMobilePreview(true)}

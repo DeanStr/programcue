@@ -69,7 +69,7 @@ type DemoWalkthroughStep = {
 const walkthrough: ReadonlyArray<DemoWalkthroughStep> = [
   {
     phase: "setup",
-    title: "Command Centre",
+    title: "Command centre",
     copy: "Open the exact blocker cohorts and readiness actions.",
     href: "/admin/command",
     identityKey: "administrator",

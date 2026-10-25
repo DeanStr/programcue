@@ -1,5 +1,5 @@
 import { CheckCircle2, History, RotateCcw } from "lucide-react";
-import { data, Form, Link, useActionData } from "react-router";
+import { data, Form, useActionData } from "react-router";
 import { ZodError } from "zod";
 import { EventFieldInputs } from "~/components/event-field-inputs";
 import { Button, ButtonLink } from "~/components/ui/button";
@@ -175,17 +175,12 @@ export default function AdminContentSession({
           <div>
             <h1>{current.title}</h1>
           </div>
-          <div className="page-actions">
-            <Link className="content-text-action" to="/admin/content">
-              Content &amp; files
-            </Link>
-          </div>
         </div>
         <section className="card pad" aria-labelledby="start-content-title">
           <h2 id="start-content-title">Start a content draft</h2>
           <p>{current.description || "No description has been written."}</p>
           <p>
-            {current.trackName ?? "No track"} · {current.format} ·{" "}
+            {current.trackName ?? "No track"} · {current.formatLabel} ·{" "}
             {current.durationMinutes} minutes
           </p>
           <p>
@@ -210,11 +205,7 @@ export default function AdminContentSession({
           <h1>{current.title}</h1>
         </div>
         <div className="page-actions">
-          <Link className="content-text-action" to="/admin/content">
-            Content &amp; files
-          </Link>
           <ButtonLink
-            variant="primary"
             to={`/admin/schedule?session=${encodeURIComponent(current.sessionId)}`}
           >
             Open schedule
@@ -392,8 +383,9 @@ export default function AdminContentSession({
                     <div>
                       <dt>Track and format</dt>
                       <dd>
-                        {revision.trackName ?? "No track"} · {revision.format} ·{" "}
-                        {revision.durationMinutes} minutes
+                        {revision.trackName ?? "No track"} ·{" "}
+                        {revision.formatLabel} · {revision.durationMinutes}{" "}
+                        minutes
                       </dd>
                     </div>
                     <div>

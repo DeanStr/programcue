@@ -2,6 +2,7 @@ import { Form } from "react-router";
 
 import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
 import { Button } from "~/components/ui/button";
+import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EventDateTime } from "~/components/ui/event-date-time";
 
 export function AcceptedSpeakerInvitationsPanel() {
@@ -43,11 +44,10 @@ export function AcceptedSpeakerInvitationsPanel() {
                 </td>
                 <td data-label="Accepted session">{invitation.sessionTitle}</td>
                 <td data-label="Access state">
-                  <span
-                    className={`status ${invitation.status === "expired" ? "danger" : "info"}`}
-                  >
-                    {invitation.status}
-                  </span>{" "}
+                  <DomainStatusBadge
+                    domain="speakerInvitation"
+                    status={invitation.status}
+                  />{" "}
                   <EventDateTime
                     epochSeconds={invitation.expiresAt}
                     timeZone={loaderData.eventTimezone}

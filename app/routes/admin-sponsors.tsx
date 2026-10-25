@@ -1,9 +1,17 @@
-import { data, Form, Link, redirect, useNavigation } from "react-router";
+import {
+  data,
+  Form,
+  Link,
+  redirect,
+  useNavigation,
+  useSearchParams,
+} from "react-router";
 import { z } from "zod";
 import { SponsorAssets } from "~/components/sponsor-assets";
 import { SponsorProfileFields } from "~/components/sponsor-fields";
 import { Button, ButtonLink } from "~/components/ui/button";
 import { EventDateTime } from "~/components/ui/event-date-time";
+import { EmptyState } from "~/components/ui/states";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
 import { SponsorAssetService } from "~/modules/sponsors/sponsor-assets.server";
 import {
@@ -252,69 +260,57 @@ export async function action({ request, context }: Route.ActionArgs) {
     throw error;
   }
 }
-export default function Sponsors({
-  loaderData: d,
-  actionData,
-}: Route.ComponentProps) {
-  const busy = useNavigation().state !== "idle";
-  const w = d.workspace;
-  const hidden = (intent: string) => (
-    <>
-      <input type="hidden" name="intent" value={intent} />
-      <input type="hidden" name="key" value={d.key} />
-      <input type="hidden" name="sponsorId" value={w?.sponsor.id ?? ""} />
-    </>
-  );
+
+type SponsorsLoaderData = Route.ComponentProps["loaderData"];
+
+function SponsorReadiness({
+  d,
+  busy,
+  hidden,
+}: {
+  d: SponsorsLoaderData;
+  busy: boolean;
+  hidden(intent: string): React.ReactNode;
+}) {
   return (
     <>
-      <div className="page-head pc-page-header">
-        <div>
-          <h1>Sponsors</h1>
-        </div>
-        <div className="page-actions">
-          <ButtonLink to="/admin/sponsors">Add sponsor</ButtonLink>
-          <ButtonLink to="/sponsor">Sponsor portal</ButtonLink>
-        </div>
-      </div>
-      {actionData && (
-        <p role={actionData.ok ? "status" : "alert"}>{actionData.message}</p>
-      )}
-      <section className="card pad mb stack" aria-label="Sponsor readiness">
-        <h2>Sponsor readiness</h2>
-        <Form
-          key={JSON.stringify(d.readiness.filters)}
-          method="get"
-          className="row-actions"
-        >
-          <label className="label">
-            Company
-            <input
-              className="field"
-              name="q"
-              defaultValue={d.readiness.filters.q}
-            />
-          </label>
-          <label className="label">
-            Readiness
-            <select
-              className="select"
-              name="state"
-              defaultValue={d.readiness.filters.state}
-            >
-              <option value="all">All sponsors</option>
-              <option value="invitation">Invitation not accepted</option>
-              <option value="sessions">Sessions to submit</option>
-              <option value="assets">Assets needing sponsor action</option>
-              <option value="review">Awaiting organiser review</option>
-              <option value="due">Deadline within 7 days or overdue</option>
-              <option value="ready">Ready</option>
-            </select>
-          </label>
-          <Button type="submit" disabled={busy}>
-            Filter sponsors
-          </Button>
-          <ButtonLink to="/admin/sponsors">Clear</ButtonLink>
-        </Form>
+      <Form
+        key={JSON.stringify(d.readiness.filters)}
+        method="get"
+        className="pc-filter-row"
+      >
+        <label className="label">
+          Company
+          <input
+            className="field"
+            name="q"
+            defaultValue={d.readiness.filters.q}
+          />
+        </label>
+        <label className="label">
+          Readiness
+          <select
+            className="select"
+            name="state"
+            defaultValue={d.readiness.filters.state}
+          >
+            <option value="all">All sponsors</option>
+            <option value="invitation">Invitation not accepted</option>
+            <option value="sessions">Sessions to submit</option>
+            <option value="assets">Assets needing sponsor action</option>
+            <option value="review">Awaiting organiser review</option>
+            <option value="due">Deadline within 7 days or overdue</option>
+            <option value="ready">Ready</option>
+          </select>
+        </label>
+        <Button type="submit" disabled={busy}>
+          Apply filters
+        </Button>
+        <ButtonLink variant="ghost" to="/admin/sponsors">
+          Clear
+        </ButtonLink>
+      </Form>
+      {d.readiness.rows.length ? (
         <section
           className="table-wrap"
           aria-label="Sponsor requirements table"
@@ -322,7 +318,9 @@ export default function Sponsors({
           tabIndex={0}
         >
           <table className="data-table">
-            <caption>Sponsor requirements and next steps</caption>
+            <caption className="sr-only">
+              Sponsor requirements and next steps
+            </caption>
             <thead>
               <tr>
                 <th>Company</th>
@@ -371,42 +369,101 @@ export default function Sponsors({
             </tbody>
           </table>
         </section>
-        {!d.readiness.rows.length && <p>No sponsors match these filters.</p>}
-        <p>
-          {d.readiness.recipients.length} contacts have outstanding sponsor
-          work. Work awaiting checks or organiser review and closed editing
-          periods are excluded.
-        </p>
-        {d.readiness.templates.length ? (
-          <Form method="post" className="row-actions">
-            {hidden("remind-sponsors")}
-            <label className="label">
-              Sponsor reminder template
-              <select className="select" name="templateVersionId">
-                {d.readiness.templates.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <Button
-              type="submit"
-              disabled={busy || !d.readiness.recipients.length}
-            >
-              Prepare sponsor reminder
-            </Button>
-            <p>
-              Creates an editable draft for matching contacts. Nothing is sent
-              until you preview and confirm delivery.
-            </p>
-          </Form>
-        ) : (
-          <p>
-            Publish an ad hoc or reminder template in{" "}
-            <Link to="/admin/communications">Communications</Link> to prepare
-            reminders.
+      ) : (
+        <p className="subtle">No sponsors match these filters.</p>
+      )}
+      <p>
+        {d.readiness.recipients.length} contacts have outstanding sponsor work.
+        Work awaiting checks or organiser review and closed editing periods are
+        excluded.
+      </p>
+      {d.readiness.templates.length ? (
+        <Form method="post" className="pc-filter-row">
+          {hidden("remind-sponsors")}
+          <label className="label">
+            Sponsor reminder template
+            <select className="select" name="templateVersionId">
+              {d.readiness.templates.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <Button
+            type="submit"
+            disabled={busy || !d.readiness.recipients.length}
+          >
+            Prepare sponsor reminder
+          </Button>
+          <p className="help">
+            Creates an editable draft for matching contacts. Nothing is sent
+            until you preview and confirm delivery.
           </p>
+        </Form>
+      ) : (
+        <p>
+          Publish an ad hoc or reminder template in{" "}
+          <Link to="/admin/communications">Communications</Link> to prepare
+          reminders.
+        </p>
+      )}
+    </>
+  );
+}
+
+export default function Sponsors({
+  loaderData: d,
+  actionData,
+}: Route.ComponentProps) {
+  const busy = useNavigation().state !== "idle";
+  const [searchParams] = useSearchParams();
+  const w = d.workspace;
+  /* The create form opens on request. Rendered permanently under the table,
+     it duplicated the header's Add sponsor and pushed the page's real content
+     below an empty form. */
+  const creating = !w && searchParams.get("new") === "1";
+  const addSponsorHref = {
+    pathname: "/admin/sponsors",
+    search: "?new=1",
+    hash: "add-sponsor",
+  };
+  const hidden = (intent: string) => (
+    <>
+      <input type="hidden" name="intent" value={intent} />
+      <input type="hidden" name="key" value={d.key} />
+      <input type="hidden" name="sponsorId" value={w?.sponsor.id ?? ""} />
+    </>
+  );
+  return (
+    <>
+      <div className="page-head pc-page-header">
+        <div>
+          <h1>Sponsors</h1>
+        </div>
+        <div className="page-actions">
+          <ButtonLink to={addSponsorHref}>Add sponsor</ButtonLink>
+          <ButtonLink to="/sponsor">Sponsor portal</ButtonLink>
+        </div>
+      </div>
+      {actionData && (
+        <p role={actionData.ok ? "status" : "alert"}>{actionData.message}</p>
+      )}
+      <section
+        className="card pad mb stack"
+        aria-labelledby="sponsor-readiness-title"
+      >
+        <div className="card-title">
+          <h2 id="sponsor-readiness-title">Sponsor readiness</h2>
+        </div>
+        {d.sponsors.length ? (
+          <SponsorReadiness d={d} busy={busy} hidden={hidden} />
+        ) : (
+          <EmptyState
+            title="No sponsors yet"
+            description="Add a sponsor to track its contacts, sessions, assets and deadline here."
+            action={<ButtonLink to={addSponsorHref}>Add sponsor</ButtonLink>}
+          />
         )}
       </section>
       {w && (
@@ -434,147 +491,166 @@ export default function Sponsors({
           ))}
         </nav>
       ) : null}
-      <div className="grid grid-2">
-        <section className="card pad">
-          <h2>{w ? w.sponsor.name : "Add sponsor"}</h2>
-          <Form
-            key={`${w?.sponsor.id ?? "new"}:${w?.sponsor.revision ?? 0}`}
-            method="post"
-            className="stack"
+      {w || creating ? (
+        <div className="grid grid-2">
+          <section
+            className="card pad"
+            id={w ? undefined : "add-sponsor"}
+            aria-labelledby="sponsor-profile-title"
           >
-            {hidden("save")}
-            <input
-              type="hidden"
-              name="revision"
-              value={w?.sponsor.revision ?? 1}
-            />
-            <SponsorProfileFields value={w?.sponsor} />
-            <label className="label">
-              Tier
+            <div className="card-title">
+              <h2 id="sponsor-profile-title">
+                {w ? w.sponsor.name : "Add sponsor"}
+              </h2>
+            </div>
+            <Form
+              key={`${w?.sponsor.id ?? "new"}:${w?.sponsor.revision ?? 0}`}
+              method="post"
+              className="stack"
+            >
+              {hidden("save")}
               <input
-                className="field"
-                name="tier"
-                maxLength={80}
-                defaultValue={w?.sponsor.tier}
+                type="hidden"
+                name="revision"
+                value={w?.sponsor.revision ?? 1}
               />
-            </label>
-            <label className="label">
-              Session allowance
-              <input
-                className="field"
-                name="sessionLimit"
-                type="number"
-                min={w?.sponsor.sessionsUsed ?? 0}
-                max={100}
-                required
-                defaultValue={w?.sponsor.sessionLimit ?? 1}
-              />
-            </label>
-            <label className="label">
-              Editing deadline
-              <input
-                className="field"
-                name="closesDate"
-                type="date"
-                defaultValue={d.closesDate}
-              />
-              <span className="help">
-                End of this date in {d.timezone}. Leave blank for no deadline.
-                Draft, submitted and accepted sessions count toward the
-                allowance.
-              </span>
-            </label>
-            <Button type="submit" disabled={busy} variant="primary">
-              {w ? "Save sponsor" : "Create sponsor"}
-            </Button>
-          </Form>
-        </section>
-        {w && (
-          <section className="card pad">
-            <h2>Portal contacts</h2>
-            <p>
-              Contacts share this company’s profile and proposals. Access
-              requires signing in with the invited address and accepting the
-              invitation.
-            </p>
-            <ul>
-              {w.contacts.map((c) => (
-                <li key={c.id}>
-                  <strong>{c.name}</strong> · {c.email} ·{" "}
-                  {c.revokedAt
-                    ? "Revoked"
-                    : c.acceptedAt
-                      ? "Accepted"
-                      : "Invited"}
-                  <details>
-                    <summary>
-                      {c.revokedAt ? "Restore access" : "Revoke access"}
-                    </summary>
-                    <Form method="post">
-                      {hidden(
-                        c.revokedAt ? "restore-contact" : "revoke-contact",
-                      )}
-                      <input type="hidden" name="contactId" value={c.id} />
-                      <input type="hidden" name="revision" value={c.revision} />
-                      <label className="label">
-                        <input
-                          type="checkbox"
-                          name="confirmed"
-                          value="yes"
-                          required
-                        />
-                        Confirm {c.revokedAt ? "restoring" : "revoking"} sponsor
-                        access for {c.email}.
-                      </label>
-                      <Button type="submit" disabled={busy}>
-                        {c.revokedAt ? "Restore contact" : "Revoke contact"}
-                      </Button>
-                    </Form>
-                  </details>
-                </li>
-              ))}
-            </ul>
-            <Form method="post" className="stack">
-              {hidden("add-contact")}
+              <SponsorProfileFields value={w?.sponsor} />
               <label className="label">
-                Contact name
+                Tier
                 <input
                   className="field"
-                  name="contactName"
-                  required
-                  maxLength={120}
+                  name="tier"
+                  maxLength={80}
+                  defaultValue={w?.sponsor.tier}
                 />
               </label>
               <label className="label">
-                Contact email
+                Session allowance
                 <input
                   className="field"
-                  name="email"
-                  type="email"
+                  name="sessionLimit"
+                  type="number"
+                  min={w?.sponsor.sessionsUsed ?? 0}
+                  max={100}
                   required
-                  maxLength={254}
+                  defaultValue={w?.sponsor.sessionLimit ?? 1}
                 />
               </label>
-              <Button type="submit" disabled={busy}>
-                Add contact
-              </Button>
-            </Form>
-            <Form method="post" className="mt">
-              {hidden("invite")}
-              <p>
-                Prepare an invitation for all active contacts above, then review
-                recipients and confirm sending in Communications.
-              </p>
-              <Button
-                type="submit"
-                disabled={busy || !w.contacts.some((c) => !c.revokedAt)}
-              >
-                Prepare invitation
+              <label className="label">
+                Editing deadline
+                <input
+                  className="field"
+                  name="closesDate"
+                  type="date"
+                  defaultValue={d.closesDate}
+                />
+                <span className="help">
+                  End of this date in {d.timezone}. Leave blank for no deadline.
+                  Draft, submitted and accepted sessions count toward the
+                  allowance.
+                </span>
+              </label>
+              <Button type="submit" disabled={busy} variant="primary">
+                {w ? "Save sponsor" : "Create sponsor"}
               </Button>
             </Form>
           </section>
-        )}
-      </div>
+          {w && (
+            <section
+              className="card pad"
+              aria-labelledby="portal-contacts-title"
+            >
+              <div className="card-title">
+                <h2 id="portal-contacts-title">Portal contacts</h2>
+              </div>
+              <p>
+                Contacts share this company’s profile and proposals. Access
+                requires signing in with the invited address and accepting the
+                invitation.
+              </p>
+              <ul className="list-clean">
+                {w.contacts.map((c) => (
+                  <li key={c.id}>
+                    <strong>{c.name}</strong> · {c.email} ·{" "}
+                    {c.revokedAt
+                      ? "Revoked"
+                      : c.acceptedAt
+                        ? "Accepted"
+                        : "Invited"}
+                    <details>
+                      <summary>
+                        {c.revokedAt ? "Restore access" : "Revoke access"}
+                      </summary>
+                      <Form method="post">
+                        {hidden(
+                          c.revokedAt ? "restore-contact" : "revoke-contact",
+                        )}
+                        <input type="hidden" name="contactId" value={c.id} />
+                        <input
+                          type="hidden"
+                          name="revision"
+                          value={c.revision}
+                        />
+                        <label className="label">
+                          <input
+                            type="checkbox"
+                            name="confirmed"
+                            value="yes"
+                            required
+                          />
+                          Confirm {c.revokedAt ? "restoring" : "revoking"}{" "}
+                          sponsor access for {c.email}.
+                        </label>
+                        <Button type="submit" disabled={busy}>
+                          {c.revokedAt ? "Restore contact" : "Revoke contact"}
+                        </Button>
+                      </Form>
+                    </details>
+                  </li>
+                ))}
+              </ul>
+              <Form method="post" className="stack">
+                {hidden("add-contact")}
+                <label className="label">
+                  Contact name
+                  <input
+                    className="field"
+                    name="contactName"
+                    required
+                    maxLength={120}
+                  />
+                </label>
+                <label className="label">
+                  Contact email
+                  <input
+                    className="field"
+                    name="email"
+                    type="email"
+                    required
+                    maxLength={254}
+                  />
+                </label>
+                <Button type="submit" disabled={busy}>
+                  Add contact
+                </Button>
+              </Form>
+              <Form method="post" className="mt">
+                {hidden("invite")}
+                <p>
+                  Prepare an invitation for all active contacts above, then
+                  review recipients and confirm sending in Communications.
+                </p>
+                <Button
+                  type="submit"
+                  disabled={busy || !w.contacts.some((c) => !c.revokedAt)}
+                >
+                  Prepare invitation
+                </Button>
+              </Form>
+            </section>
+          )}
+        </div>
+      ) : null}
       {w && (
         <section className="stack mt" aria-label="Sponsored sessions">
           <h2>

@@ -96,6 +96,32 @@ p.status::before,
 div.status::before {
   margin-top: var(--space-2);
 }
+/* A count, not a status. The dot .status paints says "state", so a tally
+   beside a heading read as a live/healthy signal. The fill follows the text
+   colour so the count holds on light, dark and public event grounds alike. */
+.pc-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, currentColor 9%, transparent);
+  color: var(--text-secondary);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--leading-snug);
+  white-space: nowrap;
+}
+.pc-count[data-tone="danger"] {
+  background: var(--state-bad-surface);
+  color: var(--state-bad-text);
+}
+.pc-count[data-tone="warning"] {
+  background: var(--state-warn-surface);
+  color: var(--state-warn-text);
+}
 
 /* Phase 0 shared interface primitives. Keep these classes namespaced so routes can adopt them incrementally. */
 .pc-page-header {
@@ -159,7 +185,7 @@ div.status::before {
 }
 .pc-field-error {
   color: var(--state-bad-text);
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   font-weight: var(--weight-semibold);
 }
 .pc-field-group.has-error > .field,
@@ -230,7 +256,7 @@ div.status::before {
   max-width: 58ch;
   margin: 0;
   color: var(--text-tertiary);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   line-height: var(--leading-snug);
 }
 .pc-state-icon {
@@ -316,7 +342,7 @@ div.status::before {
 }
 .pc-status-notice-copy > div {
   margin-top: 0;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
 }
 .pc-status-notice-action {
   align-self: center;
@@ -396,7 +422,7 @@ div.status::before {
   max-width: 480px;
   margin: 0;
   color: var(--muted);
-  font-size: var(--text-2xs);
+  font-size: var(--text-sm);
 }
 .pc-swatch-grid {
   display: grid;
@@ -668,102 +694,131 @@ div.status::before {
   transform: rotate(45deg);
 }
 
-/* --- Long administration pages ------------------------------------------
-   Persistent anchors keep large workspaces navigable. On phones, secondary
-   groups become explicit button-controlled disclosures; desktop retains the
-   complete operational view. */
-.pc-admin-section-nav {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  min-height: 24px;
-  margin-top: calc(-1 * var(--space-1));
-  margin-bottom: var(--space-2);
-}
-.pc-admin-section-nav > span {
-  flex: none;
-  color: var(--text-secondary);
-  font-size: var(--text-2xs);
-  font-weight: var(--weight-bold);
-}
-.pc-admin-section-nav ul {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.pc-admin-section-nav a {
-  display: flex;
-  min-height: 24px;
-  align-items: center;
-  padding: 0 var(--space-2);
-  border-radius: var(--radius-xs);
-  color: var(--text-tertiary);
-  font-size: var(--text-2xs);
-  font-weight: var(--weight-medium);
-}
-.pc-admin-section-nav a:hover,
-.pc-admin-section-nav a:focus-visible {
-  color: var(--brand-700);
-  background: var(--brand-50);
-}
-
 /* A small number of distinct jobs share one route and one state boundary.
    Pressed buttons keep ordinary keyboard navigation while avoiding tab roles,
-   whose arrow-key contract would add ceremony without improving this switch. */
+   whose arrow-key contract would add ceremony without improving this switch.
+   A switch held in the URL uses links with aria-current and looks the same.
+   The tabs sit on the page, not in a card: an underline marks the current
+   view, so the selection never outweighs the page's primary action, and a
+   segmented filter beneath reads as a filter rather than a second tab row.
+   The rule is a background line on the list, so the row can scroll sideways
+   on a phone instead of wrapping one tab onto its own line. */
 .pc-workspace-tabs {
+  position: relative;
   min-width: 0;
-  padding: var(--space-1);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface);
-  box-shadow: var(--elev-1);
 }
 .pc-workspace-tabs ul {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1);
+  gap: var(--space-5);
   margin: 0;
   padding: 0;
   list-style: none;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: none;
+  background:
+    linear-gradient(var(--line), var(--line)) bottom / 100% 1px no-repeat;
 }
 .pc-workspace-tabs li {
+  flex: none;
   min-width: 0;
 }
-.pc-workspace-tabs button {
+/* On a phone the row scrolls; the fading edge says there is more. */
+@media (max-width: 760px) {
+  .pc-workspace-tabs ul {
+    padding-right: var(--space-5);
+    mask-image: linear-gradient(
+      to right,
+      #000 calc(100% - var(--space-6)),
+      transparent
+    );
+  }
+}
+.pc-workspace-tabs li :is(button, a) {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
-  min-height: 38px;
-  padding: var(--space-2) var(--space-3);
+  width: 100%;
+  min-height: 40px;
+  padding: 0;
   border: 0;
-  border-radius: var(--radius-sm);
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
   color: var(--text-secondary);
   background: transparent;
   font: inherit;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: var(--weight-semibold);
+  white-space: nowrap;
+  text-decoration: none;
   cursor: pointer;
 }
-.pc-workspace-tabs button:hover {
+.pc-workspace-tabs li :is(button, a):hover {
   color: var(--ink);
-  background: var(--soft);
+  border-bottom-color: var(--border-strong);
 }
-.pc-workspace-tabs button[aria-pressed="true"] {
-  color: var(--text-inverse);
-  background: var(--ink);
+.pc-workspace-tabs li :is(button[aria-pressed="true"], a[aria-current="page"]) {
+  color: var(--ink);
+  border-bottom-color: var(--brand-600);
 }
-.pc-workspace-tabs button:focus-visible {
+.pc-workspace-tabs :is(button, a):focus-visible {
   outline: var(--focus-width) solid var(--focus-ring);
-  outline-offset: var(--focus-halo-width);
+  outline-offset: calc(-1 * var(--focus-width));
+}
+/* An explicit control supplements touch scrolling and the fading edge. The
+   revealed tab receives focus, so keyboard users can activate it directly. */
+.pc-workspace-tabs-scroll {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  bottom: 0;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: var(--canvas);
+  color: var(--ink);
+  cursor: pointer;
+}
+.pc-workspace-tabs-scroll.is-previous {
+  left: 0;
+}
+.pc-workspace-tabs-scroll.is-next {
+  right: 0;
+}
+.pc-workspace-tabs-scroll:hover {
+  background: var(--track);
+}
+.pc-workspace-tabs[data-scroll-before] ul {
+  scroll-padding-left: 32px;
+}
+.pc-workspace-tabs[data-scroll-after] ul {
+  scroll-padding-right: 32px;
+}
+@media (forced-colors: active) {
+  .pc-workspace-tabs li :is(button, a) {
+    border-bottom-color: Canvas;
+  }
+  .pc-workspace-tabs
+    li
+    :is(button[aria-pressed="true"], a[aria-current="page"]) {
+    forced-color-adjust: none;
+    border-bottom-color: Highlight;
+  }
 }
 .pc-workspace-tab-meta {
-  color: inherit;
+  min-width: 20px;
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-full);
+  color: var(--text-secondary);
+  background: var(--track);
   font-size: var(--text-2xs);
   font-variant-numeric: tabular-nums;
+  line-height: var(--leading-snug);
+  text-align: center;
 }
 .pc-admin-page-section {
   min-width: 0;
@@ -771,6 +826,12 @@ div.status::before {
 }
 .pc-admin-page-section + .pc-admin-page-section {
   margin-top: var(--space-3);
+}
+/* A card's own heading is a card title wherever it sits. Headings written
+   straight into a card, without the .card-title row, fell back to the
+   browser's 24px and outranked the page section above them. */
+.app-admin .card > h2:first-child {
+  font-size: var(--text-base);
 }
 /* --- Admin section header ------------------------------------------------
    A page is a sequence of named sections, not a run of cards. The heading
@@ -794,39 +855,20 @@ div.status::before {
   margin: var(--space-1) 0 0;
   max-width: 78ch;
   color: var(--text-tertiary);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   line-height: var(--leading-snug);
 }
 .pc-admin-page-section + .pc-admin-page-section .pc-admin-section-head {
   padding-top: var(--space-6);
   border-top: 1px solid var(--border);
 }
+/* On phones, secondary groups become explicit button-controlled disclosures;
+   desktop retains the complete operational view. */
 .pc-admin-section-toggle {
   display: none;
 }
 
 @media (max-width: 760px) {
-  .pc-admin-section-nav {
-    position: sticky;
-    top: calc(var(--topbar) + var(--space-1));
-    z-index: 20;
-    align-items: flex-start;
-    margin-top: 0;
-    margin-bottom: var(--space-3);
-    padding: var(--space-2) var(--space-3);
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
-    background: var(--surface);
-    overflow-x: auto;
-    box-shadow: var(--elev-1);
-    overscroll-behavior-inline: contain;
-  }
-  .pc-admin-section-nav ul {
-    flex-wrap: nowrap;
-  }
-  .pc-admin-section-nav a {
-    white-space: nowrap;
-  }
   /* The heading stays a heading; the chevron is a separate 44px control beside
      it, so screen readers still get a real section outline on mobile. */
   .pc-admin-section-head {
@@ -835,7 +877,7 @@ div.status::before {
     margin-bottom: var(--space-2);
   }
   .pc-admin-section-head p {
-    font-size: var(--text-2xs);
+    font-size: var(--text-xs);
   }
   .pc-admin-section-toggle {
     display: grid;
@@ -860,6 +902,35 @@ div.status::before {
   }
 }
 
+/* --- Record lists ---------------------------------------------------------
+   A list of records rather than prose: no markers and no indent. The class
+   was in use on seventeen lists before any rule defined it, so they drew
+   browser bullets and a reviewer's name ran straight into their email. A
+   record's name sits over its metadata, and a row that carries a control
+   puts it on the right, wrapping beneath on a narrow column. */
+.list-clean {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.list-clean > li > span:first-child:has(> strong) {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.list-clean > li > :is(strong, a) + small {
+  display: block;
+}
+.list-clean > li:has(> span:first-child + :is(form, label)) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+}
+
 /* --- Fieldset ------------------------------------------------------------
    Removes the UA groove and notched legend. */
 .pc-plain-fieldset {
@@ -873,6 +944,173 @@ div.status::before {
   font-size: var(--text-2xs);
   font-weight: var(--weight-semibold);
   color: var(--text-secondary);
+}
+
+/* --- Segmented view toggle ----------------------------------------------
+   The one control for switching between views of the same content: device
+   width, preview surface, calendar view, quick filter. Switching between the
+   distinct jobs of a page is .pc-workspace-tabs instead. Items are plain
+   buttons with aria-pressed or links with aria-current. Layout (display, gap,
+   width, margin, item sizing) sits behind :where() so a page can arrange
+   the control without out-ranking its chrome. */
+:where(.pc-segmented) {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 2px;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+}
+.pc-segmented {
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+}
+/* The selected item carries a border at 4.6:1 against the track. A white chip
+   on the near-white track alone measured 1.05:1, so the selection was close to
+   invisible. Every item reserves the border and keeps one weight, so switching
+   does not shift the row. */
+.pc-segmented > :where(button, a) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  min-height: 30px;
+  margin: 0;
+  padding: 0 calc(var(--space-3) - 1px);
+  border: 1px solid transparent;
+  border-radius: calc(var(--radius-sm) - 2px);
+  background: transparent;
+  color: var(--text-tertiary);
+  font: inherit;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-tight);
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+}
+.pc-segmented > :where(button, a):hover {
+  background: var(--track);
+  color: var(--text-primary);
+}
+.pc-segmented
+  > :where(button, a):is([aria-pressed="true"], [aria-current="page"]) {
+  border-color: var(--muted-2);
+  background: var(--surface);
+  color: var(--text-primary);
+  box-shadow: var(--elev-1);
+}
+@media (pointer: coarse) {
+  .pc-segmented > :where(button, a) {
+    min-height: 38px;
+  }
+}
+@media (forced-colors: active) {
+  .pc-segmented {
+    border-color: CanvasText;
+  }
+  .pc-segmented
+    > :where(button, a):is([aria-pressed="true"], [aria-current="page"]) {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+  }
+  .pc-segmented
+    > :where(button, a):is([aria-pressed="true"], [aria-current="page"])
+    * {
+    color: inherit;
+  }
+}
+
+/* --- Filter chips ---------------------------------------------------------
+   Quick filters over one list, each carrying the count of rows it shows. A
+   chip is a link with aria-current when the URL holds the filter. Unlike the
+   segmented control, the chips are separate pills, so they read as filters
+   and wrap on a phone without squeezing their labels. */
+.pc-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.pc-filter-chips > :where(a, button) {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 32px;
+  padding: 0 var(--space-2) 0 var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-tight);
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+}
+.pc-filter-chips > :where(a, button):hover {
+  border-color: var(--border-strong);
+  color: var(--ink);
+}
+/* An ink outline and a light tint mark the active filter. A solid ink fill
+   repeated the weight of the old tab pill and outranked the page's primary
+   action. */
+.pc-filter-chips
+> :where(a, button):is([aria-current="page"], [aria-pressed="true"]) {
+  border-color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 6%, var(--surface));
+  color: var(--ink);
+}
+.pc-filter-chips
+  > :where(a, button):is([aria-current="page"], [aria-pressed="true"])::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1px solid currentColor;
+  border-radius: inherit;
+  pointer-events: none;
+}
+.pc-filter-chip-count {
+  min-width: 20px;
+  padding: 1px var(--space-1);
+  border-radius: var(--radius-full);
+  background: var(--track);
+  color: var(--text-secondary);
+  font-size: var(--text-2xs);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+:is([aria-current="page"], [aria-pressed="true"]) > .pc-filter-chip-count {
+  background: var(--ink);
+  color: var(--text-inverse);
+}
+@media (pointer: coarse) {
+  .pc-filter-chips > :where(a, button) {
+    min-height: 38px;
+  }
+}
+@media (forced-colors: active) {
+  .pc-filter-chips
+    > :where(a, button):is([aria-current="page"], [aria-pressed="true"]) {
+    forced-color-adjust: none;
+    border-color: Highlight;
+    background: Highlight;
+    color: HighlightText;
+  }
+  .pc-filter-chips
+    > :where(a, button):is([aria-current="page"], [aria-pressed="true"])
+    * {
+    color: inherit;
+  }
 }
 
 /* --- Interactive surfaces -------------------------------------------------

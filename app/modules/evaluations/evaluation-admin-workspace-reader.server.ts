@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { sessionFormatLabelSql } from "~/modules/events/event-configuration";
 
 import { routingSchema } from "~/modules/submissions/submission-schema";
 import type { Viewer } from "~/platform/auth/authorize.server";
@@ -303,6 +304,7 @@ export class EvaluationAdminWorkspaceReader {
         `
         SELECT session.id, session.slug AS reference, session.title,
                session.description, session.format,
+               ${sessionFormatLabelSql("session.event_id", "session.format")} AS formatLabel,
                session.duration_minutes AS durationMinutes, session.status,
                track.name AS trackName,
                COUNT(DISTINCT assignment.id) AS assignmentCount,
@@ -342,6 +344,7 @@ export class EvaluationAdminWorkspaceReader {
           title: string;
           description: string | null;
           format: string;
+          formatLabel: string;
           durationMinutes: number;
           status: string;
           trackName: string | null;

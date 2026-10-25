@@ -14,6 +14,7 @@ import {
 } from "~/components/speaker-dashboard-overview";
 import { useSpeakerWorkspace } from "~/components/speaker-workspace-context";
 import { ButtonLink } from "~/components/ui/button";
+import { statusPresentation } from "~/components/ui/status-presentation";
 import { ResourceService } from "~/modules/resources/resource-service.server";
 import { requireSpeakerWorkspace } from "~/modules/speakers/speaker-workspace.server";
 import { ParticipantApplicationSummaryService } from "~/modules/submissions/participant-application-summary.server";
@@ -100,7 +101,13 @@ export default function SpeakerDashboard({ loaderData }: Route.ComponentProps) {
                     </Link>
                     <span className="subtle">
                       {" "}
-                      · {application.status.replaceAll("_", " ")}
+                      ·{" "}
+                      {
+                        statusPresentation(
+                          "applicantSubmission",
+                          application.status,
+                        ).label
+                      }
                     </span>
                   </li>
                 ))}
@@ -123,8 +130,12 @@ export default function SpeakerDashboard({ loaderData }: Route.ComponentProps) {
                   label: "Applications",
                   value: `${loaderData.applications.length}`,
                   detail: loaderData.applications
-                    .map((application) =>
-                      application.status.replaceAll("_", " "),
+                    .map(
+                      (application) =>
+                        statusPresentation(
+                          "applicantSubmission",
+                          application.status,
+                        ).label,
                     )
                     .filter(
                       (status, index, all) => all.indexOf(status) === index,

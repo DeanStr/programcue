@@ -11,6 +11,12 @@ body {
   font-feature-settings: "cv05", "cv11";
   -webkit-font-smoothing: antialiased;
 }
+/* The UA sizes <small> at 0.83em: 11.7px on the 14px body, below the floor,
+   and <small> carries most metadata in the product. One pixel down from its
+   context instead, never below 12px. */
+small {
+  font-size: max(var(--text-2xs), calc(1em - 1px));
+}
 h1,
 h2,
 h3 {
@@ -58,8 +64,9 @@ a {
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  box-shadow: var(--elev-3);
 }
+/* No elevation: parked above the viewport, its shadow still reached 36px
+   into the page and smudged every light header. Focus supplies the halo. */
 .skip-link:focus-visible {
   top: var(--space-3);
   transform: none;
@@ -490,15 +497,45 @@ a {
   background: var(--brand-900);
   color: var(--text-inverse);
 }
-/* One disabled treatment for every variant, including primary. */
-.btn:disabled,
-.btn[aria-disabled="true"],
-.icon-btn:disabled,
-.icon-btn[aria-disabled="true"] {
-  opacity: 0.45;
+/* Disabled keeps the control's shape and drops its colour: bordered buttons
+   keep a light outline, a filled primary becomes a neutral well and a ghost
+   stays bare. Copper at half opacity read as a pink rendering fault, a faded
+   danger outline still read as a live destructive action, and a grey well on
+   a bordered button outweighed its enabled neighbour. A pending button keeps
+   its variant so the action it is completing stays recognisable. */
+.btn:is(:disabled, [aria-disabled="true"]):not([aria-busy="true"]),
+.btn:is(:disabled, [aria-disabled="true"]):not([aria-busy="true"]):is(
+  :hover,
+  :active
+),
+.icon-btn:is(:disabled, [aria-disabled="true"]),
+.icon-btn:is(:disabled, [aria-disabled="true"]):is(:hover, :active) {
+  border-color: var(--line);
+  background: var(--surface);
+  color: var(--muted-2);
   box-shadow: none;
   cursor: not-allowed;
   transform: none;
+}
+.btn.primary:not(.small):is(:disabled, [aria-disabled="true"]):not(
+  [aria-busy="true"]
+),
+.pc-state-action
+  .btn.primary:is(:disabled, [aria-disabled="true"]):not([aria-busy="true"]) {
+  border-color: transparent;
+  background: var(--track);
+}
+:is(.data-table, .table-wrap, .row-actions)
+  .btn.primary:is(:disabled, [aria-disabled="true"]):not([aria-busy="true"]) {
+  border-color: var(--line);
+  background: var(--surface);
+}
+.btn.ghost:is(:disabled, [aria-disabled="true"]):not([aria-busy="true"]) {
+  border-color: transparent;
+  background: transparent;
+}
+.btn[aria-busy="true"] {
+  cursor: progress;
 }
 @media (pointer: coarse) {
   .btn,
@@ -719,7 +756,8 @@ a {
   letter-spacing: var(--tracking-snug);
   line-height: var(--leading-tight);
 }
-.pc-admin-section-head h2 {
+.pc-admin-section-head h2,
+.command-section-head {
   font-weight: var(--weight-bold);
 }
 @media (max-width: 760px) {
@@ -736,7 +774,8 @@ a {
     font-weight: var(--weight-bold);
     letter-spacing: var(--tracking-tight);
   }
-  .pc-admin-section-head h2 {
+  .pc-admin-section-head h2,
+  .command-section-head {
     font-size: var(--text-xl);
     font-weight: var(--weight-bold);
   }
@@ -906,6 +945,12 @@ a {
 .card-title > * {
   min-width: 0;
 }
+/* A grid stretches its items, so a form's submit button grew to the width of
+   the card and outweighed every field above it. Buttons keep their own width;
+   a page that wants a full-width action says so. */
+.stack > .btn {
+  justify-self: start;
+}
 .divider {
   height: 1px;
   background: var(--line);
@@ -939,11 +984,11 @@ a {
   color: var(--metric-tone, var(--ink));
 }
 .metric .helper {
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: var(--muted);
 }
 .metric-note {
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: var(--text-tertiary);
 }
 /* Tone reaches the numeral and a leading rail, not just a border tint that

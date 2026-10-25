@@ -125,7 +125,7 @@ export class DataImportExecutionSupport {
             delivery.status,
           ),
         )
-        ? "Task statuses were imported, but one or more outbound webhooks need attention in the Operation Centre."
+        ? "Task statuses were imported, but one or more outbound webhooks need attention in the Operation centre."
         : null;
     } catch (error) {
       console.error("Failed to dispatch imported task status webhooks", {

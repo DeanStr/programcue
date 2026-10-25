@@ -25,6 +25,7 @@ export type ProgrammeEmbedSession = {
   status: string;
   track: string | null;
   format: string;
+  formatLabel: string;
   room: string | null;
   visibility: string;
 };

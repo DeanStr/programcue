@@ -249,7 +249,7 @@ test("saves and controls a stable managed embed lifecycle", async ({
   ).toBeVisible();
 
   const row = page.getByRole("row").filter({ hasText: "Conference homepage" });
-  await expect(row).toContainText("draft");
+  await expect(row).toContainText("Draft");
   await row.getByRole("button", { name: "Load in builder" }).focus();
   await row.getByRole("button", { name: "Load in builder" }).press("Enter");
   await expect(
@@ -288,7 +288,7 @@ test("saves and controls a stable managed embed lifecycle", async ({
   await activeRow.getByRole("button", { name: "Pause" }).click();
   await expect(
     page.getByRole("row").filter({ hasText: "Conference homepage" }),
-  ).toContainText("paused");
+  ).toContainText("Paused");
   await expect
     .poll(() => new URL(page.url()).hash)
     .toBe("#managed-programme-embeds");
@@ -310,7 +310,7 @@ test("saves and controls a stable managed embed lifecycle", async ({
   await pausedRow.getByRole("button", { name: "Revoke" }).click();
   await expect(
     page.getByRole("row").filter({ hasText: "Conference homepage" }),
-  ).toContainText("revoked");
+  ).toContainText("Revoked");
   await expect
     .poll(() => new URL(page.url()).hash)
     .toBe("#managed-programme-embeds");

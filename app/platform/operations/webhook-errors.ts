@@ -26,7 +26,7 @@ export function webhookSecretWasErased(ciphertext: string) {
 export class WebhookQueueUnavailableError extends Error {
   constructor(readonly operationId: string) {
     super(
-      "The webhook test was saved but could not be sent. Retry it from the Operation Centre.",
+      "The webhook test was saved but could not be sent. Retry it from the Operation centre.",
     );
     this.name = "WebhookQueueUnavailableError";
   }
@@ -42,7 +42,7 @@ export class WebhookQueueConfigurationError extends Error {
 export class WebhookEventIdempotencyConflictError extends Error {
   constructor(readonly operationId: string) {
     super(
-      "An earlier webhook delivery with this reference sent different content. Open the operation in the Operation Centre before retrying.",
+      "An earlier webhook delivery with this reference sent different content. Open the operation in the Operation centre before retrying.",
     );
     this.name = "WebhookEventIdempotencyConflictError";
   }

@@ -115,6 +115,34 @@ beforeEach(async () => {
 });
 
 describe("administrator task filters", () => {
+  it("counts quick-filter destinations after clearing task focus and retaining other filters", async () => {
+    const focused = await load("?task=task-demo-handbook");
+    const all = await load("?state=");
+    const outstanding = await load("?state=open");
+    expect(focused.tasks.map((task) => task.id)).toEqual([
+      "task-demo-handbook",
+    ]);
+    expect(focused.quickFilterCounts.all).toBe(all.tasks.length);
+    expect(focused.quickFilterCounts.open).toBe(outstanding.tasks.length);
+    expect(focused.quickFilterCounts.all).toBeGreaterThan(1);
+
+    const filteredFocus = await load(
+      "?task=task-demo-handbook&owner=participant&target=speaker&type=acknowledgement&impact=medium",
+    );
+    const filteredDestination = await load(
+      "?state=&owner=participant&target=speaker&type=acknowledgement&impact=medium",
+    );
+    expect(filteredFocus.tasks.map((task) => task.id)).toEqual([
+      "task-demo-handbook",
+    ]);
+    expect(filteredFocus.quickFilterCounts.all).toBe(
+      filteredDestination.tasks.length,
+    );
+    expect(filteredFocus.quickFilterCounts.all).toBeLessThan(
+      focused.quickFilterCounts.all,
+    );
+  });
+
   it("defaults to assigned work and validates URL-addressable workspace views", async () => {
     await expect(load()).resolves.toMatchObject({ view: "assigned" });
     await expect(load("?view=plans")).resolves.toMatchObject({ view: "plans" });
@@ -286,10 +314,12 @@ describe("administrator task filters", () => {
     ]);
 
     const after = await load();
-    expect(after.taskSummary.outstanding).toBe(
-      before.taskSummary.outstanding + 1,
+    expect(after.taskSummary.readiness).toBeLessThan(
+      before.taskSummary.readiness,
     );
-    expect(after.taskSummary.overdue).toBe(before.taskSummary.overdue + 1);
+    expect(after.quickFilterCounts.overdue).toBe(
+      before.quickFilterCounts.overdue + 2,
+    );
     expect(
       after.tasks.find((task) => task.id === administratorTaskId),
     ).toMatchObject({

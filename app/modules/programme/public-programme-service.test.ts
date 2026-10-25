@@ -2,7 +2,8 @@ import { env } from "cloudflare:test";
 import { serializeSignedCookie } from "better-call";
 import { RouterContextProvider } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
-
+import { INITIAL_EVENT_SESSION_FORMATS } from "~/modules/events/event-configuration";
+import { getPublicSessionPage } from "~/platform/api/api-public-programme.server";
 import {
   cloudflareContext,
   cspNonceContext,
@@ -264,6 +265,40 @@ describe("published programme and itinerary", () => {
     await expect(
       service.getPublishedLandingSummary("future-of-events-2027", 8),
     ).resolves.not.toBeNull();
+  });
+
+  it("labels published sessions with the event's configured format", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await ensureDemoData(testEnv);
+    await testEnv.DB.prepare(
+      `UPDATE events SET session_formats_json = ? WHERE id = 'evt-foe-2025'`,
+    )
+      .bind(
+        JSON.stringify(
+          INITIAL_EVENT_SESSION_FORMATS.map((format) =>
+            format.key === "keynote"
+              ? { ...format, label: "Opening keynote" }
+              : format,
+          ),
+        ),
+      )
+      .run();
+
+    const programme = await new PublicProgrammeService(testEnv).getPublished(
+      "future-of-events-2027",
+    );
+    const keynote = programme?.sessions.find(
+      (session) => session.format === "keynote",
+    );
+    expect(keynote?.formatLabel).toBe("Opening keynote");
+
+    const page = await getPublicSessionPage(testEnv, "future-of-events-2027", {
+      limit: 50,
+    });
+    const pagedKeynote = (
+      page.body as { sessions: Array<{ format: string; formatLabel: string }> }
+    ).sessions.find((session) => session.format === "keynote");
+    expect(pagedKeynote?.formatLabel).toBe("Opening keynote");
   });
 
   it("rejects published approval drift at the database boundary", async () => {

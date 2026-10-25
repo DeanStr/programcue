@@ -139,7 +139,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 }
 
-export const meta = () => [{ title: "Bulk sessions · Program Cue" }];
+export const meta = () => [{ title: "Bulk session updates · Program Cue" }];
 
 function itemChange(
   item: NonNullable<
@@ -179,7 +179,6 @@ export default function AdminSessionBulk({ loaderData }: Route.ComponentProps) {
           <h1>Bulk session updates</h1>
         </div>
         <div className="page-actions">
-          <ButtonLink to="/admin/schedule">Open schedule</ButtonLink>
           <ButtonLink to="/admin/operations?type=session.bulk">
             Operation history
           </ButtonLink>

@@ -133,6 +133,10 @@
   background: transparent;
 }
 
+.pc-res-editor .resource-preview-size {
+  margin-top: var(--space-3);
+}
+
 .pc-res-editor .sticky-actions {
   position: sticky;
   bottom: 0;

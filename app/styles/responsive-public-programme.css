@@ -233,10 +233,12 @@
   .programme-embed-appearance-grid {
     grid-template-columns: 1fr;
   }
-  .programme-embed-output .segmented,
-  .programme-embed-output .segmented .btn,
+  .programme-embed-output .pc-segmented,
   .programme-embed-copy-row .btn {
     width: 100%;
+  }
+  .programme-embed-output .pc-segmented > button {
+    flex: 1;
   }
   .programme-embed-preview {
     min-height: 340px;

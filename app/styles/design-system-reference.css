@@ -110,10 +110,26 @@
   color: var(--text-tertiary);
   line-height: var(--leading-snug);
 }
+/* The segmented toggle demonstrates a view of the same content: the frame
+   narrows to a phone width without changing the panel it shows. */
+.pc-reference-frame {
+  max-width: 100%;
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.pc-reference-frame[data-width="mobile"] {
+  max-width: 390px;
+}
 .pc-reference-table {
   margin: 0;
 }
 .pc-reference-table th[scope="row"] {
   color: var(--text-primary);
   font-weight: var(--weight-semibold);
+}
+.pc-reference-panel .pc-filter-chips {
+  margin-top: var(--space-3);
 }

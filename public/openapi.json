@@ -3577,6 +3577,7 @@
           "title",
           "description",
           "format",
+          "formatLabel",
           "startsAt",
           "endsAt",
           "room",
@@ -3600,7 +3601,12 @@
             "type": "string"
           },
           "format": {
-            "type": "string"
+            "type": "string",
+            "description": "Stored session-format key; use it for filtering."
+          },
+          "formatLabel": {
+            "type": "string",
+            "description": "The event's configured label for format, for display. A key the event no longer configures is returned unchanged."
           },
           "startsAt": {
             "type": "string",
@@ -4115,7 +4121,7 @@
           },
           "tasks": {
             "type": "array",
-            "description": "Participant-accessible tasks. A session_details_review_v1 task includes sessionDetailsReview with the canonical fields, sessionRevision and fingerprint required by the completion command.",
+            "description": "Participant-accessible tasks. A session_details_review_v1 task includes sessionDetailsReview with the canonical fields, sessionRevision and fingerprint required by the completion command, plus the display formatLabel for fields.format.",
             "items": {
               "$ref": "#/components/schemas/ApiRecord"
             }

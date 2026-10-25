@@ -136,6 +136,7 @@ export function usePublicProgrammeModel(loaderData: PublicProgrammeLoaderData) {
           session.speakerNames.join(" "),
           session.track,
           session.format,
+          session.formatLabel,
           session.room,
         ]
           .join(" ")

@@ -114,7 +114,9 @@ export function OperationFiltersPanel({
         <div className="page-actions">
           <Button type="submit">Apply filters</Button>
           {loaderData.filterActive ? (
-            <ButtonLink to="/admin/operations">Clear</ButtonLink>
+            <ButtonLink variant="ghost" to="/admin/operations">
+              Clear
+            </ButtonLink>
           ) : null}
         </div>
       </Form>

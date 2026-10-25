@@ -8,7 +8,6 @@ import {
   CommunicationsSetupView,
   CommunicationsWorkView,
 } from "~/components/communications-centre-workspace";
-import { AdminPageSectionNavigation } from "~/components/ui/admin-page-sections";
 import { ButtonLink } from "~/components/ui/button";
 import {
   clearDraftRecoveryScope,
@@ -24,7 +23,7 @@ import {
 export type { CommunicationsCentreLoaderData } from "./communications-centre.server";
 export { action, loader };
 
-export const meta = () => [{ title: "Communications Centre · Program Cue" }];
+export const meta = () => [{ title: "Communications · Program Cue" }];
 
 export default function CommunicationsCentre({
   loaderData,
@@ -106,42 +105,20 @@ export default function CommunicationsCentre({
     <>
       <div className="page-head comms-page-head">
         <div>
-          <h1>{setup ? "Delivery settings" : "Communications Centre"}</h1>
+          <h1>{setup ? "Delivery settings" : "Communications"}</h1>
         </div>
         <div className="page-actions">
           {setup ? (
             <ButtonLink to="/admin/communications">
-              Back to Communications Centre
+              Back to Communications
             </ButtonLink>
           ) : (
-            <>
-              <ButtonLink variant="primary" to="/admin/communications/compose">
-                New communication
-              </ButtonLink>
-              <ButtonLink to="/admin/operations">Operation Centre</ButtonLink>
-            </>
+            <ButtonLink variant="primary" to="/admin/communications/compose">
+              New communication
+            </ButtonLink>
           )}
         </div>
       </div>
-
-      {setup ? (
-        <AdminPageSectionNavigation
-          label="Delivery settings sections"
-          links={[
-            { id: "communications-delivery", label: "Delivery" },
-            { id: "communications-automation", label: "Automation" },
-            { id: "communications-calendars", label: "Calendars" },
-          ]}
-        />
-      ) : (
-        <AdminPageSectionNavigation
-          label="Communications Centre sections"
-          links={[
-            { id: "communications-templates", label: "Templates" },
-            { id: "communications-history", label: "History" },
-          ]}
-        />
-      )}
 
       {loaderData.activeFilter === "failed" ? (
         <div className="validation-item error mb" role="status">

@@ -1,5 +1,5 @@
 import { DndContext, DragOverlay, type DragStartEvent } from "@dnd-kit/core";
-import { PanelRightClose } from "lucide-react";
+import { ExternalLink, PanelRightClose, PanelRightOpen } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Form } from "react-router";
 import { ScheduleContentWorkflows } from "~/components/schedule-content-workflows";
@@ -166,14 +166,12 @@ export function SchedulePlannerWorkspace({
               target="_blank"
               rel="noreferrer"
             >
-              Open public programme
+              Open public programme <ExternalLink aria-hidden size={14} />
+              <span className="sr-only">(opens in a new tab)</span>
             </ButtonLink>
           ) : null}
-          <ButtonLink variant="ghost" to="/admin/sessions/new">
-            Add session
-          </ButtonLink>
+          <ButtonLink to="/admin/sessions/new">Add session</ButtonLink>
           <Button
-            variant="ghost"
             type="button"
             onClick={() => {
               setBreakNotice(null);
@@ -184,7 +182,6 @@ export function SchedulePlannerWorkspace({
           </Button>
           {showAutoPlaceButton ? (
             <Button
-              variant="ghost"
               type="button"
               disabled={
                 !workspace.autoPlacementReadiness.canPreview ||
@@ -573,12 +570,14 @@ export function SchedulePlannerWorkspace({
             aria-expanded={inspectorOpen}
             aria-controls="schedule-inspector"
             onClick={() => toggleInspector(true)}
+            /* Rotated text in a 44px rail had to be read with a tilted head.
+               An icon and a one-word label fit the rail horizontally; the
+               full name and the selected session stay in the button name. */
+            aria-label={`Notes and session content · ${editLock.reason ? "Read-only · " : ""}${quickSession ? quickSession.title : "Schedule notes"}`}
+            title="Show notes and session content"
           >
-            <strong>Notes and session content</strong>
-            <span className="help">
-              {editLock.reason ? "Read-only · " : ""}
-              {quickSession ? quickSession.title : "Schedule notes"}
-            </span>
+            <PanelRightOpen aria-hidden size={16} />
+            <span>Notes</span>
           </button>
           <aside
             id="schedule-inspector"

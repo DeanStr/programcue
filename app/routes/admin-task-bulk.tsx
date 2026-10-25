@@ -149,7 +149,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 }
 
-export const meta = () => [{ title: "Bulk tasks · Program Cue" }];
+export const meta = () => [{ title: "Bulk task actions · Program Cue" }];
 
 export default function AdminTaskBulk({ loaderData }: Route.ComponentProps) {
   const actionData = useActionData<typeof action>();
@@ -186,10 +186,9 @@ export default function AdminTaskBulk({ loaderData }: Route.ComponentProps) {
     <>
       <div className="page-head pc-page-header">
         <div>
-          <h1>Bulk task operations</h1>
+          <h1>Bulk task actions</h1>
         </div>
         <div className="page-actions">
-          <ButtonLink to="/admin/tasks">Tasks &amp; readiness</ButtonLink>
           <ButtonLink to="/admin/operations?type=task.bulk">
             Operation history
           </ButtonLink>

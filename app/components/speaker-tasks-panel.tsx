@@ -278,7 +278,7 @@ export function SpeakerTasksPanel({
                         <div>
                           <dt>Format and duration</dt>
                           <dd>
-                            {task.sessionDetailsReview.fields.format} ·{" "}
+                            {task.sessionDetailsReview.formatLabel} ·{" "}
                             {task.sessionDetailsReview.fields.durationMinutes}{" "}
                             minutes
                           </dd>

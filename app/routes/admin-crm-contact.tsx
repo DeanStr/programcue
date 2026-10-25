@@ -1,10 +1,4 @@
-import {
-  ArrowLeft,
-  History,
-  Merge,
-  MessageSquarePlus,
-  Network,
-} from "lucide-react";
+import { History, Merge, MessageSquarePlus, Network } from "lucide-react";
 import type { FormEvent } from "react";
 import {
   data,
@@ -197,11 +191,8 @@ export default function AdminCrmContact({ loaderData }: Route.ComponentProps) {
             </p>
           </div>
           <div className="page-actions">
-            <ButtonLink to="/admin/crm">
-              <ArrowLeft aria-hidden size={15} /> Speaker directory
-            </ButtonLink>
             <ButtonLink to="/admin/crm/pipeline">
-              <Network aria-hidden size={15} /> Pipeline
+              <Network aria-hidden size={15} /> Sourcing pipeline
             </ButtonLink>
           </div>
         </div>

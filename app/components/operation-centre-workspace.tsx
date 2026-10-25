@@ -1,7 +1,6 @@
 import { RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useActionData, useRevalidator } from "react-router";
-import { ButtonLink } from "~/components/ui/button";
 import {
   type RealtimeTransportStatus,
   subscribeToEventChanges,
@@ -21,6 +20,15 @@ import {
 import type { OperationCentreData } from "./operation-centre-shared";
 
 export { taskImportTransitionSummary } from "./operation-centre-shared";
+
+/* Views of one page share its URL. Each view replaces the tool above the
+   operation list instead of a header button stacking a panel over it. */
+const OPERATION_VIEWS = [
+  { panel: "", label: "Operations" },
+  { panel: "activity", label: "Activity timeline" },
+  { panel: "exports", label: "Data exports" },
+  { panel: "imports", label: "Data imports" },
+] as const;
 
 function OperationAutoRefresh({
   eventId,
@@ -54,7 +62,7 @@ function OperationAutoRefresh({
           revalidator.revalidate();
       },
       onError: (error) =>
-        console.warn("Operation Centre realtime transport error.", {
+        console.warn("Operation centre realtime transport error.", {
           errorName: error instanceof Error ? error.name : "UnknownError",
         }),
       onStatusChange: setTransport,
@@ -95,19 +103,37 @@ export function OperationCentreWorkspace({
     <>
       <div className="page-head">
         <div>
-          <h1>Operation Centre</h1>
+          <h1>Operation centre</h1>
         </div>
         <div className="page-actions">
           <OperationAutoRefresh
             eventId={loaderData.eventId}
             cursor={loaderData.cursor}
           />
-          <ButtonLink to="/admin/sessions/bulk">Bulk sessions</ButtonLink>
-          <ButtonLink variant="primary" to="/admin/operations?panel=activity">
-            Activity timeline
-          </ButtonLink>
         </div>
       </div>
+      <nav className="pc-workspace-tabs ops-views" aria-label="Operation views">
+        <ul>
+          {OPERATION_VIEWS.filter(
+            (view) => view.panel !== "exports" || loaderData.canExportData,
+          ).map((view) => (
+            <li key={view.panel}>
+              <Link
+                to={
+                  view.panel
+                    ? `/admin/operations?panel=${view.panel}`
+                    : "/admin/operations"
+                }
+                aria-current={
+                  loaderData.panel === view.panel ? "page" : undefined
+                }
+              >
+                {view.label}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </nav>
       {actionData ? (
         <div
           className={`validation-item ${actionData.ok ? "ok" : "error"} card pad mb`}
@@ -128,12 +154,20 @@ export function OperationCentreWorkspace({
           </span>
         </div>
       ) : null}
-      <AirtableRecoveryPanel loaderData={loaderData} />
-      <OperationFiltersPanel loaderData={loaderData} />
+      {loaderData.panel === "" ? (
+        <>
+          <AirtableRecoveryPanel loaderData={loaderData} />
+          <OperationFiltersPanel loaderData={loaderData} />
+        </>
+      ) : null}
       <DataExportPanel loaderData={loaderData} />
       <DataImportPanel loaderData={loaderData} />
       <ActivityTimelinePanel loaderData={loaderData} />
-      <OperationsListPanel loaderData={loaderData} />
+      {/* Exports and imports create operations, so their list stays in view
+          with its retry and cancel controls; the timeline replaces it. */}
+      {loaderData.panel === "activity" ? null : (
+        <OperationsListPanel loaderData={loaderData} />
+      )}
       <OperationDetailPanel loaderData={loaderData} />
     </>
   );

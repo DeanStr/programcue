@@ -26,7 +26,7 @@ export function ReviewQueuePanel() {
     >
       <div className="card-title">
         <h2 id="review-queue-title">My queue</h2>
-        <span className="status info right">{assignedCount}</span>
+        <span className="pc-count right">{assignedCount}</span>
       </div>
       <p className="review-queue-progress">
         <span className="pc-num">

@@ -904,7 +904,7 @@ test.describe("mutable schedule authoring", () => {
 
 test("schedule contains its room grid and explains mobile scrolling", async ({
   page,
-}) => {
+}, testInfo) => {
   await page.setViewportSize({ width: 412, height: 915 });
   await waitForInterface(page, "/admin/schedule");
 
@@ -926,6 +926,36 @@ test("schedule contains its room grid and explains mobile scrolling", async ({
       document.documentElement.clientWidth,
   );
   expect(documentOverflow).toBeLessThanOrEqual(1);
+
+  await page.evaluate(() => document.fonts.ready);
+  const publicProgramme = page.getByRole("link", {
+    name: "Open public programme",
+  });
+  for (const width of [320, 360, 375, 393, 412]) {
+    await page.setViewportSize({ width, height: 915 });
+    await expect(publicProgramme).toBeInViewport();
+    const linkBounds = (await publicProgramme.boundingBox())!;
+    const iconBounds = (await publicProgramme.locator("svg").boundingBox())!;
+    expect(iconBounds.width).toBeGreaterThanOrEqual(14);
+    expect(iconBounds.x).toBeGreaterThanOrEqual(linkBounds.x);
+    expect(iconBounds.x + iconBounds.width).toBeLessThanOrEqual(
+      linkBounds.x + linkBounds.width,
+    );
+    expect(
+      await publicProgramme.evaluate(
+        (element) => element.scrollWidth - element.clientWidth,
+      ),
+    ).toBeLessThanOrEqual(1);
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth),
+    ).toBeLessThanOrEqual(width);
+    if (width === 320 || width === 393) {
+      await page.screenshot({
+        path: testInfo.outputPath(`schedule-actions-${width}.png`),
+      });
+    }
+  }
+  await page.waitForLoadState("networkidle");
 });
 
 test("laptop placement selection keeps the calendar wide and details explicit", async ({

@@ -1,11 +1,11 @@
 import { Form, Link } from "react-router";
-
 import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
 import { Button, ButtonLink } from "~/components/ui/button";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EventDateTime } from "~/components/ui/event-date-time";
 import { EmptyState } from "~/components/ui/states";
+import { statusPresentation } from "~/components/ui/status-presentation";
 import { shortReference } from "~/lib/short-reference";
 import { availableEvaluationAssignmentTargets } from "~/modules/evaluations/evaluation-assignment-availability";
 
@@ -632,11 +632,10 @@ export function EvaluationSubmissionQueue() {
                           {submissionAssignments.map((assignment) => (
                             <small key={assignment.id}>
                               <strong>{assignment.evaluatorName}</strong> ·{" "}
-                              {assignment.status
-                                .replaceAll("_", " ")
-                                .replace(/^./, (letter) =>
-                                  letter.toUpperCase(),
-                                )}
+                              {
+                                statusPresentation("review", assignment.status)
+                                  .label
+                              }
                             </small>
                           ))}
                         </div>
@@ -687,11 +686,11 @@ export function EvaluationSubmissionQueue() {
                               ) : null;
                             })}
                           </select>
-                          <button type="submit" className="pc-eval-text-action">
+                          <Button type="submit" size="small">
                             {submissionAssignments.length
                               ? "Add another reviewer"
                               : "Assign"}
-                          </button>
+                          </Button>
                         </Form>
                       ) : (
                         <span className="help">
@@ -711,16 +710,16 @@ export function EvaluationSubmissionQueue() {
                           {terminal ? "Final" : "Unavailable"}
                         </span>
                       ) : (
-                        <button
-                          className="pc-eval-text-action is-primary"
+                        <Button
                           type="button"
+                          size="small"
                           onClick={() => {
                             setNoReviewOverrideConfirmed(false);
                             setDecisionId(submission.id);
                           }}
                         >
                           Decide
-                        </button>
+                        </Button>
                       )}
                     </td>
                   </tr>

@@ -212,7 +212,7 @@ async function waitForSurfaceReady(page: Page, name: string) {
     ).toBeVisible();
   } else if (name === "tasks-readiness") {
     await expect(
-      page.getByRole("link", { name: "Outstanding", exact: true }),
+      page.getByRole("link", { name: /^Outstanding \d+$/u }),
     ).toBeVisible();
     await expect(
       page.getByRole("navigation", { name: "Task workspace views" }),
@@ -813,12 +813,9 @@ test.describe
               ? // Relative-day copy changes with wall-clock time; its layout and absolute due date remain visible here while unit tests own the calculation.
                 ".task-due-distance { visibility: hidden !important; }"
               : testInfo.project.name === "mobile-chromium" &&
-                  surface.name === "evaluation-admin"
-                ? ".pc-admin-section-nav { position: static !important; }"
-                : testInfo.project.name === "mobile-chromium" &&
-                    surface.role === "speaker"
-                  ? ".speaker-nav { visibility: hidden !important; }"
-                  : null;
+                  surface.role === "speaker"
+                ? ".speaker-nav { visibility: hidden !important; }"
+                : null;
         const fullPageCaptureStyle = fullPageCaptureCss
           ? await page.addStyleTag({ content: fullPageCaptureCss })
           : null;

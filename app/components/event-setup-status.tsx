@@ -69,7 +69,6 @@ export function EventSetupCommitActions({
       <div className="event-setup-actions-buttons">
         <Button
           type="button"
-          size={compact ? "small" : undefined}
           onClick={onDiscard}
           disabled={!hasAnyUnsavedChanges || saving}
         >
@@ -78,7 +77,6 @@ export function EventSetupCommitActions({
         <Button
           type="submit"
           variant="primary"
-          size={compact ? "small" : undefined}
           disabled={saving || pendingRecordDraftPresent}
           aria-describedby={
             pendingRecordDraftPresent ? pendingHelpId : undefined

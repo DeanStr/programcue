@@ -291,7 +291,7 @@ export class PublishedScheduleCalendarService {
             queued.status,
           )
         ) {
-          failureMessage = `Existing calendar operation ${queued.operationId} is ${queued.status} and must be retried from the Operation Centre.`;
+          failureMessage = `Existing calendar operation ${queued.operationId} is ${queued.status} and must be retried from the Operation centre.`;
         } else if (queued.duplicate) result.duplicateCount += 1;
         else result.queuedCount += 1;
       } catch (error) {

@@ -283,25 +283,23 @@ export function ApplicantPreviewPanel({
           <div className="fb-preview-chrome">
             <span className="pc-num">{PREVIEW_WIDTHS[viewport]} px wide</span>
             <fieldset
-              className="preview-viewport-controls right pc-plain-fieldset"
+              className="preview-viewport-controls right pc-segmented"
               aria-label="Applicant preview size"
             >
-              <Button
-                size="small"
+              <button
                 type="button"
                 aria-pressed={viewport === "mobile"}
                 onClick={() => setViewport("mobile")}
               >
                 Mobile
-              </Button>
-              <Button
-                size="small"
+              </button>
+              <button
                 type="button"
                 aria-pressed={viewport === "desktop"}
                 onClick={() => setViewport("desktop")}
               >
                 Desktop
-              </Button>
+              </button>
             </fieldset>
             {onClose ? (
               <Button

@@ -1,6 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Locator, type Page, test } from "@playwright/test";
 
+import { acceptConfirm } from "./support/confirm-dialog";
 import { e2eOrigin } from "./support/e2e-origin";
 import { openEvaluationView } from "./support/evaluation-admin";
 import { resetDemoEvent } from "./support/reset-demo-event";
@@ -208,8 +209,8 @@ test.describe
 
       await waitForInterface(page, "/admin/tasks");
       await page.getByRole("button", { name: "Plans & onboarding" }).click();
-      await page.getByLabel(/I confirm these forms should be created/i).check();
       await page.getByRole("button", { name: "Create travel forms" }).click();
+      await acceptConfirm(page);
       await expectStatus(
         page,
         "Hotel stay and flight reimbursement forms are ready",
@@ -386,7 +387,7 @@ test.describe
       await page
         .getByLabel("Results round")
         .selectOption({ label: "Initial review" });
-      await page.getByRole("button", { name: "Apply" }).click();
+      await page.getByRole("button", { name: "Apply filters" }).click();
       const historicalResult = page
         .getByRole("region", { name: "Unified evaluation results" })
         .getByRole("row", {

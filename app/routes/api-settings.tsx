@@ -135,7 +135,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       return data({
         ok: true as const,
         message:
-          "Signed webhook test queued. Follow its result in the Operation Centre.",
+          "Signed webhook test queued. Follow its result in the Operation centre.",
         token: null,
         webhookSecret: null,
         operationId: queued.operationId,
@@ -664,7 +664,7 @@ export default function ApiSettings({ loaderData }: Route.ComponentProps) {
                           confirm(
                             {
                               title: `Send a signed test event to ${endpoint.name}?`,
-                              description: `Program Cue makes a real signed HTTPS request to ${endpoint.url}. Follow the result in the Operation Centre.`,
+                              description: `Program Cue makes a real signed HTTPS request to ${endpoint.url}. Follow the result in the Operation centre.`,
                               confirmLabel: "Send test event",
                               tone: "primary",
                             },

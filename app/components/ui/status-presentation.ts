@@ -35,6 +35,19 @@ export const STATUS_PRESENTATIONS = {
     rejected: { label: "Rejected", tone: "danger" },
     withdrawn: { label: "Withdrawn", tone: "neutral" },
   },
+  /* What an applicant sees. Routing, review and decision preparation are
+     internal stages; until a decision is released they all read as one. */
+  applicantSubmission: {
+    draft: { label: "Draft", tone: "neutral" },
+    submitted: { label: "Submitted", tone: "info" },
+    assigned: { label: "Under review", tone: "info" },
+    in_review: { label: "Under review", tone: "info" },
+    decision_ready: { label: "Under review", tone: "info" },
+    accepted: { label: "Accepted", tone: "success" },
+    waitlisted: { label: "Waitlisted", tone: "warning" },
+    rejected: { label: "Rejected", tone: "danger" },
+    withdrawn: { label: "Withdrawn", tone: "neutral" },
+  },
   review: {
     assigned: { label: "Assigned", tone: "info" },
     in_progress: { label: "In progress", tone: "info" },
@@ -148,6 +161,26 @@ export const STATUS_PRESENTATIONS = {
     create: { label: "Create", tone: "warning" },
     update: { label: "Update", tone: "warning" },
     noop: { label: "Unchanged", tone: "info" },
+  },
+  visibility: {
+    public: { label: "Public", tone: "info" },
+    private: { label: "Private", tone: "neutral" },
+    hidden: { label: "Hidden", tone: "neutral" },
+  },
+  speakerInvitation: {
+    pending: { label: "Pending", tone: "info" },
+    expired: { label: "Expired", tone: "danger" },
+  },
+  sender: {
+    unverified: { label: "Unverified", tone: "warning" },
+    verified: { label: "Verified", tone: "success" },
+    disabled: { label: "Disabled", tone: "neutral" },
+  },
+  managedEmbed: {
+    draft: { label: "Draft", tone: "neutral" },
+    active: { label: "Active", tone: "success" },
+    paused: { label: "Paused", tone: "warning" },
+    revoked: { label: "Revoked", tone: "danger" },
   },
   webhookEndpoint: {
     active: { label: "Active", tone: "success" },

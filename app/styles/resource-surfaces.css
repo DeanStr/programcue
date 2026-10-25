@@ -63,16 +63,13 @@
   border-radius: var(--radius);
   background: var(--soft);
 }
-.resource-embed-kind,
+.resource-embed-kind {
+  margin-top: var(--space-1);
+}
 .resource-embed-row-actions {
   display: flex;
   gap: var(--space-1);
   margin-top: var(--space-1);
-}
-.resource-embed-kind .btn[aria-pressed="true"] {
-  border-color: var(--brand-500);
-  background: var(--brand-50);
-  color: var(--brand-700);
 }
 .resource-embed-list {
   display: grid;

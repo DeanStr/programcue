@@ -64,7 +64,7 @@ test("an accepted session opens before its first draft and enters content review
   ).toBeVisible();
   const detailUrl = page.url();
   await expect(
-    page.getByText(/Experience Design · presentation · 45 minutes/),
+    page.getByText(/Experience Design · Presentation · 45 minutes/),
   ).toBeVisible();
   expect((await page.reload())?.status()).toBe(200);
   await page.getByRole("link", { name: "Open schedule", exact: true }).click();

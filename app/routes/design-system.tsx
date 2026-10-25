@@ -68,6 +68,12 @@ export default function DesignSystem() {
   const [referencePanel, setReferencePanel] = useState<
     "records" | "schedule" | "delivery"
   >("records");
+  const [referenceWidth, setReferenceWidth] = useState<"desktop" | "mobile">(
+    "desktop",
+  );
+  const [referenceFilter, setReferenceFilter] = useState<
+    "outstanding" | "overdue" | "all"
+  >("outstanding");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   return (
@@ -373,8 +379,11 @@ export default function DesignSystem() {
               <h2>One route, distinct jobs</h2>
             </div>
             <p>
-              Pressed-button navigation keeps mounted draft state without
-              pretending that one page is several browser destinations.
+              Underlined tabs switch between a page's distinct jobs and keep
+              mounted draft state. Filter chips narrow one list and carry the
+              count each one shows. A segmented toggle changes how the same
+              content is displayed. The page header holds actions, never a
+              destination the sidebar already lists.
             </p>
           </div>
           <AdminWorkspaceTabs<"records" | "schedule" | "delivery">
@@ -391,20 +400,53 @@ export default function DesignSystem() {
             className="pc-reference-panel"
             aria-label={`${referencePanel} reference panel`}
           >
-            <strong>
-              {referencePanel === "records"
-                ? "Current programme records"
-                : referencePanel === "schedule"
-                  ? "Blocking schedule checks"
-                  : "Provider delivery evidence"}
-            </strong>
-            <p>
-              {referencePanel === "records"
-                ? "Mounted panels preserve unsaved filters and edits while the operator changes jobs."
-                : referencePanel === "schedule"
-                  ? "Schedule state remains categorical and independent from product emphasis."
-                  : "Delivery labels state only the provider evidence that was actually recorded."}
-            </p>
+            <fieldset className="pc-segmented" aria-label="Preview width">
+              {(["desktop", "mobile"] as const).map((width) => (
+                <button
+                  key={width}
+                  type="button"
+                  aria-pressed={referenceWidth === width}
+                  onClick={() => setReferenceWidth(width)}
+                >
+                  {width === "desktop" ? "Desktop" : "Mobile"}
+                </button>
+              ))}
+            </fieldset>
+            <fieldset className="pc-filter-chips" aria-label="Record state">
+              {(
+                [
+                  ["outstanding", "Outstanding", 12],
+                  ["overdue", "Overdue", 3],
+                  ["all", "All", 48],
+                ] as const
+              ).map(([value, label, count]) => (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={referenceFilter === value}
+                  onClick={() => setReferenceFilter(value)}
+                >
+                  {label}
+                  <span className="pc-filter-chip-count">{count}</span>
+                </button>
+              ))}
+            </fieldset>
+            <div className="pc-reference-frame" data-width={referenceWidth}>
+              <strong>
+                {referencePanel === "records"
+                  ? "Current programme records"
+                  : referencePanel === "schedule"
+                    ? "Blocking schedule checks"
+                    : "Provider delivery evidence"}
+              </strong>
+              <p>
+                {referencePanel === "records"
+                  ? "Mounted panels preserve unsaved filters and edits while the operator changes jobs."
+                  : referencePanel === "schedule"
+                    ? "Schedule state remains categorical and independent from product emphasis."
+                    : "Delivery labels state only the provider evidence that was actually recorded."}
+              </p>
+            </div>
           </section>
         </section>
 

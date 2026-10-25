@@ -15,7 +15,7 @@ export class CalendarQueueUnavailableError extends Error {
     cause?: unknown,
   ) {
     super(
-      "The calendar invitation was saved but could not be sent. Retry it from the Operation Centre.",
+      "The calendar invitation was saved but could not be sent. Retry it from the Operation centre.",
       cause ? { cause } : undefined,
     );
     this.name = "CalendarQueueUnavailableError";

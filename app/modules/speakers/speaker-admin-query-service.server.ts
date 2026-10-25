@@ -1,4 +1,5 @@
 import type { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
+import { sessionFormatLabelSql } from "~/modules/events/event-configuration";
 import { parseEventFilePolicy } from "~/modules/files/file-policy";
 import { participantResourceTaskAccessSql } from "~/modules/tasks/task-service-foundation.server";
 import type { Viewer } from "~/platform/auth/authorize.server";
@@ -122,6 +123,7 @@ export class SpeakerAdminQueryService {
       this.env.DB.prepare(
         `
         SELECT s.id, s.title, s.description, s.format,
+               ${sessionFormatLabelSql("s.event_id", "s.format")} AS formatLabel,
                s.duration_minutes AS durationMinutes, s.status,
                ss.role_label AS roleLabel,
                track.name AS trackName,

@@ -311,7 +311,7 @@ export function PublicSiteHome({
                   </small>
                 ) : null}
                 <small>
-                  {[session.track, session.format, session.room]
+                  {[session.track, session.formatLabel, session.room]
                     .filter(Boolean)
                     .join(" · ")}
                 </small>

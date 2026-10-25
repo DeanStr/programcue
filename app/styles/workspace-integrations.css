@@ -445,7 +445,10 @@
   }
 }
 
-/* Operation Centre — Vercel deployment rows. The row is the link. */
+/* Operation centre — Vercel deployment rows. The row is the link. */
+.ops-views {
+  margin-bottom: var(--space-4);
+}
 .ops-filters {
   margin: 0 0 var(--space-3);
 }

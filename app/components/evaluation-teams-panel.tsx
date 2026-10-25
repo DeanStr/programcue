@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { Form, useLocation, useNavigate } from "react-router";
-
 import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
 import { Button } from "~/components/ui/button";
 import { useConfirm } from "~/components/ui/confirm-dialog";
+import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EventDateTime } from "~/components/ui/event-date-time";
 
 export function EvaluationTeamsPanel() {
@@ -26,7 +26,7 @@ export function EvaluationTeamsPanel() {
         <div>
           <h2>Evaluation teams</h2>
         </div>
-        <span className="status info right">{loaderData.teams.length}</span>
+        <span className="pc-count right">{loaderData.teams.length}</span>
       </div>
       <details
         id="evaluation-access"
@@ -217,11 +217,7 @@ export function EvaluationTeamsPanel() {
           <article className="card pad" key={team.id}>
             <div className="card-title">
               <h3>{team.name}</h3>
-              <span
-                className={`status ${team.status === "active" ? "success" : "neutral"}`}
-              >
-                {team.status}
-              </span>
+              <DomainStatusBadge domain="content" status={team.status} />
             </div>
             {team.description ? (
               <p className="subtle">{team.description}</p>

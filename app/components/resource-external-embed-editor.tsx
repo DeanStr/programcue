@@ -130,11 +130,10 @@ export function ResourceExternalEmbedEditor({
       <div>
         <span className="label">Video or map</span>
         <fieldset
-          className="resource-embed-kind pc-plain-fieldset"
+          className="resource-embed-kind pc-segmented"
           aria-label="External content type"
         >
-          <Button
-            size="small"
+          <button
             type="button"
             aria-pressed={kind === "video"}
             onClick={() => {
@@ -147,9 +146,8 @@ export function ResourceExternalEmbedEditor({
             }}
           >
             <Play aria-hidden size={15} /> Video
-          </Button>
-          <Button
-            size="small"
+          </button>
+          <button
             type="button"
             aria-pressed={kind === "map"}
             onClick={() => {
@@ -162,7 +160,7 @@ export function ResourceExternalEmbedEditor({
             }}
           >
             <MapPin aria-hidden size={15} /> Map
-          </Button>
+          </button>
         </fieldset>
       </div>
 

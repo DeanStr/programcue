@@ -459,14 +459,41 @@
   color: var(--text-tertiary);
   font-size: var(--text-2xs);
 }
+/* A bounded list in a consent dialog must say it continues. The frame marks
+   the scroll region, its height stops part-way through a row, and the edge
+   shadows appear only while more rows sit above or below: the solid covers
+   scroll with the content and uncover the fixed shadows at either end. */
 .schedule-review-link-disclosure {
-  display: grid;
-  gap: var(--space-2);
-  max-height: 12rem;
-  margin: 0;
-  padding: 0;
+  max-height: 13.5rem;
+  padding: var(--space-2) var(--space-3);
   overflow: auto;
   overscroll-behavior: contain;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background:
+    linear-gradient(var(--surface-sunken) 30%, transparent) center top / 100%
+    2.5rem no-repeat local,
+    linear-gradient(transparent, var(--surface-sunken) 70%) center bottom / 100%
+    2.5rem no-repeat local,
+    radial-gradient(
+      farthest-side at 50% 0,
+      color-mix(in srgb, var(--ink) 16%, transparent),
+      transparent
+    )
+    center top / 100% 0.75rem no-repeat scroll,
+    radial-gradient(
+      farthest-side at 50% 100%,
+      color-mix(in srgb, var(--ink) 16%, transparent),
+      transparent
+    )
+    center bottom / 100% 0.75rem no-repeat scroll,
+    var(--surface-sunken);
+}
+.schedule-review-link-disclosure ol {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
   list-style: none;
 }
 .schedule-review-link-disclosure li {
@@ -475,7 +502,7 @@
 }
 .schedule-review-link-disclosure span {
   color: var(--text-tertiary);
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
 }
 .schedule-review-link-copy {
   display: flex;
@@ -769,46 +796,26 @@
   font-size: var(--text-2xs);
 }
 
-/* Day tabs sit as a segmented control, not a second tab bar. */
+/* Day tabs sit as a segmented control, not a second tab bar. Each day
+   carries a second line, so its items stack rather than centre one label. */
 .schedule-day-tabs {
-  margin: 0;
-  padding: 3px;
   overflow-x: auto;
-  border: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface-sunken);
 }
-.schedule-day-tabs .tab {
+.schedule-day-tabs > button {
   display: grid;
   min-width: max-content;
   gap: 1px;
-  margin: 0;
-  padding: var(--space-1) var(--space-3);
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  box-shadow: none;
-  color: var(--text-tertiary);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-medium);
+  padding: calc(var(--space-1) - 1px) calc(var(--space-3) - 1px);
 }
 .schedule-day-short {
   display: none;
 }
-.schedule-day-tabs .tab small {
+.schedule-day-tabs > button small {
   font-size: var(--text-2xs);
   font-weight: var(--weight-medium);
   color: var(--text-tertiary);
 }
-.schedule-day-tabs .tab.active {
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--ink);
-  font-weight: var(--weight-semibold);
-  box-shadow: var(--elev-1);
-}
-.schedule-day-tabs .tab.active small {
+.schedule-day-tabs > button[aria-pressed="true"] small {
   color: var(--text-secondary);
 }
 
@@ -1102,32 +1109,6 @@
   content: "";
   pointer-events: none;
 }
-.schedule-canvas .schedule-view-tabs {
-  margin: 0;
-  padding: 3px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface-sunken);
-  gap: 2px;
-}
-.schedule-canvas .schedule-view-tabs .tab {
-  margin: 0;
-  padding: var(--space-1) var(--space-2);
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  box-shadow: none;
-  color: var(--text-tertiary);
-  font-size: var(--text-2xs);
-  font-weight: var(--weight-medium);
-}
-.schedule-canvas .schedule-view-tabs .tab.active {
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--ink);
-  font-weight: var(--weight-semibold);
-  box-shadow: var(--elev-1);
-}
 .schedule-agenda {
   display: none;
   margin: 0;
@@ -1219,20 +1200,13 @@
   color: inherit;
   cursor: pointer;
 }
-.schedule-inspector-toggle strong,
-.schedule-inspector-toggle .help {
-  writing-mode: vertical-rl;
-  transform: rotate(180deg);
-}
-.schedule-inspector-toggle strong {
-  font-size: var(--text-xs);
+.schedule-inspector-toggle > span {
+  color: var(--text-secondary);
+  font-size: var(--text-2xs);
   font-weight: var(--weight-semibold);
 }
-.schedule-inspector-toggle .help {
-  max-height: 16rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.schedule-inspector-toggle:hover > span {
+  color: var(--ink);
 }
 .schedule-inspector-panel {
   padding: 0 var(--space-4) var(--space-4);
@@ -1435,6 +1409,10 @@
     min-height: 36px;
     padding-inline: var(--space-2);
     font-size: var(--text-xs);
+    white-space: normal;
+  }
+  .schedule-page-actions > .btn > svg {
+    flex: none;
   }
   /* Create schedule is wrapped in its form; span the row like other primaries. */
   .schedule-page-actions > .btn.primary,
@@ -1448,12 +1426,12 @@
     align-self: center;
     justify-self: center;
   }
-  .schedule-canvas .schedule-view-tabs .tab {
+  .schedule-canvas .schedule-view-tabs > button,
+  .schedule-canvas .schedule-day-tabs > button {
     flex: 1;
-    text-align: center;
   }
-  .schedule-canvas .schedule-day-tabs .tab {
-    flex: 1;
+  .schedule-canvas .schedule-view-tabs > button {
+    padding-inline: calc(var(--space-2) - 1px);
   }
 }
 
@@ -1479,10 +1457,6 @@
   .schedule-canvas-toolbar h2 {
     font-size: var(--text-base);
     line-height: var(--leading-tight);
-  }
-  .schedule-canvas .schedule-view-tabs,
-  .schedule-canvas .schedule-day-tabs {
-    border-color: transparent;
   }
 }
 

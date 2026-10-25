@@ -492,27 +492,6 @@ body:has(.sidebar-is-collapsed) {
   margin: var(--space-2) calc(-1 * var(--modal-gutter));
   background: var(--border);
 }
-/* A count, not a status: the dot .status paints before every pill is noise on
-   a numeral whose whole job is to be read as a number. */
-.pc-count {
-  min-width: 20px;
-  padding: 1px var(--space-2);
-  border-radius: var(--radius-full);
-  background: var(--chip);
-  color: var(--text-secondary);
-  font-size: var(--text-2xs);
-  font-weight: var(--weight-semibold);
-  font-variant-numeric: tabular-nums;
-  text-align: center;
-}
-.pc-count[data-tone="danger"] {
-  background: var(--state-bad-surface);
-  color: var(--state-bad-text);
-}
-.pc-count[data-tone="warning"] {
-  background: var(--state-warn-surface);
-  color: var(--state-warn-text);
-}
 /* An identity block rather than a menu row: the account panel opens on who
    you are, and that is a statement, not a destination. */
 .pc-identity {
@@ -675,31 +654,6 @@ body:has(.sidebar-is-collapsed) {
   padding: var(--space-3) var(--space-4) 0;
   border: 0;
   margin: 0;
-}
-.pc-segmented {
-  display: inline-flex;
-  padding: 2px;
-  gap: 2px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: var(--surface-sunken);
-  outline: 1px solid var(--border);
-  outline-offset: -1px;
-}
-.pc-segmented > button {
-  min-height: 28px;
-  padding: 0 var(--space-3);
-  border: 0;
-  border-radius: var(--radius-xs);
-  background: transparent;
-  color: var(--text-tertiary);
-  font-size: var(--text-2xs);
-  font-weight: var(--weight-semibold);
-}
-.pc-segmented > button[aria-pressed="true"] {
-  background: var(--surface);
-  color: var(--text-primary);
-  box-shadow: var(--elev-1);
 }
 .command-results {
   padding: var(--space-2);

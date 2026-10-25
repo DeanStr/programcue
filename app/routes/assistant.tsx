@@ -40,7 +40,7 @@ import { getCloudflareContext } from "~/platform/cloudflare-context";
 import "~/styles/workspace-assistant.css";
 
 export const meta: MetaFunction = () => [
-  { title: "Event Assistant · Program Cue" },
+  { title: "Event assistant · Program Cue" },
 ];
 
 async function administrator(
@@ -635,12 +635,7 @@ export default function AssistantRoute() {
   }, [actionData]);
   return (
     <div className="pc-assist">
-      <PageHeader
-        title="Event Assistant"
-        actions={
-          <ButtonLink to="/admin/command">Open Command Centre</ButtonLink>
-        }
-      />
+      <PageHeader title="Event assistant" />
 
       {!loaderData.provider.configured ? (
         <p className="help" role="status">

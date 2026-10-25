@@ -25,9 +25,20 @@
 }
 .deliverable-cell {
   display: grid;
+  justify-items: start;
   gap: 0.5rem;
   margin-bottom: 1rem;
   min-width: 12rem;
+}
+.deliverable-cell:last-child {
+  margin-bottom: 0;
+}
+.deliverable-cell-status {
+  text-decoration: none;
+}
+.deliverable-cell-status:hover .status,
+.deliverable-cell-status:focus-visible .status {
+  text-decoration: underline;
 }
 
 .deliverables-matrix tbody th,

@@ -33,7 +33,7 @@ export type AdminNavigationItem = readonly [
 ];
 
 export const NAV_ITEMS = [
-  ["command", LayoutDashboard, "Home"],
+  ["command", LayoutDashboard, "Command centre"],
   [
     "assistant",
     Sparkles,
@@ -84,22 +84,32 @@ export const NAV_ITEMS = [
   ],
   ["integrations", Cable, "Integrations"],
   ["settings", Settings, "API & webhooks"],
-  ["operations", Activity, "Operations"],
+  ["operations", Activity, "Operation centre"],
 ] as const satisfies ReadonlyArray<AdminNavigationItem>;
 
 /* Keep a stable set of user-facing workspace families. Their children expose
    the existing routes without making the rail mirror the internal model. */
+/* A child is part of its parent's job. Sponsors are their own event
+   workflow, the assistant answers across every workflow, and the Speaker
+   directory spans the organisation's events, so none of them nests under an
+   event page. */
 const NAV_GROUPS = [
   {
     label: "Event work",
     ids: [
       "command",
+      "assistant",
       "submissions",
       "speakers",
+      "sponsors",
       "tasks",
       "schedule",
       "communications",
     ],
+  },
+  {
+    label: "Organisation",
+    ids: ["crm"],
   },
   {
     label: "Administration",
@@ -107,14 +117,13 @@ const NAV_GROUPS = [
   },
 ] as const;
 
-/* Speaker Directory and Resources are full workspaces that no rail entry pointed
-   at, so the rail marked Event speakers current for them and contradicted the
-   breadcrumb printed directly below it. They are the speaker family's second
-   level and appear whenever that family is where you are. */
+/* Resources is a full workspace that no rail entry pointed at, so the rail
+   marked Event speakers current for it and contradicted the breadcrumb
+   printed directly below it. Children appear whenever their family is where
+   you are. */
 const NAV_CHILDREN: Record<string, ReadonlyArray<string>> = {
-  command: ["assistant"],
   submissions: ["review"],
-  speakers: ["crm", "resources", "sponsors"],
+  speakers: ["resources"],
   schedule: ["content", "programme"],
   event: ["branding", "site"],
   operations: ["integrations", "settings"],
@@ -236,6 +245,8 @@ export function adminCommandMatches(query: string, candidate: string) {
 const ADMIN_NAVIGATION_SEARCH_ALIASES: Partial<
   Record<(typeof NAV_ITEMS)[number][0], ReadonlyArray<string>>
 > = {
+  command: ["Home", "Dashboard"],
+  operations: ["Operations"],
   crm: ["Speaker network"],
   programme: ["Programme publishing"],
   schedule: ["Programme"],
@@ -403,9 +414,9 @@ export function adminPageBreadcrumbs(
               : pathname === "/admin/tasks/deliverables"
                 ? "Speaker deliverables"
                 : pathname === "/admin/tasks/bulk"
-                  ? "Bulk task update"
+                  ? "Bulk task actions"
                   : pathname === "/admin/sessions/bulk"
-                    ? "Bulk session update"
+                    ? "Bulk session updates"
                     : pathname === "/admin/files/retention"
                       ? "Data retention"
                       : section === "submissions"

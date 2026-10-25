@@ -230,9 +230,7 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
         </div>
         <div className="page-actions">
           <ButtonLink to="/admin/crm/pipeline">Sourcing pipeline</ButtonLink>
-          <ButtonLink variant="primary" to="/admin/crm/outreach">
-            Speaker invitations
-          </ButtonLink>
+          <ButtonLink to="/admin/crm/outreach">Speaker invitations</ButtonLink>
         </div>
       </div>
 
@@ -277,7 +275,7 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
       <section className="crm-board" aria-labelledby="crm-directory-heading">
         <div className="crm-board-head">
           <h2 id="crm-directory-heading">
-            {segment ? `${segment.name} segment` : "Organization contacts"}
+            {segment ? `${segment.name} segment` : "Organisation contacts"}
           </h2>
           <span className="crm-board-meta">
             Showing {directory.contacts.length}{" "}

@@ -506,9 +506,7 @@ export default function CommunicationComposer({
                 Draft revision {draft.revision}
               </span>
             ) : null}
-            <ButtonLink to="/admin/communications">
-              Communications Centre
-            </ButtonLink>
+            <ButtonLink to="/admin/communications">Communications</ButtonLink>
           </>
         }
       />

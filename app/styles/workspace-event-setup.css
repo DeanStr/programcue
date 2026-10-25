@@ -387,16 +387,6 @@
     flex-direction: column;
   }
 
-  .event-setup-section-nav.pc-workspace-tabs > ul {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .event-setup-section-nav li,
-  .event-setup-section-nav button {
-    width: 100%;
-  }
-
   .event-setup-page .pc-admin-section-toggle {
     display: none;
   }

@@ -337,7 +337,7 @@
   margin: var(--space-2) 0 0;
   padding-left: calc(20px + var(--space-3));
   color: var(--text-tertiary);
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
 }
 .speaker-task-note.is-ok {
   color: var(--state-good-text);
@@ -526,7 +526,7 @@
   box-shadow: none;
 }
 .speaker-upload-form label:has(input[type="file"]) .help {
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
 }
 .speaker-upload-form .speaker-upload-selection {
   min-width: 0;

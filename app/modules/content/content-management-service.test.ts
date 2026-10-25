@@ -364,8 +364,8 @@ describe("content management", () => {
         }),
         expect.objectContaining({
           label: "Content status",
-          before: "approved",
-          after: "draft",
+          before: "Approved",
+          after: "Draft",
         }),
       ]),
     );

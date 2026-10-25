@@ -2,13 +2,15 @@ import { Form, Link, useLocation } from "react-router";
 
 import { BrandMark } from "~/components/brand-mark";
 import { Button, ButtonLink } from "~/components/ui/button";
+import type { ViewerRole } from "~/platform/auth/authorize.server";
+import { viewerRoleLabel } from "~/platform/auth/viewer-role-label";
 
 export function ReviewerShell({
   viewer,
   eventName,
   children,
 }: {
-  viewer: { name: string; role: string; demo: boolean };
+  viewer: { name: string; role: ViewerRole; demo: boolean };
   eventName: string;
   children: React.ReactNode;
 }) {
@@ -57,8 +59,8 @@ export function ReviewerShell({
           ) : null}
         </div>
         <div className="review-account">
-          <span className="status info">
-            {viewer.role.replaceAll("_", " ")}
+          <span className="review-account-role">
+            {viewerRoleLabel(viewer.role)}
           </span>
           <span
             className="avatar"

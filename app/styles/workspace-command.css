@@ -1,4 +1,4 @@
-/* Command Centre and administrator page frame.
+/* Command centre and administrator page frame.
    Type does the hierarchy. Cards earn chrome. Comparable rows sit on canvas. */
 
 /* --- Shell frame ----------------------------------------------------------
@@ -42,11 +42,6 @@
   align-items: flex-end;
   margin-bottom: var(--space-5);
 }
-.app-admin .command-page-head h1 {
-  font-size: var(--display-2);
-  font-weight: var(--weight-extrabold);
-  letter-spacing: var(--tracking-tight);
-}
 .command-page-head .pc-page-header-lede,
 .command-page-head p {
   margin-top: var(--space-2);
@@ -80,7 +75,6 @@
    spine: nothing said Workflows outranked Delivery. */
 .command-section-head {
   margin: 0;
-  color: var(--text-secondary);
 }
 .command-band-head {
   margin: 0;
@@ -540,16 +534,17 @@
   background: var(--track);
   overflow: hidden;
 }
-/* A healthy, incomplete workflow is neutral ink. Hue is spent only where a
-   workflow needs attention, and complete work is quieter still. */
+/* A healthy, incomplete workflow is neutral ink. Strong hue is spent only
+   where a workflow needs attention. Complete work is a soft green: the grey it
+   used to be read as an empty or disabled bar. */
 .command-meter > span {
   display: block;
   height: 100%;
   background: var(--text-tertiary);
   transition: width var(--dur-slow) var(--ease-out);
 }
-.command-meter.quiet > span {
-  background: var(--border-strong);
+.command-meter.complete > span {
+  background: color-mix(in srgb, var(--state-good-solid) 55%, var(--track));
 }
 .command-meter.amber > span {
   background: var(--state-warn-solid);

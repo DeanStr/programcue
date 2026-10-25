@@ -1,7 +1,7 @@
 import { Form, Link } from "react-router";
 
 import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
-import { Button, ButtonSummary } from "~/components/ui/button";
+import { Button, ButtonLink, ButtonSummary } from "~/components/ui/button";
 import { EventDateTime } from "~/components/ui/event-date-time";
 import { statusPresentation } from "~/components/ui/status-presentation";
 
@@ -116,24 +116,21 @@ export function EvaluationResultRow({ result }: { result: EvaluationResult }) {
           ) ? (
             <span className="status success">Final</span>
           ) : (
-            <button
-              className="pc-eval-text-action is-primary"
+            <Button
               type="button"
+              size="small"
               onClick={() => {
                 setNoReviewOverrideConfirmed(false);
                 setDecisionId(result.id);
               }}
             >
               Decide
-            </button>
+            </Button>
           )
         ) : (
-          <Link
-            className="pc-eval-text-action is-primary"
-            to={assignmentHref(focusName, result.id)}
-          >
+          <ButtonLink size="small" to={assignmentHref(focusName, result.id)}>
             Assign
-          </Link>
+          </ButtonLink>
         )}
         {result.targetType === "proposal" ? (
           <details className="pc-eval-overflow">

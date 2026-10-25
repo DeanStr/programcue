@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import { sessionFormatLabelSql } from "~/modules/events/event-configuration";
 
 import type {
   PublishedProgramme,
@@ -281,7 +282,9 @@ async function d1PublishedSessionPage(
     `
       SELECT s.id, content.slug, content.title,
              COALESCE(content.description, '') AS description,
-             content.format, se.starts_at AS startsAt, se.ends_at AS endsAt,
+             content.format,
+             ${sessionFormatLabelSql("s.event_id", "content.format")} AS formatLabel,
+             se.starts_at AS startsAt, se.ends_at AS endsAt,
              r.name AS room, r.building, r.level, r.position AS roomPosition,
              t.name AS track,
              COALESCE((

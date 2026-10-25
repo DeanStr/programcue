@@ -35,7 +35,7 @@ export function EvaluationDiscussionPanel() {
             selected round.
           </p>
         </div>
-        <span className="status info right">
+        <span className="pc-count right">
           {history.messages.length}
           {history.hasEarlier ? "+" : ""} message
           {history.messages.length === 1 && !history.hasEarlier ? "" : "s"}

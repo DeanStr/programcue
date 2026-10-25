@@ -95,18 +95,21 @@ test("administrator navigation groups stable workspace families without hiding p
   await expect(
     navigation.getByRole("link", { name: "Session content & files" }),
   ).toBeVisible();
+  // The Speaker directory spans the organisation's events, so it has its own
+  // group instead of appearing only inside an event's speaker family.
+  await expect(
+    navigation.getByText("Organisation", { exact: true }),
+  ).toBeVisible();
   await expect(
     navigation.getByRole("link", { name: "Speaker directory" }),
-  ).toHaveCount(0);
+  ).toHaveAttribute("href", "/admin/crm");
   await expect(
     navigation.getByRole("link", { name: "Speaker resources" }),
   ).toHaveCount(0);
+  // The page header holds actions; the rail already lists Session content.
   await expect(
-    page.getByRole("link", { name: "Content review" }),
-  ).toHaveAttribute("href", "/admin/content#content-review-title");
-  await expect(
-    page.getByRole("link", { name: "File library" }),
-  ).toHaveAttribute("href", "/admin/content#content-files-title");
+    page.locator("#main").getByRole("link", { name: "Content review" }),
+  ).toHaveCount(0);
 
   await waitForInterface(page, "/admin/content");
   await expect(
@@ -118,21 +121,14 @@ test("administrator navigation groups stable workspace families without hiding p
   await waitForInterface(page, "/admin/speakers");
   const main = page.locator("#main");
   await expect(
-    main.getByRole("link", { name: "Speaker directory" }),
-  ).toHaveAttribute("href", "/admin/crm");
-  await expect(main.getByRole("link", { name: "Resources" })).toHaveAttribute(
-    "href",
-    "/admin/resources",
-  );
-  // Both are full workspaces, so the rail names them as the speaker family's
-  // second level rather than marking Event speakers current and contradicting the
-  // breadcrumb below it.
+    main.locator(".page-actions").getByRole("link", { name: "Resources" }),
+  ).toHaveCount(0);
+  // Resources is a full workspace, so the rail names it as the speaker
+  // family's second level rather than marking Event speakers current and
+  // contradicting the breadcrumb below it.
   const speakerRail = page.getByRole("complementary", {
     name: "Primary navigation",
   });
-  await expect(
-    speakerRail.getByRole("link", { name: "Speaker directory" }),
-  ).toHaveAttribute("href", "/admin/crm");
   await expect(
     speakerRail.getByRole("link", { name: "Speaker resources" }),
   ).toHaveAttribute("href", "/admin/resources");
@@ -141,15 +137,12 @@ test("administrator navigation groups stable workspace families without hiding p
   const crmRail = page.getByRole("complementary", {
     name: "Primary navigation",
   });
-  // The page is Speaker directory, so that is what claims aria-current. Event
-  // speakers marks the family instead of claiming to be the page and contradicting the
-  // breadcrumb underneath it.
   await expect(
     crmRail.getByRole("link", { name: "Speaker directory" }),
   ).toHaveAttribute("aria-current", "page");
   await expect(
     crmRail.getByRole("link", { name: "Event speakers" }),
-  ).toHaveAttribute("data-family-current", "");
+  ).not.toHaveAttribute("data-family-current", "");
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("button", { name: "Open navigation" }).click();
@@ -195,12 +188,12 @@ test("route announcements describe page changes but ignore same-page actions", a
   );
   await expect(announcement).toBeEmpty();
 
-  await page.getByRole("link", { name: "Home", exact: true }).click();
+  await page.getByRole("link", { name: "Command centre", exact: true }).click();
   // The save was rejected, so the edited end date is still unsaved and Event
   // Setup asks before discarding it.
   await page.getByRole("button", { name: "Leave and discard" }).click();
   await expect(
-    page.getByRole("heading", { name: "Command Centre", level: 1 }),
+    page.getByRole("heading", { name: "Command centre", level: 1 }),
   ).toBeVisible();
   await expect(announcement).toHaveText(await page.title());
 });
@@ -555,6 +548,7 @@ test("resource authoring exposes typed click-to-load video and map blocks", asyn
     "aria-pressed",
   );
 
+  await page.getByText("Preview as speakers see it", { exact: true }).click();
   await page
     .getByLabel("YouTube or Vimeo link")
     .fill("https://youtu.be/dQw4w9WgXcQ?t=42");

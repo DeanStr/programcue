@@ -1,4 +1,5 @@
 import { AirtableProviderBoundary } from "~/modules/airtable/airtable-provider-boundary.server";
+import { sessionFormatLabelSql } from "~/modules/events/event-configuration";
 import type { Viewer } from "~/platform/auth/authorize.server";
 
 export type AdminProgrammeRow = {
@@ -8,6 +9,7 @@ export type AdminProgrammeRow = {
   visibility: string;
   track: string | null;
   format: string;
+  formatLabel: string;
   room: string | null;
   startsAt: number | null;
 };
@@ -37,6 +39,10 @@ export class ProgrammeAdminService {
                 CASE WHEN se.id IS NULL THEN s.visibility ELSE content.visibility END AS visibility,
                 CASE WHEN se.id IS NULL THEN source_track.name ELSE published_track.name END AS track,
                 CASE WHEN se.id IS NULL THEN s.format ELSE content.format END AS format,
+                ${sessionFormatLabelSql(
+                  "s.event_id",
+                  "CASE WHEN se.id IS NULL THEN s.format ELSE content.format END",
+                )} AS formatLabel,
                 r.name AS room, se.starts_at AS startsAt,
                 content.session_id AS publishedContentSessionId
            FROM sessions s

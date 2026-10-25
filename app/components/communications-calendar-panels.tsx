@@ -394,9 +394,7 @@ export function CalendarLifecycleTable({
     <section className="card pad">
       <div className="card-title">
         <h2>Calendar lifecycle</h2>
-        <span className="status info right">
-          {loaderData.invitations.length}
-        </span>
+        <span className="pc-count right">{loaderData.invitations.length}</span>
       </div>
       {loaderData.invitations.length ? (
         <ul

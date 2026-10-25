@@ -1,10 +1,10 @@
 import { Form, Link } from "react-router";
-
 import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
 import { RecommendationChoiceFields } from "~/components/evaluation-recommendation-choice-fields";
 import { RubricFields } from "~/components/evaluation-rubric-fields";
 import { Button } from "~/components/ui/button";
 import { useConfirm } from "~/components/ui/confirm-dialog";
+import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EventDateTime } from "~/components/ui/event-date-time";
 import { communicationScheduledLocalValue } from "~/modules/communications/communication-time";
 
@@ -32,11 +32,7 @@ export function EvaluationRoundsPanel() {
           >
             <div className="card-title">
               <h2>Round {round.roundNumber}</h2>
-              <span
-                className={`status ${round.status === "active" ? "success" : "info"}`}
-              >
-                {round.status}
-              </span>
+              <DomainStatusBadge domain="content" status={round.status} />
             </div>
             <h3>{round.name}</h3>
             <p className="subtle">
@@ -262,7 +258,7 @@ export function EvaluationRoundsPanel() {
                   Event evaluator access does not add anyone here automatically.
                 </p>
               </div>
-              <span className="status info">{round.reviewers.length}</span>
+              <span className="pc-count right">{round.reviewers.length}</span>
             </div>
             {round.reviewers.length ? (
               <ul className="list-clean">
@@ -377,9 +373,10 @@ export function EvaluationRoundsPanel() {
                           <span>
                             <strong>{progress.reviewerName}</strong>
                             <small className="subtle">
-                              {" · "}
                               {progress.assignedCount} assigned ·{" "}
-                              {progress.completedCount} reviews submitted
+                              {progress.completedCount} review
+                              {progress.completedCount === 1 ? "" : "s"}{" "}
+                              submitted
                               {progress.recusedCount
                                 ? ` · ${progress.recusedCount} returned`
                                 : ""}

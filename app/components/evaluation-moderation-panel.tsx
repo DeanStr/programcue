@@ -1,5 +1,6 @@
 import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
 import { Button } from "~/components/ui/button";
+import { statusPresentation } from "~/components/ui/status-presentation";
 
 export function EvaluationModerationPanel() {
   const {
@@ -47,7 +48,7 @@ export function EvaluationModerationPanel() {
                       <strong>{assignment.evaluatorName}</strong>
                       {assignment.teamName ? ` · ${assignment.teamName}` : ""}
                       <small className="subtle">
-                        {assignment.status.replaceAll("_", " ")}
+                        {statusPresentation("review", assignment.status).label}
                         {(assignment.reviewStatus === "submitted" ||
                           assignment.reviewStatus === "locked") &&
                         assignment.weightedScore !== null

@@ -1849,6 +1849,7 @@ components:
           title,
           description,
           format,
+          formatLabel,
           startsAt,
           endsAt,
           room,
@@ -1863,7 +1864,14 @@ components:
         slug: { type: string }
         title: { type: string }
         description: { type: string }
-        format: { type: string }
+        format:
+          type: string
+          description: Stored session-format key; use it for filtering.
+        formatLabel:
+          type: string
+          description: >-
+            The event's configured label for format, for display. A key the
+            event no longer configures is returned unchanged.
         startsAt: { type: string, format: date-time }
         endsAt: { type: string, format: date-time }
         room: { type: string }
@@ -2062,7 +2070,8 @@ components:
           description: >-
             Participant-accessible tasks. A session_details_review_v1 task
             includes sessionDetailsReview with the canonical fields,
-            sessionRevision and fingerprint required by the completion command.
+            sessionRevision and fingerprint required by the completion command,
+            plus the display formatLabel for fields.format.
           items: { $ref: "#/components/schemas/ApiRecord" }
         nextCursor: { type: [string, "null"] }
         correlationId: { type: string }

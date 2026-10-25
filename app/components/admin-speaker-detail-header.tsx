@@ -1,4 +1,4 @@
-import { ArrowLeft, Eye, ListChecks } from "lucide-react";
+import { Eye } from "lucide-react";
 
 import { ButtonLink } from "~/components/ui/button";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
@@ -73,12 +73,6 @@ export function AdminSpeakerDetailHeader({
         </div>
       </div>
       <div className="page-actions">
-        <ButtonLink to="/admin/speakers">
-          <ArrowLeft aria-hidden size={15} /> Back to roster
-        </ButtonLink>
-        <ButtonLink to="/admin/tasks">
-          <ListChecks aria-hidden size={15} /> Manage tasks
-        </ButtonLink>
         <ButtonLink to={`/admin/speakers/${profile.id}/preview`}>
           <Eye aria-hidden size={15} /> Preview participant view
         </ButtonLink>

@@ -1,6 +1,5 @@
 import { AlertTriangle, CheckCircle2, ListFilter } from "lucide-react";
 import { Form, Link, useLocation, useNavigate } from "react-router";
-
 import { AdminAssignedTasksPanel } from "~/components/admin-assigned-tasks-panel";
 import { AdminTaskPlanPanel } from "~/components/admin-task-plan-panel";
 import {
@@ -9,11 +8,24 @@ import {
 } from "~/components/task-completion-undo-control";
 import { AdminWorkspaceTabs } from "~/components/ui/admin-workspace-tabs";
 import { Button, ButtonLink } from "~/components/ui/button";
+import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { ReadinessWeightingCard } from "~/components/ui/readiness-weighting";
-import type { TaskTemplateDraftValues } from "~/modules/tasks/task-schema";
+import {
+  type TaskTemplateDraftValues,
+  taskTargetTypeLabel,
+  taskTypeLabel,
+} from "~/modules/tasks/task-schema";
 import type { AdminTasksData, TaskWorkspaceView } from "~/routes/admin-tasks";
 
 const TASK_FILTER_KEYS = ["task", "state", "impact", "target", "type", "owner"];
+
+const TASK_QUICK_FILTERS = [
+  { label: "Outstanding", state: "open", count: "open" },
+  { label: "Overdue", state: "overdue", count: "overdue" },
+  { label: "Needs review", state: "submitted", count: "submitted" },
+  { label: "Blocked", state: "blocked", count: "blocked" },
+  { label: "All", state: "", count: "all" },
+] as const;
 
 const TASK_WORKSPACE_PANELS = [
   { id: "assigned", label: "Assigned work" },
@@ -91,11 +103,9 @@ export function AdminTasksWorkspace({
         </div>
         <div className="page-actions">
           <ButtonLink to="/admin/tasks/deliverables">
-            Deliverables matrix
+            Speaker deliverables
           </ButtonLink>
-          <ButtonLink variant="primary" to="/admin/tasks/bulk">
-            Bulk actions
-          </ButtonLink>
+          <ButtonLink to="/admin/tasks/bulk">Bulk task actions</ButtonLink>
         </div>
       </div>
       <AdminWorkspaceTabs<TaskWorkspaceView>
@@ -121,30 +131,31 @@ export function AdminTasksWorkspace({
         hidden={data.view !== "assigned"}
       >
         <div className="tasks-quick-choices">
-          {[
-            { label: "Outstanding", state: "open" },
-            { label: "Overdue", state: "overdue" },
-            { label: "Needs review", state: "submitted" },
-            { label: "All", state: "" },
-          ].map((choice) => {
-            const search = new URLSearchParams(location.search);
-            search.set("state", choice.state);
-            search.delete("task");
-            search.delete("view");
-            return (
-              <Link
-                key={choice.label}
-                className={`tab${data.filters.state === choice.state ? " active" : ""}`}
-                aria-current={
-                  data.filters.state === choice.state ? "page" : undefined
-                }
-                preventScrollReset
-                to={`/admin/tasks?${search.toString()}`}
-              >
-                {choice.label}
-              </Link>
-            );
-          })}
+          {/* Each count is the number of rows its filter shows under the
+              other active filters, so no separate stats line repeats them. */}
+          <nav className="pc-filter-chips" aria-label="Task state">
+            {TASK_QUICK_FILTERS.map((choice) => {
+              const search = new URLSearchParams(location.search);
+              search.set("state", choice.state);
+              search.delete("task");
+              search.delete("view");
+              return (
+                <Link
+                  key={choice.label}
+                  aria-current={
+                    data.filters.state === choice.state ? "page" : undefined
+                  }
+                  preventScrollReset
+                  to={`/admin/tasks?${search.toString()}`}
+                >
+                  {choice.label}
+                  <span className="pc-filter-chip-count">
+                    {data.quickFilterCounts[choice.count]}
+                  </span>
+                </Link>
+              );
+            })}
+          </nav>
           <details className="tasks-filters">
             <summary>
               <ListFilter aria-hidden size={14} /> Filters
@@ -154,7 +165,7 @@ export function AdminTasksWorkspace({
                 data.filters.type,
                 data.filters.impact,
                 data.filters.task,
-                !["", "open", "overdue", "submitted"].includes(
+                !["", "open", "overdue", "submitted", "blocked"].includes(
                   data.filters.state,
                 ),
               ].filter(Boolean).length > 0
@@ -178,11 +189,11 @@ export function AdminTasksWorkspace({
                   defaultValue={data.filters.state}
                 >
                   <option value="">All statuses</option>
-                  <option value="open">Incomplete</option>
+                  <option value="open">Outstanding</option>
                   <option value="not_started">Not started</option>
                   <option value="in_progress">In progress</option>
                   <option value="blocked">Blocked</option>
-                  <option value="submitted">Awaiting review</option>
+                  <option value="submitted">Needs review</option>
                   <option value="completed">Completed</option>
                   <option value="waived">Waived</option>
                   <option value="overdue">Overdue</option>
@@ -227,10 +238,10 @@ export function AdminTasksWorkspace({
                 >
                   <option value="">All impacts</option>
                   <option value="critical">Critical</option>
-                  <option value="non_critical">Non-critical</option>
                   <option value="high">High</option>
                   <option value="medium">Medium</option>
                   <option value="low">Low</option>
+                  <option value="non_critical">High, medium or low</option>
                 </select>
               </label>
               <label className="label">
@@ -246,31 +257,16 @@ export function AdminTasksWorkspace({
               </label>
               <div className="page-actions" style={{ alignItems: "end" }}>
                 <Button type="submit">Apply filters</Button>
-                <ButtonLink to="/admin/tasks">Clear</ButtonLink>
+                <ButtonLink variant="ghost" to="/admin/tasks">
+                  Clear
+                </ButtonLink>
               </div>
             </Form>
           </details>
-        </div>
-        <p className="tasks-summary">
-          <a href="#readiness-weighting">
-            <strong>{data.taskSummary.readiness}%</strong> ready
+          <a className="tasks-readiness-link" href="#readiness-weighting">
+            <strong>{data.taskSummary.readiness}%</strong> event readiness
           </a>
-          <span>
-            <strong>{data.taskSummary.outstanding}</strong> outstanding
-          </span>
-          <span>
-            <strong>{data.taskSummary.evidenceReview}</strong> need review
-          </span>
-          <span>
-            <strong>{data.taskSummary.blocked}</strong> blocked
-          </span>
-          <span>
-            <strong>{data.taskSummary.overdue}</strong> overdue
-          </span>
-          <span className="tasks-result-count">
-            Showing {data.tasks.length} of {data.totalTaskCount} tasks
-          </span>
-        </p>
+        </div>
         <AdminAssignedTasksPanel data={data} busy={busy} />
         <details className="tasks-readiness-more mt" id="readiness-weighting">
           <summary>How task readiness is calculated</summary>
@@ -299,7 +295,7 @@ export function AdminTasksWorkspace({
         <section className="card pad tasks-template-inventory">
           <div className="card-title">
             <h3>Existing templates</h3>
-            <span className="status info">{activeTemplateCount} active</span>
+            <span className="pc-count">{activeTemplateCount} active</span>
           </div>
           {data.templates.length ? (
             <div className="table-wrap">
@@ -319,9 +315,11 @@ export function AdminTasksWorkspace({
                       <th scope="row" data-label="Template">
                         {template.name}
                       </th>
-                      <td data-label="Scope">{template.targetType}</td>
+                      <td data-label="Scope">
+                        {taskTargetTypeLabel(template.targetType)}
+                      </td>
                       <td data-label="Type">
-                        {template.taskType.replaceAll("_", " ")}
+                        {taskTypeLabel(template.taskType)}
                       </td>
                       <td data-label="Assignment">
                         {template.autoAssignOnAcceptance
@@ -329,11 +327,10 @@ export function AdminTasksWorkspace({
                           : "Manual"}
                       </td>
                       <td data-label="Status">
-                        <span
-                          className={`status ${template.status === "active" ? "success" : "neutral"}`}
-                        >
-                          {template.status}
-                        </span>
+                        <DomainStatusBadge
+                          domain="content"
+                          status={template.status}
+                        />
                       </td>
                     </tr>
                   ))}

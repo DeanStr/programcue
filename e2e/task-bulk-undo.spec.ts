@@ -51,6 +51,172 @@ async function selectAdministrator(page: import("@playwright/test").Page) {
   ]);
 }
 
+test("focused task chips count their destinations while retaining other filters", async ({
+  page,
+}) => {
+  await waitForInterface(page, "/admin/tasks?task=task-demo-handbook");
+  const rows = page.locator(".tasks-assigned tbody tr[id]");
+  await expect(rows).toHaveCount(1);
+  const states = page.getByRole("navigation", { name: "Task state" });
+  await expect(
+    states.getByRole("link", { name: "All 3", exact: true }),
+  ).toBeVisible();
+  await states.getByRole("link", { name: "All 3", exact: true }).click();
+  await expect(rows).toHaveCount(3);
+  await expect(page).not.toHaveURL(/task=/);
+
+  await waitForInterface(
+    page,
+    "/admin/tasks?task=task-demo-handbook&type=acknowledgement&impact=medium",
+  );
+  await states.getByRole("link", { name: "All 1", exact: true }).click();
+  await expect(rows).toHaveCount(1);
+  await expect(page).toHaveURL(/type=acknowledgement/);
+  await expect(page).toHaveURL(/impact=medium/);
+  await expect(page).not.toHaveURL(/task=/);
+});
+
+test("secondary task forms span the table without moving controls and retain drafts", async ({
+  page,
+}, testInfo) => {
+  for (const width of [1440, 1280, 1024, 390, 320]) {
+    await page.setViewportSize({ width, height: 900 });
+    await waitForInterface(page, "/admin/tasks");
+    await page.evaluate(() => document.fonts.ready);
+    const row = page.locator("#admin-task-task-demo-handbook");
+    const more = row.getByRole("button", { name: "More actions" });
+    const actions = page.getByRole("region", {
+      name: "Actions for Read the speaker handbook",
+    });
+    const geometry = () =>
+      row.evaluate((element) => {
+        const top = element.getBoundingClientRect().top;
+        return [...element.querySelectorAll("td, button")].map((item) => {
+          const bounds = item.getBoundingClientRect();
+          return { x: bounds.x, y: bounds.y - top, width: bounds.width };
+        });
+      });
+    const before = await geometry();
+    await more.click();
+    await actions.getByText("Waive task", { exact: true }).click();
+    await actions
+      .getByLabel("Reason", { exact: true })
+      .fill("Keep this waiver draft");
+    const after = await geometry();
+    for (const [index, bounds] of after.entries()) {
+      expect(Math.abs(bounds.x - before[index]!.x)).toBeLessThanOrEqual(1);
+      expect(Math.abs(bounds.y - before[index]!.y)).toBeLessThanOrEqual(1);
+      expect(Math.abs(bounds.width - before[index]!.width)).toBeLessThanOrEqual(
+        1,
+      );
+    }
+    const table = (await page.locator(".tasks-assigned table").boundingBox())!;
+    const panel = (await actions.boundingBox())!;
+    expect(panel.width).toBeGreaterThan(table.width * 0.9);
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth),
+    ).toBeLessThanOrEqual(width);
+    if (width === 1280 || width === 320) {
+      await page.screenshot({
+        path: testInfo.outputPath(`task-actions-${width}.png`),
+      });
+    }
+    await more.click();
+    await expect(actions).toBeHidden();
+    await more.click();
+    await expect(actions.getByLabel("Reason", { exact: true })).toHaveValue(
+      "Keep this waiver draft",
+    );
+  }
+});
+
+test("hidden workspace views have keyboard-accessible scroll controls", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await waitForInterface(page, "/admin/tasks");
+  const views = page.getByRole("navigation", { name: "Task workspace views" });
+  await expect(
+    views.getByRole("button", { name: "Show more views" }),
+  ).toHaveCount(0);
+  for (const width of [320, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await waitForInterface(page, "/admin/tasks");
+    const more = views.getByRole("button", { name: "Show more views" });
+    await expect(more).toBeVisible();
+    const templates = views.getByRole("button", { name: /^Templates/ });
+    // At 320px the long Plans label is also hidden. Each activation reveals
+    // the next clipped view without choosing it.
+    for (let step = 0; step < 3; step++) {
+      await more.focus();
+      await page.keyboard.press("Enter");
+      if (await templates.evaluate((tab) => tab === document.activeElement)) {
+        break;
+      }
+    }
+    await expect(templates).toBeFocused();
+    await expect(templates).toBeInViewport({ ratio: 1 });
+    await expect(
+      views.getByRole("button", { name: /^Assigned work/ }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await page.keyboard.press("Enter");
+    await expect(
+      page.getByRole("region", { name: "Create task template" }),
+    ).toBeVisible();
+    const previous = views.getByRole("button", { name: "Show previous views" });
+    await previous.focus();
+    await page.keyboard.press("Enter");
+    const focusedView = views.locator("li button:focus");
+    await expect(focusedView).toHaveCount(1);
+    await expect(focusedView).toBeInViewport({ ratio: 1 });
+    await expect(templates).toHaveAttribute("aria-pressed", "true");
+  }
+});
+
+test("task state filters stay visible and keyboard accessible on narrow screens", async ({
+  page,
+}, testInfo) => {
+  await waitForInterface(page, "/admin/tasks");
+  await page.evaluate(() => document.fonts.ready);
+  const filters = page.getByRole("navigation", { name: "Task state" });
+
+  for (const width of [320, 360, 375, 393]) {
+    await page.setViewportSize({ width, height: 900 });
+    const bounds = (await filters.boundingBox())!;
+    for (const link of await filters.getByRole("link").all()) {
+      await expect(link).toBeInViewport();
+      const linkBounds = (await link.boundingBox())!;
+      expect(linkBounds.x).toBeGreaterThanOrEqual(bounds.x);
+      expect(linkBounds.x + linkBounds.width).toBeLessThanOrEqual(
+        bounds.x + bounds.width,
+      );
+    }
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth),
+    ).toBeLessThanOrEqual(width);
+    if (width === 320) {
+      await page.screenshot({
+        path: testInfo.outputPath("task-filters-320.png"),
+      });
+    }
+  }
+
+  await page.setViewportSize({ width: 320, height: 900 });
+  await filters.getByRole("link", { name: /^All \d+$/u }).focus();
+  await page.keyboard.press("Enter");
+  await expect(
+    filters.getByRole("link", { name: /^All \d+$/u }),
+  ).toHaveAttribute("aria-current", "page");
+  const completedTask = page
+    .getByRole("region", { name: "Assigned work", exact: true })
+    .getByText("Complete your speaker profile", { exact: true });
+  await expect(completedTask).toBeVisible();
+  await filters.getByRole("link", { name: /^Outstanding \d+$/u }).focus();
+  await page.keyboard.press("Enter");
+  await expect(completedTask).toHaveCount(0);
+  await page.waitForLoadState("networkidle");
+});
+
 test("task dashboard filters visible work and keeps template creation open", async ({
   page,
 }) => {
@@ -99,12 +265,18 @@ test("task dashboard filters visible work and keeps template creation open", asy
   const handbookTask = assignedWork.getByRole("row").filter({
     has: page.getByText("Read the speaker handbook", { exact: true }),
   });
-  await handbookTask.getByText("Extend deadline", { exact: true }).click();
-  await handbookTask.getByLabel(/New deadline/).fill("2035-05-20");
-  await handbookTask
+  await handbookTask.getByRole("button", { name: "More actions" }).click();
+  const handbookActions = page.getByRole("region", {
+    name: "Actions for Read the speaker handbook",
+  });
+  await handbookActions.getByText("Extend deadline", { exact: true }).click();
+  await handbookActions.getByLabel(/New deadline/).fill("2035-05-20");
+  await handbookActions
     .getByLabel("Reason for deadline extension")
     .fill("Speaker requested an individual extension.");
-  await handbookTask.getByRole("button", { name: "Confirm extension" }).click();
+  await handbookActions
+    .getByRole("button", { name: "Confirm extension" })
+    .click();
   await expect(
     page.getByRole("status").filter({ hasText: "Speaker deadline extended" }),
   ).toBeVisible();
@@ -113,7 +285,6 @@ test("task dashboard filters visible work and keeps template creation open", asy
   await filters.getByLabel("Status").selectOption("completed");
   await filters.getByRole("button", { name: "Apply filters" }).click();
   await expect(page).toHaveURL(/state=completed/u);
-  await expect(page.getByText("Showing 1 of 3 tasks")).toBeVisible();
   await expect(
     assignedWork.getByText("Complete your speaker profile", { exact: true }),
   ).toBeVisible();
@@ -198,8 +369,12 @@ test("task status bulk actions require an exact preview and can be cancelled", a
     has: page.getByText("Complete your speaker profile", { exact: true }),
   });
   await expect(unchangedTask.getByLabel("Complete status")).toBeVisible();
-  await unchangedTask.getByText("Task details", { exact: true }).click();
-  await expect(unchangedTask).toContainText("Revision 1");
+  await unchangedTask.getByRole("button", { name: "More actions" }).click();
+  const unchangedActions = page.getByRole("region", {
+    name: "Actions for Complete your speaker profile",
+  });
+  await unchangedActions.getByText("Task details", { exact: true }).click();
+  await expect(unchangedActions).toContainText("Revision 1");
 });
 
 test("an unavailable task preview returns to the bulk workspace", async ({
@@ -418,9 +593,11 @@ test("deliverable comments preserve author and event-local timestamps across rol
     /America\/Toronto/,
   );
 
-  const administratorComposer = row.locator("details").filter({
-    hasText: "Add comment",
-  });
+  await row.getByRole("button", { name: "More actions" }).click();
+  const administratorComposer = page
+    .getByRole("region", { name: "Actions for Upload presentation slides" })
+    .locator("details")
+    .filter({ hasText: "Add comment" });
   await administratorComposer.locator("summary").click();
   await administratorComposer
     .getByRole("textbox", { name: "Message" })
@@ -521,28 +698,40 @@ test("laptop tasks start with actionable rows and quick choices", async ({
   await page.setViewportSize({ width: 1280, height: 720 });
   await waitForInterface(page, "/admin/tasks");
   await expect(page.getByLabel("Status", { exact: true })).toBeHidden();
-  const rows = page.locator(".tasks-assigned tbody tr");
+  const rows = page.locator(".tasks-assigned tbody tr[id]");
   await expect(rows).toHaveCount(2);
   await expect(rows.nth(0)).toBeInViewport();
   await expect(rows.nth(1)).toBeInViewport();
   await expect(
     page.getByText("Dependencies refresh before every read"),
   ).toHaveCount(0);
-  await page.getByRole("link", { name: "All", exact: true }).click();
+  await page
+    .getByRole("navigation", { name: "Task state" })
+    .getByRole("link", { name: /^All \d+$/u })
+    .click();
   await expect(rows).toHaveCount(3);
   await page.reload();
   await expect(rows).toHaveCount(3);
   await page.getByRole("button", { name: /Templates/ }).click();
   await page.getByRole("button", { name: /Assigned work/ }).click();
   await expect(rows).toHaveCount(3);
-  await page.getByRole("link", { name: "Needs review", exact: true }).click();
+  await page
+    .getByRole("navigation", { name: "Task state" })
+    .getByRole("link", { name: /^Needs review \d+$/u })
+    .click();
   await expect(page).toHaveURL(/state=submitted/);
   await expect(
     page.getByText("No assigned work matches these filters"),
   ).toBeVisible();
-  await page.getByRole("link", { name: "Overdue", exact: true }).click();
+  await page
+    .getByRole("navigation", { name: "Task state" })
+    .getByRole("link", { name: /^Overdue \d+$/u })
+    .click();
   await expect(page).toHaveURL(/state=overdue/);
-  await page.getByRole("link", { name: "Outstanding", exact: true }).click();
+  await page
+    .getByRole("navigation", { name: "Task state" })
+    .getByRole("link", { name: /^Outstanding \d+$/u })
+    .click();
   await expect(rows).toHaveCount(2);
 });
 
@@ -571,7 +760,7 @@ test("dashboard work counts open the corresponding filtered records", async ({
     .getByRole("link", { name: /Speakers with outstanding requirements/ })
     .click();
   await expect(page).toHaveURL(/owner=participant&state=open/);
-  await expect(page.locator(".tasks-assigned tbody tr")).toHaveCount(2);
+  await expect(page.locator(".tasks-assigned tbody tr[id]")).toHaveCount(2);
   await expect(
     page
       .locator(".tasks-assigned")

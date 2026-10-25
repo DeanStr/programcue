@@ -388,27 +388,34 @@ export function ScheduleReviewLinksPanel({
                   omitted.
                 </p>
                 {workspace.reviewLinkSummary.disclosures.length ? (
-                  <ol className="schedule-review-link-disclosure">
-                    {workspace.reviewLinkSummary.disclosures.map(
-                      (item, index) => (
-                        // biome-ignore lint/suspicious/noArrayIndexKey: Frozen disclosure rows have no stored identity; duplicate titles are valid.
-                        <li key={index}>
-                          <strong>{item.title}</strong>
-                          <span>
-                            {expiryLabel(
-                              item.startsAt,
-                              workspace.event.timezone,
-                            )}
-                            {" · "}
-                            {item.room}
-                            {item.speakers.length
-                              ? ` · ${item.speakers.join(", ")}`
-                              : ""}
-                          </span>
-                        </li>
-                      ),
-                    )}
-                  </ol>
+                  <section
+                    className="schedule-review-link-disclosure"
+                    aria-label="Sessions in this snapshot"
+                    // biome-ignore lint/a11y/noNoninteractiveTabindex: Keyboard users must be able to scroll the bounded session list.
+                    tabIndex={0}
+                  >
+                    <ol>
+                      {workspace.reviewLinkSummary.disclosures.map(
+                        (item, index) => (
+                          // biome-ignore lint/suspicious/noArrayIndexKey: Frozen disclosure rows have no stored identity; duplicate titles are valid.
+                          <li key={index}>
+                            <strong>{item.title}</strong>
+                            <span>
+                              {expiryLabel(
+                                item.startsAt,
+                                workspace.event.timezone,
+                              )}
+                              {" · "}
+                              {item.room}
+                              {item.speakers.length
+                                ? ` · ${item.speakers.join(", ")}`
+                                : ""}
+                            </span>
+                          </li>
+                        ),
+                      )}
+                    </ol>
+                  </section>
                 ) : (
                   <p className="subtle">
                     This snapshot has no scheduled public sessions.

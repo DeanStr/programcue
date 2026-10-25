@@ -19,6 +19,10 @@ test("sponsor contact submits within allowance and organiser accepts into the or
   await page.goto("/");
   await page.goto("/admin/sponsors");
   await page
+    .locator("#main .page-actions")
+    .getByRole("link", { name: "Add sponsor", exact: true })
+    .click();
+  await page
     .getByLabel("Company name", { exact: true })
     .fill("Example sponsor");
   await page.getByLabel("Tier", { exact: true }).fill("Gold");
@@ -152,7 +156,7 @@ test("deliverables matrix supports filters, evidence navigation and event-local 
   await page.goto("/");
   await page.goto("/admin/tasks");
   await page
-    .getByRole("link", { name: "Deliverables matrix", exact: true })
+    .getByRole("link", { name: "Speaker deliverables", exact: true })
     .click();
   await expect(
     page.getByRole("heading", { name: "Speaker deliverables", exact: true }),

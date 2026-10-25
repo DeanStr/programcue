@@ -286,7 +286,7 @@ export default function SubmissionsAdmin({ loaderData }: Route.ComponentProps) {
                   placeholder="Title, submitter or email"
                 />
               </label>
-              <label className="submissions-filter">
+              <label className="submissions-filter submissions-filter-routing">
                 <span>Routing</span>
                 <select
                   className="select"
@@ -354,8 +354,8 @@ export default function SubmissionsAdmin({ loaderData }: Route.ComponentProps) {
                 </select>
               </label>
               <div className="submissions-filter-actions">
-                <Button variant="primary" size="small" type="submit">
-                  Apply
+                <Button size="small" type="submit">
+                  Apply filters
                 </Button>
                 <ButtonLink
                   variant="ghost"

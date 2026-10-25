@@ -10,11 +10,10 @@
 }
 
 /* Alternate schedule views share the room-grid data without introducing a second scheduling model. */
+/* One row: a segmented control that wraps strands its last view on a line of
+   its own. On narrow screens the items share the width with tighter padding. */
 .schedule-view-tabs {
   margin-left: auto;
-  display: flex;
-  gap: var(--space-1);
-  flex-wrap: wrap;
 }
 .schedule-alt {
   min-width: 0;
@@ -128,17 +127,11 @@
   .schedule-inspector-toggle {
     order: 3;
     flex-direction: row;
-    align-items: baseline;
+    align-items: center;
     justify-content: flex-start;
     width: 100%;
     padding: var(--space-3) var(--space-4);
     gap: var(--space-2);
-  }
-  .schedule-inspector-toggle strong,
-  .schedule-inspector-toggle .help {
-    writing-mode: horizontal-tb;
-    transform: none;
-    max-height: none;
   }
 }
 @media (max-width: 760px) {
@@ -182,17 +175,11 @@
   }
   .schedule-inspector-toggle {
     flex-direction: row;
-    align-items: baseline;
+    align-items: center;
     justify-content: flex-start;
     width: 100%;
     padding: var(--space-3) var(--space-4);
     gap: var(--space-2);
-  }
-  .schedule-inspector-toggle strong,
-  .schedule-inspector-toggle .help {
-    writing-mode: horizontal-tb;
-    transform: none;
-    max-height: none;
   }
   .schedule-source {
     max-height: 280px;
@@ -200,9 +187,6 @@
   .schedule-view-tabs {
     width: 100%;
     margin-left: 0;
-  }
-  .schedule-view-tabs .btn {
-    flex: 1;
   }
   .schedule-stage .schedule-canvas,
   .schedule-stage .schedule-conflicts {

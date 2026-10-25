@@ -1,11 +1,250 @@
 # Verified implementation status
 
-Evidence recorded through **22 October 2026**, including the local interface refinement and visual evaluation pass, assistant request presentation and partial task coverage, readiness source links, the sponsor/deliverables release, application/scanner releases, a controlled live invited-speaker journey and autonomous backup acceptance.
+Evidence recorded through **24 October 2026**, including the navigation and page header pass, the local interface consistency pass and its visual review follow-up, the interface refinement and visual evaluation pass, assistant request presentation and partial task coverage, readiness source links, the sponsor/deliverables release, application/scanner releases, a controlled live invited-speaker journey and autonomous backup acceptance.
 This is the current capability,
 requirements and acceptance index; consolidation does not constitute a new
 verification or deployment. The [product specification](../sessionboard-replacement-full-scope-implementation-specification-with-competition-ux.md)
 owns intended scope, [DECISIONS.md](DECISIONS.md) owns engineering decisions, and
 Git history retains earlier committed work logs.
+
+## Navigation and page header pass — 24 October 2026
+
+**Local presentation change; no API or schema change; not deployed.** See
+*Navigation, page headers and filters* in [DECISIONS.md](DECISIONS.md).
+
+- Workspace tabs are underlined on the page; quick filters are count chips.
+  Tasks merged its state filter and stats line into chips whose counts match
+  the rows each shows, split Impact into its own column and dropped the
+  single-task 0% bar. Operation centre's Activity timeline, exports and
+  imports are tabs instead of a primary header button stacking panels.
+- Page headers hold actions only: duplicate links to sidebar destinations,
+  breadcrumb back buttons and "On this page" anchors are removed. Navigation
+  primaries became bordered buttons; Add session is the programme page
+  primary and Bulk session updates moved there from Operation centre.
+- Sidebar: Event assistant and Sponsors are top-level event work, Speaker
+  directory has an Organisation group. Titles match sidebar labels (Command
+  centre, Operation centre, Communications, Speaker resources, Bulk task
+  actions, Speaker deliverables).
+- Defects fixed: `.list-clean` had no rule (bullets; name and email run
+  together); a doubled table edge under row headers; Sponsors' empty state
+  claimed a filter mismatch; complete Command centre bars read as empty;
+  full-width stack buttons; unlabelled round-progression fields.
+- Sponsors' create form opens on request; preset task plans confirm through
+  a dialog listing the templates; the resource speaker preview is a
+  disclosure and attachments precede Publish; matrix cells no longer repeat
+  their column header; the Schedule notes rail uses an icon and a word, not
+  rotated text.
+
+Not changed: organisation/event breadcrumbs (required by §11.5); filters still
+apply on an explicit button; the Templates tab keeps its create form open;
+compact workbench titles.
+
+Validation (local, 24 October): `npm run check:core` lanes pass — Biome,
+TypeScript, production build, configuration tests (98, including the video
+story-state check with 11 re-pinned product snapshots) and unit/Worker tests
+(210 files, 2,072 tests; 98 files, 668 tests). The Chromium Playwright suite
+ran with snapshot updates (272 tests across desktop, mobile, laptop and the
+mobile WebKit UX project); its four failures (a reload that no longer kept a
+section open, the palette's old Home name, and the Applications filter row
+wrapping under the longer Apply filters label) were fixed and their three
+specs re-run green. Twenty-six visual baselines were regenerated and
+reviewed. `npm run check` (dependency audit and Firefox/WebKit smoke) was not
+run. The launch film's recreated scenes and narration still use the old
+labels (Home, Command Centre, Open Command Centre).
+
+Review follow-up (24 October, same local pass):
+- Task chips count their destination after clearing a focused task, while
+  retaining the other filters. A focused handbook task now offers All 3,
+  matching the three rows opened by the link.
+- Secondary task forms span the table in their own row. Opening More and a
+  waiver keeps every requirement cell and action control in place at
+  320, 390, 1024, 1280 and 1440px; closing and reopening preserves draft input.
+- Hidden button-based workspace views have explicit scroll arrows. Keyboard
+  activation reveals and focuses a tab without selecting its view; arrows
+  disappear when no views remain hidden in that direction.
+- The mobile layout test accepts the organisation Scope control when a prior
+  CRM fixture has granted the demo administrator organisation access, removing
+  the observed test-order dependency.
+- Shared tabs and filter chips use a background rule and inset border instead
+  of raw shadows, satisfying the existing CSS hygiene gate. The sponsor-create
+  link uses a structured route target so its fragment is not mistaken for a
+  colour literal by the design-system check.
+
+Follow-up validation: production build, generated TypeScript checks, Biome,
+CSS hygiene/design-system adoption and the video story-state check pass.
+Focused tests pass (22 component/navigation tests and 23 task-route Worker
+tests). Eight Chromium specs pass across desktop, mobile and laptop projects
+(88 checks, including three new task regressions and the CRM-before-mobile
+test order). Only the mobile Tasks baseline changed; it and the expanded
+action-panel screenshots at 320px and 1280px were inspected. A second visual
+run without snapshot updates passes all 32 checks. The complete `npm run check`
+gate was not rerun for this focused follow-up.
+
+Requested CLI review/fix loop (24 October): two rounds of
+`codex exec review --uncommitted -m gpt-6.1-sol -c 'model_reasoning_effort="high"'`
+both reported no actionable findings. No additional code fixes or dismissed
+findings were required; the tracked patch and untracked-file hashes matched
+between rounds. `npm run check:focused` passed Biome, generated TypeScript
+validation and 2,156 affected tests in 213 files. Each reviewer also passed
+56 focused unit tests and 69 Worker tests; round 1 passed three Chromium
+regressions, and round 2 passed the production build and all 14 task-workflow
+browser checks. Raw findings, logs, patch snapshots, hashes and per-round
+assessments are in `.artifacts/review-loop-20261024T121047Z/`. Only this audit
+receipt changed after the final review. The full `npm run check` gate was not
+run for this review loop.
+
+## Interface consistency pass — 23 October 2026
+
+**Local presentation change plus one additive public API field; not
+deployed.**
+
+Defects fixed:
+- The parked skip link's shadow no longer smudges the top-left of light
+  headers (reviewer, participant, applicant and public pages).
+- Disabled buttons use one neutral treatment. Copper at half opacity read as a
+  broken pink control; a second, conflicting opacity rule in the planner
+  stylesheet is gone.
+- `<small>` no longer falls to the browser's 11.7px; it sits one pixel below its
+  context, never under 12px.
+- The task-state control uses two columns at 400px and below so all four
+  filters fit narrow screens. Mobile schedule action labels wrap while the
+  external-link icon retains its 14px width.
+
+Consistency:
+- View toggles (branding and site previews, form builder panes, email and
+  applicant previews, embed width, resource embed kind, schedule view and day,
+  session-content preview, task quick filters) share `.pc-segmented`. Review &
+  selection uses the shared page tabs. The underline `.tab` style is retired.
+  The event-site editor's section tabs and the public day tabs keep their own
+  styles.
+- Schedule planner and Public programme & embeds header actions are bordered
+  buttons; Add session moved out of the programme page's link row. Form
+  Builder's Publish version renders as the page primary. Task rows show one
+  decision with waiver, extension, details and comments behind More.
+- Counts beside headings render as count pills, not status dots.
+- Field help, errors, record metadata and notice text are 13px; section and
+  empty-state descriptions are 14px.
+
+Raw values replaced:
+- Statuses of evaluation teams, rounds, assignments and invitations, task
+  templates, resource pages, sender profiles, template versions, session
+  visibility and participant application summaries use presentation labels.
+  Task types use shared labels.
+- Session formats show the event's configured label in the evaluation session
+  queue, speaker detail, participant sessions and session-details review,
+  session-content preview, embed builder and public programme, event site and
+  itinerary, and session-content pages and their revision history (which also
+  label visibility and content status). Published sessions carry
+  `formatLabel`, added to the public session schema; the participant API's
+  session-details review carries it beside the fingerprinted fields.
+
+Not covered: about 40 remaining underscore-to-space displays (roles, file
+kinds, import entity types) and page-specific 12px rules outside the shared
+roles.
+
+Validation:
+- Before the responsive follow-up, `npm run check:core` passed: Biome,
+  TypeScript, 668 unit, 2,072 Worker and
+  one agent test, build, CSS hygiene, design-system adoption, OpenAPI,
+  migration, audit and recovery contracts. New tests cover published and paged
+  format labels and the one-decision task row.
+- 45 visual baselines were regenerated with `--update-snapshots=all` and
+  inspected; 26 film pins were updated (frames not re-rendered).
+- The first full Chromium run failed five browser checks that asserted the
+  old lowercase formats and direct task-row disclosures; those specs were
+  updated and passed with the visual suite (60 checks). The final full run
+  passed 265 checks with 2 skipped and one failure: the mobile
+  public-programme screenshot alternates between two page heights. It fails
+  the same way at `b556d536` (3 of 6 repeats; 2 of 6 with this change), so it
+  is pre-existing.
+- The evaluation suite passed 12 of 12. Firefox/WebKit smoke and the complete
+  `npm run check` gate were not run.
+- Responsive follow-up: both layout regressions failed the new browser checks
+  against the prior build. After the fixes, seven focused Chromium behavior and
+  visual checks passed, including filter containment and keyboard use at
+  320–393px and the schedule icon at 320–412px. The 320px task and 320px/393px
+  schedule screenshots were inspected; existing visual baselines did not change.
+  Generated TypeScript checks, Biome, build and design-system checks passed.
+  The full repository gate was not rerun for these two CSS fixes.
+- The requested Codex review/fix loop completed two
+  `codex exec review --uncommitted -m gpt-6.1-sol -c 'model_reasoning_effort="high"'`
+  rounds on the same patch. Both reported no actionable regressions; no
+  additional code fixes or dismissed findings were required. Round 1 passed
+  generated TypeScript checks and 93 focused unit/Worker tests. Round 2 passed
+  generated TypeScript checks, build, 81 focused unit/Worker tests and three
+  Chromium checks. The full repository gate was not rerun. Logs, findings,
+  patch hash and per-round assessments are in
+  `.artifacts/review-loop-20261023/`; only this audit receipt changed afterward.
+
+Visual review follow-up (24 October, same uncommitted pass):
+- A visual review of all 45 changed baselines plus live checks (hover, focus,
+  forced colours, 320–412px) found regressions, which were fixed:
+  - The selected segment measured 1.05:1 against its track; it now carries a
+    4.6:1 border, and forced colours use the system Highlight fill.
+  - The new disabled well made disabled bordered buttons outweigh enabled ones
+    (review workbench, Event settings, public Clear filters). Only filled
+    primaries keep the well now.
+  - Opening a task row's More panel threw the trigger onto its own line.
+  - In forced colours the selected page tab had no indicator.
+- Also fixed:
+  - The design-system width demo now narrows its frame.
+  - Form Builder and event-site mobile pane switches use page tabs.
+  - The schedule view toggle no longer wraps at 320px.
+  - Applicants see "Under review" for internal review stages.
+  - Managed-embed status and task template scope use labels.
+  - Reviewer role is plain labelled text.
+  - Profile-history and operation counts are count pills.
+  - Event settings' compact Save is a primary.
+  - Applications' Apply is no longer a second filled primary.
+- Remaining role displays in the admin account and event switcher still use
+  underscore-to-space.
+- Validation:
+  - Biome, generated TypeScript and design-system checks pass.
+  - `npm run test:changed` passed 210 files and 2,080 tests before the final
+    small task-panel edit; the task workspace tests pass after it.
+  - Visual, public-site and review-link suites passed 41 checks; 27 baselines
+    were regenerated with `--update-snapshots=all` and inspected region by
+    region against the first pass.
+  - 15 affected behaviour specs passed 143 of 144 checks. The failure was a
+    stale task-row selector in `speaker-portal.spec.ts`; after the fix that
+    spec passed 8 of 8.
+  - `check:core`, Firefox/WebKit smoke and the complete `npm run check` gate
+    were not rerun.
+- Three further review findings, fixed afterwards:
+  - Public programme search and facet selects had no resting border, and a
+    `background` shorthand cleared the select chevron. They now have a surface
+    fill, an editorial hairline, chevrons and the shared focus treatment, in
+    light and dark themes.
+  - The review-link dialog's session list cut off exactly between rows with no
+    cue. It is now a framed, keyboard-focusable region; part of the next row
+    shows, with scroll shadows only while more rows are hidden.
+  - Evaluation administration's Assign, Add another reviewer, Decide and
+    results Apply were actions styled as links. They are now small bordered
+    buttons, level with their selects. The results-row Assign link is a button
+    link; Open discussion stays a link. On mobile, later items in an
+    evaluation table cell stay in the value column, so the reviewer select no
+    longer clips.
+  - Validation: Biome, generated TypeScript, design-system checks and 158
+    related unit tests pass. Visual, public-site and review-link suites passed
+    41 checks; 9 baselines changed and were inspected. Eleven evaluation,
+    public-programme, embed, itinerary and accessibility specs passed 76
+    checks, and six evaluation and accessibility specs passed 51 checks after
+    the mobile cell fix.
+- Final manifest repair: refreshed 19 of the 26 film screenshot pins against
+  the current, visually reviewed baselines. Story-state and caption validation
+  and `npm run test:config` (98 tests) pass. The full core and release gates
+  were not rerun for this metadata-only repair; film frames were not re-rendered.
+- Post-repair review loop (24 October): two further passes of the requested
+  `codex exec review --uncommitted -m gpt-6.1-sol -c 'model_reasoning_effort="high"'`
+  both reported no actionable findings. No additional fixes or dismissed findings
+  were required. Each reviewer passed 93 focused unit/Worker tests; independent
+  validation passed 98 tests across seven files, generated TypeScript checks,
+  Biome, design-system checks and film validation. OpenAPI validation also passed.
+  Round 2 stopped its broader related-test run in favour of focused tests; that
+  interrupted run is not credited as passing. Browser and full repository gates
+  were not rerun; application code was unchanged. Raw reviews, assessments,
+  input hashes and check logs are in `.artifacts/review-loop-20261024-_eu9m5cr/`.
+  Only this audit receipt changed after the final clean review.
 
 ## Interface defects, displayed values and view races — 22 October 2026
 
@@ -39,8 +278,8 @@ Raw values replaced:
   Recent communications.
 - Applications shows the routing state alone when no team is routed, and the
   team alone when routing is automatic.
-- Session formats still show the event's format key, because the review loader
-  does not read the event's format labels.
+- Session formats still showed the event's format key here; resolved by the
+  23 October consistency pass.
 
 View races fixed in the Applications grid:
 - Column and density changes build on the last requested URL. Holding requests
@@ -127,7 +366,7 @@ brand, primary actions, links and selection. In-progress and informational
 statuses, including status badges and in-progress speaker stages, use a muted
 steel blue. Failure moved from a 0° red to crimson (about 345°) on near-neutral
 rose surfaces; the warning solid is a clearer amber-gold; healthy incomplete
-Command Centre meters are neutral. Field errors and notification counts use the
+Command centre meters are neutral. Field errors and notification counts use the
 failure tokens. All new text pairs meet 4.5:1 and graphical marks 3:1.
 
 These colour changes fell inside the visual tests' 1% tolerance, so 25 affected
@@ -159,13 +398,13 @@ deployed.** Current behavior:
 
 - Ordinary administrator and participant page titles share 34px bold on desktop
   and 30px bold on phones; Form Builder and the reviewer workbench use a 23px
-  compact variant; Command Centre and Schedule keep their own title roles. A
+  compact variant; Command centre and Schedule keep their own title roles. A
   browser check holds the twelve-page administration title cohort to one style
   per viewport.
 - At 360px and below the top bar keeps the event name on its own row; between
   761 and 1000px the search trigger truncates instead of wrapping. Pressed
   buttons change fill instead of moving.
-- Command Centre places critical next actions before the readiness score, whose
+- Command centre places critical next actions before the readiness score, whose
   colour follows the server readiness state and warning count. Meters are 6px and
   global New is secondary.
 - Applications: Density and Columns are URL view controls that keep applied
@@ -354,7 +593,7 @@ inventing an unavailable write-token count. Private requester-scoped reports sur
 reloads and connect the request/hash, source records, immutable proposal revisions,
 review decisions, approval wait and persisted action result.
 
-Readiness follows the Command Centre's existing highest-priority action. Its read
+Readiness follows the Command centre's existing highest-priority action. Its read
 tool supplies exact supporting records (bounded to 100 and an 8,000-character context), explicit task-target fields
 and eligible named organisers. Insufficient evidence prevents a preview. Task-backed
 blockers and existing assistant coordination work link to existing tasks instead of
@@ -919,7 +1158,7 @@ Blocked tasks name and link their unfinished prerequisites. Session creation use
 **Add session**, and published schedules offer **Edit next version** with an
 explicit unchanged-publication explanation.
 
-Command Centre leads with the ranked action and linked counts for decision-ready
+Command centre leads with the ranked action and linked counts for decision-ready
 proposals, distinct participant owners with incomplete speaker or session requirements,
 sessions without an active-version placement, and submitted tasks. Readiness
 calculation remains below those queues. The exact count definitions are recorded
@@ -927,15 +1166,15 @@ in [DECISIONS.md](DECISIONS.md).
 
 Evidence: focused component/service tests, `e2e/schedule-calendar.spec.ts`,
 `e2e/task-bulk-undo.spec.ts`, and refreshed laptop schedule/task plus desktop/mobile
-Command Centre and mobile task snapshots. The 18 October release additionally
-verified the live Command Centre priorities, default Outstanding task filter and
+Command centre and mobile task snapshots. The 18 October release additionally
+verified the live Command centre priorities, default Outstanding task filter and
 collapsed/openable laptop schedule inspector through `/evaluate`. This does not
 establish external-provider acceptance. Browser evidence remains scoped; a full film render
 was not requested or run. The film's pinned snapshot hashes are synchronized with
 the reviewed captures. Review corrections add in-dialog
 break failure/progress/committed-warning coverage, fitted Day/Week calendars,
 a bounded 1024px room grid, active custom-filter indicators and accurate empty
-queue guidance. Command Centre readiness/action annotation frames were rendered
+queue guidance. Command centre readiness/action annotation frames were rendered
 and visually checked against the refreshed screenshot; this is preview evidence,
 not a newly released film.
 The fallback review also verifies that missing or malformed dashboard counts fail
@@ -1012,7 +1251,7 @@ the deployment and acceptance boundaries above.
 | Requirement IDs | Verified status |
 | --- | --- |
 | OBJ-001–006 | Connected application → evaluation → decisions → onboarding → scheduling/publication → communications/integrations workflow; replacement acceptance outstanding. |
-| ADM-001–005 | Command Centre, D1/Airtable event creation, setup, invitations, organisation/event grants, switching and role matrix connected. |
+| ADM-001–005 | Command centre, D1/Airtable event creation, setup, invitations, organisation/event grants, switching and role matrix connected. |
 | CFP-001–009 / SUB-001–007 | Versioned authoring/intake, conditional schemas, stepped layout, draft/claim/revision flows, co-speakers, direct-session intake and lifecycle administration connected. |
 | EVA-001–009 | Teams, invitations, rounds, assignments, mixed rubrics, moderation, decisions and acceptance onboarding connected. |
 | ABS-01/02/03/07 | Independent round configuration, reviewer pools, numeric/dropdown/free-text criteria and blind-review enforcement verified by Worker and ABS-S2/S3 browser coverage. |
@@ -1026,7 +1265,7 @@ the deployment and acceptance boundaries above.
 | EMB-01/04/09/12/13/14/15 | Public programme/gallery, accessible details and configurable/managed embeds connected over published data. |
 | AIA-08 | Deterministic auto-placement, exact preview, selected-subset confirmation and authoritative revalidation connected. |
 | TEC-001–009 | Worker/D1/R2/Queue/Workflow/DO architecture, isolation, API and operational mechanics connected; historical deployment/backup/alert evidence below does not establish RPO/RTO. |
-| UX-001–010 | Search/saved views, readiness, review workspace, consequence previews, recovery, undo, AI, walkthroughs and Operation Centre connected; manual accessibility acceptance outstanding. |
+| UX-001–010 | Search/saved views, readiness, review workspace, consequence previews, recovery, undo, AI, walkthroughs and Operation centre connected; manual accessibility acceptance outstanding. |
 | CMP-001–013 | Repository and deployed evaluator evidence exist, but a completed independent evaluation, Forge/submission/reimbursement/judging and walkthrough evidence remain external. |
 | OUT-001–005 | General CRM, broad marketing automation, generic CMS, payments and multilingual expansion excluded. Speaker Network is a bounded extra-credit slice, not frozen base scope. |
 

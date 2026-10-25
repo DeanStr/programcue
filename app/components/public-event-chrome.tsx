@@ -233,7 +233,7 @@ export function PublicEventHeader({
               ? PUBLIC_EVENT_NAVIGATION_LABELS.sharedItinerary
               : PUBLIC_EVENT_NAVIGATION_LABELS.itinerary}
           </span>
-          <span className="status info" aria-hidden="true">
+          <span className="pc-count" aria-hidden="true">
             {itinerary.savedCount}
           </span>
         </ButtonAnchor>

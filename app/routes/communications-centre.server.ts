@@ -423,7 +423,7 @@ async function handleTemplateAutomationIntent({
       ok: true,
       intent,
       message:
-        "The real test email is queued with representative merge data. Inspect provider progress in the Operation Centre.",
+        "The real test email is queued with representative merge data. Inspect provider progress in the Operation centre.",
       operationId: result.operationId ?? undefined,
     });
   }
@@ -564,7 +564,7 @@ async function handleCalendarCommunicationIntent({
     {
       ok: false,
       intent,
-      message: "Unsupported Communications Centre action.",
+      message: "Unsupported communications action.",
     },
     { status: 400 },
   );

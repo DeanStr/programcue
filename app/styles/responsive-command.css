@@ -1,4 +1,4 @@
-/* Command Centre breakpoint refinements. */
+/* Command centre breakpoint refinements. */
 
 @media (max-width: 1180px) {
   .command-workflow-row {
@@ -27,9 +27,6 @@
 }
 
 @media (max-width: 760px) {
-  .app-admin .command-page-head h1 {
-    font-size: var(--text-2xl);
-  }
   .command-page-head {
     align-items: flex-start;
     margin-bottom: var(--space-5);

@@ -179,7 +179,7 @@ export class CommunicationQueueUnavailableError extends Error {
     cause?: unknown,
   ) {
     super(
-      "The communication was saved but could not be sent. Retry it from the Operation Centre.",
+      "The communication was saved but could not be sent. Retry it from the Operation centre.",
       { cause },
     );
     this.name = "CommunicationQueueUnavailableError";

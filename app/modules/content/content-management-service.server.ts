@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { statusPresentation } from "~/components/ui/status-presentation";
+import { sessionFormatLabelSql } from "~/modules/events/event-configuration";
 import { ContentArchiveService } from "./content-archive-service.server";
 import { ContentManagementStateError } from "./content-management-errors";
 
@@ -36,6 +38,7 @@ type ContentRevisionRow = {
   trackId: string | null;
   trackName: string | null;
   format: string;
+  formatLabel: string;
   durationMinutes: number;
   requiredResourcesJson: string;
   visibility: "public" | "private" | "hidden";
@@ -67,7 +70,11 @@ function contentRevisionChanges(
       before: previous.trackName ?? "No track",
       after: revision.trackName ?? "No track",
     },
-    { label: "Format", before: previous.format, after: revision.format },
+    {
+      label: "Format",
+      before: previous.formatLabel,
+      after: revision.formatLabel,
+    },
     {
       label: "Duration",
       before: `${previous.durationMinutes} minutes`,
@@ -75,13 +82,13 @@ function contentRevisionChanges(
     },
     {
       label: "Visibility",
-      before: previous.visibility,
-      after: revision.visibility,
+      before: statusPresentation("visibility", previous.visibility).label,
+      after: statusPresentation("visibility", revision.visibility).label,
     },
     {
       label: "Content status",
-      before: previous.contentStatus.replaceAll("_", " "),
-      after: revision.contentStatus.replaceAll("_", " "),
+      before: statusPresentation("content", previous.contentStatus).label,
+      after: statusPresentation("content", revision.contentStatus).label,
     },
     {
       label: "Required resources",
@@ -696,6 +703,7 @@ export class ContentManagementService {
       const session = await this.env.DB.prepare(
         `SELECT session.id AS sessionId, session.title, session.description,
                 event.timezone, session.format,
+                ${sessionFormatLabelSql("session.event_id", "session.format")} AS formatLabel,
                 session.duration_minutes AS durationMinutes,
                 track.name AS trackName,
                 EXISTS (SELECT 1 FROM schedule_versions version
@@ -715,6 +723,7 @@ export class ContentManagementService {
           description: string | null;
           timezone: string;
           format: string;
+          formatLabel: string;
           durationMinutes: number;
           trackName: string | null;
           hasDraft: number;
@@ -754,7 +763,9 @@ export class ContentManagementService {
               revision.revision_number AS revisionNumber,
               revision.title, revision.slug, revision.description,
               revision.track_id AS trackId, track.name AS trackName,
-              revision.format, revision.duration_minutes AS durationMinutes,
+              revision.format,
+              ${sessionFormatLabelSql("revision.event_id", "revision.format")} AS formatLabel,
+              revision.duration_minutes AS durationMinutes,
               revision.required_resources_json AS requiredResourcesJson,
               revision.visibility, revision.content_status AS contentStatus,
               revision.change_kind AS changeKind,

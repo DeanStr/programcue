@@ -257,7 +257,7 @@ function SpeakerDetailPanel({
         <>
           <h3>
             Sessions{" "}
-            <span className="status info">
+            <span className="pc-count">
               {model.selectedSpeakerAllSessions.length}
             </span>
           </h3>

@@ -159,8 +159,8 @@ export function EmbedConfigurationWorkflow({
                 >
                   <option value="">All formats</option>
                   {formats.map((format) => (
-                    <option key={format} value={format}>
-                      {format}
+                    <option key={format.value} value={format.value}>
+                      {format.label}
                     </option>
                   ))}
                 </select>
@@ -323,28 +323,21 @@ export function EmbedConfigurationWorkflow({
             <div>
               <h3>Live preview</h3>
             </div>
-            <fieldset
-              className="segmented pc-plain-fieldset"
-              aria-label="Preview width"
-            >
-              <Button
+            <fieldset className="pc-segmented" aria-label="Preview width">
+              <button
                 type="button"
-                size="small"
-                className={previewWidth === "desktop" ? "active" : undefined}
                 aria-pressed={previewWidth === "desktop"}
                 onClick={() => setPreviewWidth("desktop")}
               >
                 Desktop
-              </Button>
-              <Button
+              </button>
+              <button
                 type="button"
-                size="small"
-                className={previewWidth === "mobile" ? "active" : undefined}
                 aria-pressed={previewWidth === "mobile"}
                 onClick={() => setPreviewWidth("mobile")}
               >
                 Mobile
-              </Button>
+              </button>
             </fieldset>
           </div>
           <div

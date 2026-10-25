@@ -239,7 +239,7 @@ test.describe("explicit local performance evidence", () => {
       const target =
         index % 2 === 0
           ? { href: "/admin/event", heading: "Event settings" }
-          : { href: "/admin/command", heading: "Command Centre" };
+          : { href: "/admin/command", heading: "Command centre" };
       const duration = await page.evaluate(async ({ href, heading }) => {
         const link = document.querySelector<HTMLAnchorElement>(
           `a[href='${href}']`,

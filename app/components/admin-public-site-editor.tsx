@@ -531,7 +531,7 @@ export function AdminPublicSiteEditor({
     () =>
       programme
         ? programme.sessions.map((session) => {
-            const metadata = [session.track, session.format, session.room]
+            const metadata = [session.track, session.formatLabel, session.room]
               .filter(Boolean)
               .join(" · ");
             return {

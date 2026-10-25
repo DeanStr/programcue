@@ -3,7 +3,10 @@ import { data, Form, Link, useActionData, useNavigation } from "react-router";
 import { ZodError, z } from "zod";
 import { Button, ButtonLink } from "~/components/ui/button";
 import { useConfirm } from "~/components/ui/confirm-dialog";
-import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
+import {
+  DomainStatusBadge,
+  statusPresentation,
+} from "~/components/ui/domain-status-badge";
 import { requireSpeakerWorkspace } from "~/modules/speakers/speaker-workspace.server";
 import { ParticipantApplicationSummaryService } from "~/modules/submissions/participant-application-summary.server";
 import {
@@ -199,14 +202,18 @@ function ApplicationDetail({
             </h2>
             <p className="speaker-task-meta">{application.publicReference}</p>
           </div>
-          <DomainStatusBadge domain="submission" status={application.status} />
+          <DomainStatusBadge
+            domain="applicantSubmission"
+            status={application.status}
+          />
         </div>
         {applicationDecisionCopy(application.status) ? (
           <div className="validation-item info" role="status">
             <strong>
-              {application.status
-                .replaceAll("_", " ")
-                .replace(/^\w/, (letter) => letter.toUpperCase())}
+              {
+                statusPresentation("applicantSubmission", application.status)
+                  .label
+              }
             </strong>
             <span>{applicationDecisionCopy(application.status)}</span>
           </div>
@@ -436,7 +443,7 @@ export default function ParticipantApplications({
                     <div className="speaker-task-title-row">
                       <h3>{application.title}</h3>
                       <DomainStatusBadge
-                        domain="submission"
+                        domain="applicantSubmission"
                         status={application.status}
                       />
                     </div>

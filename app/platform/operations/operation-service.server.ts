@@ -39,7 +39,7 @@ import {
 const STALE_QUEUED_OPERATION_SECONDS = 60;
 
 // Keep the mutation-side guard aligned with the retry rules exposed by the
-// Operation Centre. Co-speaker invitations deliberately use their owning
+// Operation centre. Co-speaker invitations deliberately use their owning
 // workflow instead of generic operation retry, so an archived old failure and
 // any replacement work remain distinct records.
 const failureAcknowledgementEligibilitySql = `
@@ -146,7 +146,7 @@ export class OperationService {
     }
     if (!operation.canAcknowledgeFailure) {
       throw new OperationStateError(
-        "Only a failed operation with no retry or cancel action in the Operation Centre can be acknowledged.",
+        "Only a failed operation with no retry or cancel action in the Operation centre can be acknowledged.",
       );
     }
 

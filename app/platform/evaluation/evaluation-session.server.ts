@@ -72,7 +72,7 @@ export const EVALUATION_IDENTITIES = {
     description:
       "Governance, retention, event setup and every admin workspace.",
     whatToTry:
-      "Review retention controls, then open Event setup or Command Centre.",
+      "Review retention controls, then open Event setup or Command centre.",
     group: "showcase",
   },
   organizer: {
@@ -153,7 +153,7 @@ export type EvaluationIdentityKey = keyof typeof EVALUATION_IDENTITIES;
 
 const EVALUATION_WORKSPACE_RECOVERY_LABEL = {
   owner: "Back to Data retention",
-  organizer: "Go to Command Centre",
+  organizer: "Go to Command centre",
   chair: "Back to Review & selection",
   reviewer: "Back to review workbench",
   sbek_reviewer: "Back to event access",

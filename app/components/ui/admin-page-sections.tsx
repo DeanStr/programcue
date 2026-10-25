@@ -25,34 +25,6 @@ function serverViewportSnapshot() {
   return false;
 }
 
-export type AdminPageSectionLink = {
-  id: string;
-  label: string;
-};
-
-export function AdminPageSectionNavigation({
-  label,
-  links,
-  className,
-}: {
-  label: string;
-  links: AdminPageSectionLink[];
-  className?: string;
-}) {
-  return (
-    <nav className={cn("pc-admin-section-nav", className)} aria-label={label}>
-      <span>On this page</span>
-      <ul>
-        {links.map((link) => (
-          <li key={link.id}>
-            <a href={`#${link.id}`}>{link.label}</a>
-          </li>
-        ))}
-      </ul>
-    </nav>
-  );
-}
-
 export function AdminPageSection({
   id,
   label,

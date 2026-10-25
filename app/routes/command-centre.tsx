@@ -43,7 +43,7 @@ import {
 import type { Route } from "./+types/command-centre";
 
 export const meta: Route.MetaFunction = () => [
-  { title: "Command Centre · Program Cue" },
+  { title: "Command centre · Program Cue" },
 ];
 
 export async function loader({ request, context }: Route.LoaderArgs) {
@@ -84,7 +84,7 @@ function AutoRefresh({ eventId, cursor }: { eventId: string; cursor: number }) {
       initialCursor: cursor,
       onInvalidate: () => revalidator.revalidate(),
       onError: (error) =>
-        console.warn("Command Centre realtime transport error.", {
+        console.warn("Command centre realtime transport error.", {
           errorName: error instanceof Error ? error.name : "UnknownError",
         }),
       onStatusChange: setTransport,
@@ -122,11 +122,11 @@ function AutoRefresh({ eventId, cursor }: { eventId: string; cursor: number }) {
   );
 }
 
-/* 100% is silence. Below it the ramp has to be monotonic in severity or the
-   page misreports itself: the previous bands painted 33% gold and 50% copper,
-   so the workflow further behind looked calmer than the one ahead of it. */
+/* Below 100% the ramp has to be monotonic in severity or the page
+   misreports itself: the previous bands painted 33% gold and 50% copper, so
+   the workflow further behind looked calmer than the one ahead of it. */
 function progressTone(score: number) {
-  if (score >= 100) return "quiet";
+  if (score >= 100) return "complete";
   if (score >= 67) return "";
   return score >= 34 ? "amber" : "red";
 }
@@ -398,15 +398,12 @@ export default function CommandCentre({ loaderData }: Route.ComponentProps) {
     <div className="command-page">
       <PageHeader
         className="command-page-head"
-        title="Command Centre"
+        title="Command centre"
         actions={
-          <>
-            <AutoRefresh
-              eventId={loaderData.eventId}
-              cursor={loaderData.cursor}
-            />
-            <ButtonLink to="/admin/event">Event settings</ButtonLink>
-          </>
+          <AutoRefresh
+            eventId={loaderData.eventId}
+            cursor={loaderData.cursor}
+          />
         }
       />
 

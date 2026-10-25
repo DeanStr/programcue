@@ -8,7 +8,6 @@ import {
   RoundAdvancementDialog,
 } from "~/components/evaluation-admin-dialogs";
 import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
-import { AdminPageSectionNavigation } from "~/components/ui/admin-page-sections";
 import { Button, ButtonLink } from "~/components/ui/button";
 
 export function EvaluationHeader() {
@@ -85,16 +84,9 @@ export function EvaluationAssignmentUndo() {
 }
 
 export function EvaluationAdminPage() {
-  const { loaderData } = useEvaluationAdminModel();
   return (
     <div className="pc-eval-admin">
       <EvaluationHeader />
-      {loaderData.plan ? null : (
-        <AdminPageSectionNavigation
-          label="Evaluation administration sections"
-          links={[{ id: "evaluation-setup", label: "Create plan" }]}
-        />
-      )}
       <EvaluationFilterNotice />
       <EvaluationActionNotice />
       <EvaluationAssignmentUndo />

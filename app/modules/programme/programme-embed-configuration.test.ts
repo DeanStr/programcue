@@ -31,6 +31,7 @@ describe("programme embed configuration", () => {
             visibility: "public",
             track: "Public track",
             format: "keynote",
+            formatLabel: "Keynote",
             room: "Main stage",
           },
           {
@@ -39,6 +40,7 @@ describe("programme embed configuration", () => {
             visibility: "public",
             track: "Not published",
             format: "workshop",
+            formatLabel: "Workshop",
             room: "Room 2",
           },
           {
@@ -47,6 +49,7 @@ describe("programme embed configuration", () => {
             visibility: "private",
             track: "Private session",
             format: "panel",
+            formatLabel: "Panel",
             room: "Room 3",
           },
         ],
@@ -55,7 +58,7 @@ describe("programme embed configuration", () => {
     ).toEqual({
       days: ["2025-05-20"],
       tracks: ["Public track"],
-      formats: ["keynote"],
+      formats: [{ value: "keynote", label: "Keynote" }],
       rooms: ["Main stage"],
     });
   });

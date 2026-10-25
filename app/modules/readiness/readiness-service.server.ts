@@ -452,13 +452,13 @@ export class ReadinessService {
     ] = await loadCommandCentreRecords(this.env, viewer, now);
 
     if (!workCounts)
-      throw new Error("Command Centre work-count query returned no result.");
+      throw new Error("Command centre work-count query returned no result.");
     for (const key of [
       "proposalsAwaitingDecisions",
       "sessionsNeedingSlot",
     ] as const) {
       if (!Number.isSafeInteger(workCounts[key]) || workCounts[key] < 0)
-        throw new Error(`Command Centre work count ${key} is invalid.`);
+        throw new Error(`Command centre work count ${key} is invalid.`);
     }
 
     const tasks = taskResult.results.filter(

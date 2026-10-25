@@ -5,6 +5,7 @@ import { Form } from "react-router";
 import { AdminTaskFormFieldBuilder } from "~/components/admin-task-form-field-builder";
 import { Button } from "~/components/ui/button";
 import { CharacterCount } from "~/components/ui/character-count";
+import { useConfirm } from "~/components/ui/confirm-dialog";
 import {
   normalizeTaskTemplateDraft,
   suggestedTaskEvidenceMode,
@@ -37,6 +38,7 @@ export function AdminTaskPlanPanel({
       template.status === "active" &&
       (!data.focusedSpeakerId || template.targetType === "speaker"),
   );
+  const { confirm, dialog } = useConfirm();
   const [selectedTemplateId, setSelectedTemplateId] = useState(
     assignableTemplates[0]?.id ?? "",
   );
@@ -108,6 +110,7 @@ export function AdminTaskPlanPanel({
   );
   return (
     <div className={`tasks-plan-panel is-${mode}`}>
+      {dialog}
       {showPlan ? (
         <section className="card pad tasks-plan-block">
           <div className="card-title">
@@ -127,17 +130,30 @@ export function AdminTaskPlanPanel({
                 name="intent"
                 value="create-session-details-review"
               />
-              <label className="speaker-confirm">
-                <input
-                  type="checkbox"
-                  name="confirmed"
-                  value="create-session-details-review"
-                  required
-                />{" "}
-                I confirm this optional task should be created and automatically
-                assigned when a submission is accepted.
-              </label>
-              <Button type="submit" disabled={busy}>
+              <input
+                type="hidden"
+                name="confirmed"
+                value="create-session-details-review"
+              />
+              <Button
+                type="button"
+                disabled={busy}
+                onClick={(event) => {
+                  const form = event.currentTarget.form;
+                  if (!form) return;
+                  confirm(
+                    {
+                      title: "Create the session review task?",
+                      description:
+                        "It is assigned automatically to the participants of each session accepted from now on. Sessions already accepted are unchanged.",
+                      records: ["Session-detail review · optional · session"],
+                      confirmLabel: "Create session review task",
+                      tone: "primary",
+                    },
+                    () => form.requestSubmit(),
+                  );
+                }}
+              >
                 <Plus aria-hidden size={15} /> Create session review task
               </Button>
             </Form>
@@ -178,17 +194,33 @@ export function AdminTaskPlanPanel({
                 name="intent"
                 value="create-travel-onboarding"
               />
-              <label className="speaker-confirm">
-                <input
-                  type="checkbox"
-                  name="confirmed"
-                  value="create-travel-onboarding"
-                  required
-                />{" "}
-                I confirm these forms should be created and automatically
-                assigned to speakers when a submission is accepted.
-              </label>
-              <Button type="submit" disabled={busy}>
+              <input
+                type="hidden"
+                name="confirmed"
+                value="create-travel-onboarding"
+              />
+              <Button
+                type="button"
+                disabled={busy}
+                onClick={(event) => {
+                  const form = event.currentTarget.form;
+                  if (!form) return;
+                  confirm(
+                    {
+                      title: "Create the travel forms?",
+                      description:
+                        "Both forms are assigned automatically to speakers on each submission accepted from now on, due seven days after acceptance. Existing speakers are unchanged.",
+                      records: [
+                        "Hotel stay requirements · speaker",
+                        "Flight reimbursement · speaker",
+                      ],
+                      confirmLabel: "Create travel forms",
+                      tone: "primary",
+                    },
+                    () => form.requestSubmit(),
+                  );
+                }}
+              >
                 <Plus aria-hidden size={15} /> Create travel forms
               </Button>
             </Form>

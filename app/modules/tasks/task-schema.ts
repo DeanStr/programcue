@@ -136,6 +136,33 @@ const taskTypeSchema = z.enum([
   "administrator_only",
 ]);
 const taskImpactSchema = z.enum(["critical", "high", "medium", "low"]);
+
+export const TASK_TARGET_TYPE_LABELS = {
+  speaker: "Speaker",
+  session: "Session",
+  event: "Event",
+} as const satisfies Record<z.infer<typeof taskTargetTypeSchema>, string>;
+
+export function taskTargetTypeLabel(type: string) {
+  const label = (TASK_TARGET_TYPE_LABELS as Record<string, string>)[type];
+  if (!label) throw new Error(`Unsupported task target type: ${type}.`);
+  return label;
+}
+
+export const TASK_TYPE_LABELS = {
+  checklist: "Checklist",
+  acknowledgement: "Acknowledgement",
+  short_form: "Short form",
+  file_upload: "File upload",
+  link_visit: "Link visit",
+  administrator_only: "Administrator only",
+} as const satisfies Record<z.infer<typeof taskTypeSchema>, string>;
+
+export function taskTypeLabel(type: string) {
+  const label = (TASK_TYPE_LABELS as Record<string, string>)[type];
+  if (!label) throw new Error(`Unsupported task type: ${type}.`);
+  return label;
+}
 const taskEvidenceModeSchema = z.enum([
   "none",
   "checkbox",

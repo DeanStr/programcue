@@ -6,6 +6,7 @@ import { AdminPublicSiteEditor } from "~/components/admin-public-site-editor";
 import { AdminPublicSitePreview } from "~/components/admin-public-site-preview";
 import { AdminPublicSiteRecordings } from "~/components/admin-public-site-recordings";
 import { AdminPublicSiteSponsors } from "~/components/admin-public-site-sponsors";
+import { AdminWorkspaceTabs } from "~/components/ui/admin-workspace-tabs";
 import { Button, ButtonLink } from "~/components/ui/button";
 import { ConfirmDialog, useConfirm } from "~/components/ui/confirm-dialog";
 import { useUnsavedChanges } from "~/components/ui/use-unsaved-changes";
@@ -699,27 +700,16 @@ export default function AdminPublicSite({ loaderData }: Route.ComponentProps) {
         </dl>
       </section>
 
-      <fieldset
-        className="public-site-mobile-surfaces branding-preview-devices pc-plain-fieldset"
-        aria-label="Editor surface"
-      >
-        <button
-          type="button"
-          className={mobileSurface === "preview" ? "is-active" : undefined}
-          aria-pressed={mobileSurface === "preview"}
-          onClick={() => setMobileSurface("preview")}
-        >
-          Preview
-        </button>
-        <button
-          type="button"
-          className={mobileSurface === "edit" ? "is-active" : undefined}
-          aria-pressed={mobileSurface === "edit"}
-          onClick={() => setMobileSurface("edit")}
-        >
-          Edit
-        </button>
-      </fieldset>
+      <AdminWorkspaceTabs<"preview" | "edit">
+        className="public-site-mobile-surfaces"
+        label="Editor surface"
+        panels={[
+          { id: "preview", label: "Preview" },
+          { id: "edit", label: "Edit" },
+        ]}
+        activePanel={mobileSurface}
+        onChange={setMobileSurface}
+      />
 
       <div
         className={`public-site-admin-workspace is-${mobileSurface}`}

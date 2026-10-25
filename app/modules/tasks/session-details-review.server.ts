@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { sessionFormatLabelSql } from "~/modules/events/event-configuration";
 import type { Viewer } from "~/platform/auth/authorize.server";
 
 export const SESSION_DETAILS_REVIEW_PRESET = "session_details_review_v1";
@@ -112,6 +113,7 @@ export async function loadParticipantSessionDetailsReview(
 ) {
   const row = await env.DB.prepare(
     `SELECT session.title, session.description, session.format,
+            ${sessionFormatLabelSql("session.event_id", "session.format")} AS formatLabel,
             session.duration_minutes AS durationMinutes,
             session.revision AS sessionRevision,
             track.id AS trackId, track.name AS trackName
@@ -129,11 +131,17 @@ export async function loadParticipantSessionDetailsReview(
         AND session.status NOT IN ('cancelled','archived')`,
   )
     .bind(viewer.organisationId, viewer.eventId, sessionId, viewer.personId)
-    .first<SessionDetailsReviewFields & { sessionRevision: number }>();
+    .first<
+      SessionDetailsReviewFields & {
+        sessionRevision: number;
+        formatLabel: string;
+      }
+    >();
   if (!row) return null;
   const parsed = sessionDetailsReviewFieldsSchema.parse(row);
   return {
     fields: parsed,
+    formatLabel: row.formatLabel,
     sessionRevision: row.sessionRevision,
     fingerprint: await sessionDetailsFingerprint(parsed),
   };

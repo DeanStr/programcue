@@ -184,9 +184,6 @@ export default function Deliverables({
         <div>
           <h1>Speaker deliverables</h1>
         </div>
-        <div className="page-actions">
-          <ButtonLink to="/admin/tasks">Tasks &amp; readiness</ButtonLink>
-        </div>
       </div>
       {actionData && (
         <p role={actionData.ok ? "status" : "alert"}>{actionData.message}</p>
@@ -233,10 +230,14 @@ export default function Deliverables({
         <Button type="submit" disabled={busy}>
           Apply filters
         </Button>
-        <ButtonLink to="/admin/tasks/deliverables">Clear</ButtonLink>
+        <ButtonLink variant="ghost" to="/admin/tasks/deliverables">
+          Clear
+        </ButtonLink>
       </Form>
       <section className="card pad mt" aria-label="Remind filtered speakers">
-        <h2>Remind speakers</h2>
+        <div className="card-title">
+          <h2>Remind speakers</h2>
+        </div>
         <p>
           {d.recipientCount} {d.recipientCount === 1 ? "speaker" : "speakers"}{" "}
           across all matching pages {d.recipientCount === 1 ? "has" : "have"}{" "}
@@ -312,15 +313,25 @@ export default function Deliverables({
                       {tasks.length ? (
                         tasks.map((task) => (
                           <div key={task.id} className="deliverable-cell">
+                            {/* The column already names the requirement, so
+                                the cell leads with its status and shows a
+                                title only when it differs. */}
                             <Link
+                              className="deliverable-cell-status"
                               to={`/admin/tasks?task=${encodeURIComponent(task.id)}&state=`}
                             >
-                              {task.title}
+                              <DomainStatusBadge
+                                domain="task"
+                                status={task.status}
+                              />
+                              <span className="sr-only">
+                                {" "}
+                                {task.title} for {speaker.name}
+                              </span>
                             </Link>
-                            <DomainStatusBadge
-                              domain="task"
-                              status={task.status}
-                            />
+                            {task.title !== column.name ? (
+                              <small>{task.title}</small>
+                            ) : null}
                             {deliverableOverdue(task, d.now) && (
                               <strong>Overdue</strong>
                             )}

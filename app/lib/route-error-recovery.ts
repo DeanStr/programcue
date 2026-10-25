@@ -48,7 +48,7 @@ export function routeErrorRecovery({
 
   if (status === 403 || status === 400 || status === 428) {
     if (adminContextLoaded) {
-      return { href: "/admin/command", label: "Go to Command Centre" };
+      return { href: "/admin/command", label: "Go to Command centre" };
     }
     return { href: "/events/select", label: "Choose an event" };
   }
@@ -64,13 +64,13 @@ export function routeErrorRecovery({
       return { href: "/events/select", label: "Choose an event" };
     }
     if (adminContextLoaded || pathname.startsWith("/admin/")) {
-      return { href: "/admin/command", label: "Go to Command Centre" };
+      return { href: "/admin/command", label: "Go to Command centre" };
     }
     return { href: "/", label: "Go to home" };
   }
 
   if (adminContextLoaded || pathname.startsWith("/admin/")) {
-    return { href: "/admin/command", label: "Go to Command Centre" };
+    return { href: "/admin/command", label: "Go to Command centre" };
   }
   return { href: "/", label: "Go to home" };
 }

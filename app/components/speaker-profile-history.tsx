@@ -37,7 +37,7 @@ export function SpeakerProfileHistory({
         <div>
           <h3 id="profile-history-title">Public profile history</h3>
         </div>
-        <span className="pill right">{revisions.length}</span>
+        <span className="pc-count right">{revisions.length}</span>
       </div>
       {revisions.length ? (
         <ol className="timeline">

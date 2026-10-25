@@ -45,6 +45,7 @@ const session: PublishedSession = {
   title: "The Future of Attendee Engagement",
   description: "A published session description.",
   format: "keynote",
+  formatLabel: "Keynote",
   startsAt: Date.parse("2025-05-20T13:00:00Z") / 1_000,
   endsAt: Date.parse("2025-05-20T13:45:00Z") / 1_000,
   room: "Main Stage",

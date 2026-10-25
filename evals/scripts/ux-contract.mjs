@@ -3,14 +3,14 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 
 export const surfaces = [
-  { id: "command", route: "/admin/command", heading: "Command Centre" },
+  { id: "command", route: "/admin/command", heading: "Command centre" },
   { id: "applications", route: "/admin/submissions", heading: "Applications" },
   {
     id: "form-builder",
     route: "/admin/submissions/form",
     heading: "Call for Speakers Form Builder",
   },
-  { id: "communications", route: "/admin/communications", heading: "Communications Centre" },
+  { id: "communications", route: "/admin/communications", heading: "Communications" },
   { id: "event-settings", route: "/admin/event" },
   { id: "branding", route: "/admin/branding" },
   { id: "evaluation", route: "/admin/review" },

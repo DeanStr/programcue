@@ -360,7 +360,7 @@ test("organization CRM covers directory, relationship, pipeline, handoff and out
   ).toBeVisible();
 
   await page
-    .locator("#main .page-actions")
+    .getByRole("navigation", { name: "Breadcrumb" })
     .getByRole("link", { name: "Speaker directory" })
     .click();
   await expect(page).toHaveURL(/\/admin\/crm$/u);

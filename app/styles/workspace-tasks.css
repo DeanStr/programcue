@@ -3,12 +3,12 @@
 .tasks-quick-choices {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--space-2);
-  margin-bottom: var(--space-2);
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-3);
 }
 .tasks-filters {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
 }
 .tasks-filters > summary {
   display: flex;
@@ -27,19 +27,18 @@
 .tasks-filters[open] > summary {
   margin-bottom: var(--space-3);
 }
-.tasks-summary {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2) var(--space-4);
-  font-size: var(--text-xs);
+.tasks-readiness-link {
+  margin-left: auto;
   color: var(--text-secondary);
-  margin: 0 0 var(--space-3);
+  font-size: var(--text-xs);
+  text-decoration: none;
 }
-.tasks-summary strong {
+.tasks-readiness-link strong {
   color: var(--ink);
 }
-.tasks-result-count {
-  margin-left: auto;
+.tasks-readiness-link:hover {
+  color: var(--ink);
+  text-decoration: underline;
 }
 .tasks-workspace-tabs {
   margin-bottom: var(--space-3);
@@ -136,7 +135,7 @@
 }
 .pc-weighting-note {
   margin: var(--space-3) 0 0;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   line-height: var(--leading-normal);
 }
 
@@ -162,13 +161,6 @@
 .tasks-assigned .pc-record-stack > small + small::before {
   content: " · ";
   color: var(--text-tertiary);
-}
-.task-readiness-cell {
-  min-width: 72px;
-  gap: var(--space-1);
-}
-.task-readiness-cell .progress {
-  width: 100%;
 }
 .task-due-distance {
   font-weight: var(--weight-semibold);
@@ -199,7 +191,7 @@
   color: var(--state-good-solid);
 }
 
-/* One filled control per row. Secondary work is a text disclosure. */
+/* One bordered control per row. Secondary work sits behind More actions. */
 /* The row is a wrapper, not the cell: a flex <td> stops being a table cell,
    so its divider sat at its own content height instead of the row's. */
 .tasks-assigned .task-admin-action-row,
@@ -215,18 +207,65 @@
   border: 0;
   background: none;
   color: var(--text-secondary);
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   font-weight: var(--weight-semibold);
   cursor: pointer;
-}
-.tasks-assigned .task-ghost.is-action {
-  color: var(--ink);
 }
 .tasks-assigned .task-ghost:hover {
   color: var(--ink);
 }
-.tasks-assigned .task-admin-action-row details[open] {
-  width: 100%;
+.tasks-assigned .task-more-toggle svg {
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.tasks-assigned .task-more-toggle[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+/* Secondary work spans all columns instead of stretching the action cell.
+   The hidden row preserves drafts without contributing to table sizing. */
+.tasks-assigned .pc-responsive-table .task-details-row[hidden] {
+  display: none;
+}
+.tasks-assigned tr[data-actions-open="true"] > td,
+.tasks-assigned tbody > tr:nth-last-child(2) > td {
+  border-bottom: 0;
+}
+.tasks-assigned .task-details-row > td {
+  padding-top: 0;
+}
+.tasks-assigned .task-more-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: start;
+  contain: inline-size;
+  gap: var(--space-2) var(--space-5);
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+}
+.tasks-assigned .task-more-panel > details[open] {
+  flex-basis: 100%;
+  min-width: 0;
+}
+.tasks-assigned .task-more-panel :is(form, p) {
+  max-width: 40rem;
+}
+.tasks-assigned .task-action-disclosure > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 28px;
+  list-style: none;
+}
+.tasks-assigned .task-action-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+.tasks-assigned .task-action-disclosure > summary svg {
+  flex: none;
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.tasks-assigned .task-action-disclosure[open] > summary svg {
+  transform: rotate(90deg);
 }
 .task-bottom {
   display: grid;
@@ -277,9 +316,11 @@
   .tasks-assigned .pc-responsive-table tbody {
     gap: 0;
   }
+  /* Impact and due date share one line; every other cell spans the row. */
   .tasks-assigned .pc-responsive-table tr {
     display: grid;
-    gap: var(--space-1);
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: var(--space-1) var(--space-2);
     padding: var(--space-3) 0;
     border: 0;
     border-bottom: 1px solid var(--line);
@@ -295,8 +336,11 @@
     border: 0;
     background: transparent;
   }
-  .tasks-assigned .task-admin-action-row {
-    display: block;
+  .tasks-assigned .pc-responsive-table tr[data-actions-open="true"] {
+    border-bottom: 0;
+  }
+  .tasks-assigned .pc-responsive-table .task-details-row {
+    padding-top: 0;
   }
   .tasks-assigned .pc-responsive-table td::before,
   .tasks-assigned .pc-responsive-table .pc-record-primary-cell::before,
@@ -306,8 +350,11 @@
   .tasks-assigned .pc-responsive-table .pc-record-primary-cell {
     background: transparent;
   }
-  .tasks-assigned .task-readiness-cell {
-    display: none;
+  .tasks-assigned
+    .pc-responsive-table
+    tr
+    > :not([data-label="Impact"], [data-label="Due"]) {
+    grid-column: 1 / -1;
   }
   .tasks-assigned .pc-responsive-table .pc-record-stack {
     display: block;

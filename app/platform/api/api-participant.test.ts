@@ -413,6 +413,7 @@ describe("participant API resources", () => {
           (value: unknown) => value === null || typeof value === "string",
         ),
       },
+      formatLabel: "Presentation",
       sessionRevision: expect.any(Number),
       fingerprint: expect.stringMatching(/^[a-f0-9]{64}$/u),
     });

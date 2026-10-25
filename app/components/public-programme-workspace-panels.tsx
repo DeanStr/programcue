@@ -367,7 +367,8 @@ export function PublicProgrammeFilters({
             <option value="">All formats</option>
             {formats.map((value) => (
               <option key={value} value={value}>
-                {value}
+                {programme.sessions.find((session) => session.format === value)
+                  ?.formatLabel ?? value}
               </option>
             ))}
           </select>
@@ -399,6 +400,7 @@ export function PublicProgrammeFilters({
         </p>
         <Button
           type="button"
+          variant="ghost"
           size="small"
           onClick={clearFilters}
           disabled={!clearableFiltersActive}
@@ -678,7 +680,7 @@ export function ItineraryPanel({ model }: { model: PublicProgrammeModel }) {
                   </strong>
                   <span className="itinerary-title">{session.title}</span>
                   <span className="itinerary-meta">
-                    {[session.room, session.format, session.track]
+                    {[session.room, session.formatLabel, session.track]
                       .filter(Boolean)
                       .join(" · ")}
                   </span>
@@ -786,7 +788,7 @@ export function SessionDetailPanel({ model }: { model: PublicProgrammeModel }) {
     new URLSearchParams(location.search).get("session") === selected.id;
   const classification = [
     model.showEmbedField("track") ? selected.track : null,
-    model.showEmbedField("format") ? selected.format : null,
+    model.showEmbedField("format") ? selected.formatLabel : null,
     model.showEmbedField("time")
       ? formatProgrammeDuration(selected.startsAt, selected.endsAt)
       : null,
@@ -1099,7 +1101,7 @@ export function OverviewSpeakers({ model }: { model: PublicProgrammeModel }) {
             <>
               <h3>
                 Sessions{" "}
-                <span className="status info">
+                <span className="pc-count">
                   {selectedSpeakerSessions.length}
                 </span>
               </h3>

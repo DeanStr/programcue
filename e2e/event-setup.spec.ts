@@ -800,10 +800,11 @@ test("the command palette uses path-based React Router navigation", async ({
   await page
     .getByRole("combobox", { name: "Program Cue commands" })
     .fill("Home");
-  await page.getByRole("option", { name: /^Home\b/ }).click();
+  // The rail label changed from Home; the old word still finds the page.
+  await page.getByRole("option", { name: /^Command centre\b/ }).click();
   await expect(page).toHaveURL(/\/admin\/command$/);
   await expect(
-    page.getByRole("heading", { name: "Command Centre" }),
+    page.getByRole("heading", { name: "Command centre" }),
   ).toBeVisible();
 });
 
@@ -950,7 +951,7 @@ test("the command palette hands an editable question to the assistant without ru
   await askCommand.click();
 
   await expect(
-    page.getByRole("heading", { name: "Event Assistant", level: 1 }),
+    page.getByRole("heading", { name: "Event assistant", level: 1 }),
   ).toBeVisible();
   expect(new URL(page.url()).searchParams.has("prompt")).toBe(false);
   await expect

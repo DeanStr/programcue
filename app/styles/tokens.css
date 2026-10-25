@@ -277,7 +277,11 @@
 
   /* --- Type --------------------------------------------------------------
      Eight roles. 12px is the floor: anything smaller was unreadable at the
-     exact moments it mattered most (errors, required marks, metadata). */
+     exact moments it mattered most (errors, required marks, metadata).
+     Secondary text has three tiers. Descriptions under headings and empty
+     states are --text-sm, with colour carrying the hierarchy; field help,
+     errors and record metadata are --text-xs; --text-2xs is for badges,
+     counts, column headers, timestamps and keyboard hints only. */
   --text-2xs: 12px;
   --text-xs: 13px;
   --text-sm: 14px;
