@@ -1840,12 +1840,12 @@ and text carry the signal, and the warning solid is a clear amber-gold
 3:1. Operational
 shells use the self-hosted Inter variable face for headings as well as body
 copy, controls and data, so dense working views keep a single scanning rhythm.
-Ordinary page titles in the administrator and participant shells share one
+Page titles in the administrator, participant and reviewer shells share one
 role: 34px bold on desktop and 30px bold on phones, with shared line height and
-tracking. Form Builder and the reviewer workbench opt into the explicit 23px
-compact header variant; the Schedule workbench and the Command Centre display
-title keep their own explicit roles. Workspace and responsive styles do not
-otherwise redefine page-title typography. Administration section headers use
+tracking. Form Builder, the Schedule planner, the reviewer workbench and the
+Command Centre use the same role (revised 28 October; see "Consistent
+operational page titles"). Workspace and responsive styles do not redefine
+page-title typography. Administration section headers use
 23px bold on desktop and 19px bold on phones, Command Centre section labels use
 19px semibold, and card titles remain 16px. Communications omits an
 in-page contents bar for its two-section daily workspace: visible headings and
@@ -3054,3 +3054,19 @@ evidence.
   buttons to full width. A heading written straight into an admin card renders
   at card-title size. A row header's bottom border no longer doubles the table
   wrapper's edge.
+
+## Consistent operational page titles — 25–28 October 2026
+
+- Form Builder, Schedule planner and the reviewer workbench use the shared
+  operational title role: 34px bold above 760px and 30px on phones, with the
+  same leading and tracking as the other operational pages. This supersedes
+  the compact workbench exceptions recorded on 24 October.
+- This trades a little workspace height for one title role. The workbench
+  headers keep an 8px gap below the title; the workspace starts 8–13px lower
+  than with the compact titles. Planner header actions wrap when the
+  available width requires it, which costs a further row at mid widths; the
+  title and controls must remain readable and contained.
+- The Form Builder page title, browser tab title and Applications button read
+  "Form builder", matching the breadcrumb and demo guide. The form picker directly below names the form being edited; the old
+  "Call for Speakers Form Builder" title was wrong for any other form and
+  wrapped to two lines on phones.

@@ -860,7 +860,7 @@ test("the command palette matches intent words and opens setup work directly", a
   await expect(page).toHaveURL(/\/admin\/submissions\/form$/);
   await expect(
     page.getByRole("heading", {
-      name: "Call for Speakers Form Builder",
+      name: "Form builder",
       level: 1,
     }),
   ).toBeVisible();

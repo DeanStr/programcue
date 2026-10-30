@@ -1,11 +1,41 @@
 # Verified implementation status
 
-Evidence recorded through **24 October 2026**, including the navigation and page header pass, the local interface consistency pass and its visual review follow-up, the interface refinement and visual evaluation pass, assistant request presentation and partial task coverage, readiness source links, the sponsor/deliverables release, application/scanner releases, a controlled live invited-speaker journey and autonomous backup acceptance.
+Evidence recorded through **28 October 2026**, including the shared workbench title follow-up, the navigation and page header pass, the local interface consistency pass and its visual review follow-up, the interface refinement and visual evaluation pass, assistant request presentation and partial task coverage, readiness source links, the sponsor/deliverables release, application/scanner releases, a controlled live invited-speaker journey and autonomous backup acceptance.
 This is the current capability,
 requirements and acceptance index; consolidation does not constitute a new
 verification or deployment. The [product specification](../sessionboard-replacement-full-scope-implementation-specification-with-competition-ux.md)
 owns intended scope, [DECISIONS.md](DECISIONS.md) owns engineering decisions, and
 Git history retains earlier committed work logs.
+
+## Shared workbench titles — 25–28 October 2026
+
+**Local presentation change; no API or schema change; not deployed.** Form
+Builder, Schedule planner and the reviewer workbench now share the operational
+title role: 34px desktop and 30px at phone widths. This supersedes the compact
+title exceptions in the 24 October pass and costs 8–13px of workspace height.
+Workbench headers keep an 8px gap below the title, and planner actions wrap at
+narrower widths. The Form Builder title is now "Form builder": the form picker
+names the form being edited, whereas the old title said "Call for Speakers"
+for every form and wrapped to two lines on phones. The Applications button and
+browser tab title use the same sentence-case name.
+
+The visual suite now verifies title size and typography across sixteen admin
+and reviewer routes at desktop and phone widths. Eight screenshots changed
+against the committed baselines (the two Applications captures only for the
+button label); the five launch-film snapshot pins among them were updated.
+
+Validation (28 October): production build, generated TypeScript checks, Biome
+on changed files, CSS hygiene/design-system adoption and the video story-state
+check pass. The visual suite passes all 32 checks with the expected baseline
+updates and again without updates after the final rebuild. A run without
+updates of the visual, submissions, event-setup and demo specs passed 62 tests
+before a local Wrangler proxy crash stopped one submissions shard; a separate
+submissions run then passed all 12 tests. The later Applications button and
+tab-title case change is not referenced by those specs. The 25 October revision also had manual inspection of all three
+workbenches at 320–1440px, a refreshed Tailscale comparison gallery and a
+`codex exec review` with no actionable findings; none of those was repeated
+for the 28 October spacing and title follow-up. The full `npm run check`
+release gate was not run.
 
 ## Navigation and page header pass — 24 October 2026
 
@@ -400,7 +430,7 @@ deployed.** Current behavior:
   and 30px bold on phones; Form Builder and the reviewer workbench use a 23px
   compact variant; Command centre and Schedule keep their own title roles. A
   browser check holds the twelve-page administration title cohort to one style
-  per viewport.
+  per viewport. (Superseded: see "Shared workbench titles", 25–28 October.)
 - At 360px and below the top bar keeps the event name on its own row; between
   761 and 1000px the search trigger truncates instead of wrapping. Pressed
   buttons change fill instead of moving.

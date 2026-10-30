@@ -48,11 +48,11 @@
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/form-builder-desktop-chromium-linux.png",
-      "sha256": "5f772de878c7a8aed9a4d7adf51fe4ecedd85d152cd3bc3ccaeede4d4d06f3e0"
+      "sha256": "09d93c4d9f8ded0b5187e279923a0067dba93313f71e22094746dcf4368bda8a"
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/form-builder-laptop-chromium-linux.png",
-      "sha256": "2fe9300504fb2bef554e89deed9c3591a377030acaf593198b975663bc276fb6"
+      "sha256": "3776a4e1cf434fb88b23457a258ac183383e77760378a8165b9ccde7eb69aa71"
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/programme-admin-desktop-chromium-linux.png",
@@ -80,15 +80,15 @@
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/review-workbench-desktop-chromium-linux.png",
-      "sha256": "409e7b62bfef9378603ed55b1a4a936eec2babf2e09336b24629aa1a6560a98e"
+      "sha256": "d1d918b53fc874259a48ed1878a0d78bc6889b645c0fbe69a6e37fd0627968de"
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/review-workbench-mobile-chromium-linux.png",
-      "sha256": "b404b2863f288539985a99bebc1b15a17d191cb746bac7aa2983559f215d7e2f"
+      "sha256": "f3f72e1cf944b5209c79a12a0bf5fd49a6c2bae301d92ada1eb4aa261b9b648f"
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/schedule-planner-laptop-chromium-linux.png",
-      "sha256": "db51118734a04f6346a5723c60997d7b8f120c2f3009aeeeb0e2d59dc896049b"
+      "sha256": "fc834ac8c335acf92d4e85ab48d74ee1b3120cf59bbbc47a56696093ae435925"
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/speaker-dashboard-desktop-chromium-linux.png",

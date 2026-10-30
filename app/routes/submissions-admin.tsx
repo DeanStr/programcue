@@ -234,7 +234,7 @@ export default function SubmissionsAdmin({ loaderData }: Route.ComponentProps) {
           <h1>Applications</h1>
         </div>
         <div className="page-actions">
-          <ButtonLink to="/admin/submissions/form">Form Builder</ButtonLink>
+          <ButtonLink to="/admin/submissions/form">Form builder</ButtonLink>
           <ButtonLink variant="primary" to="/admin/submissions/new">
             New
           </ButtonLink>

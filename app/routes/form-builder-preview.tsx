@@ -36,7 +36,7 @@ import { getCloudflareContext } from "~/platform/cloudflare-context";
 import type { Route } from "./+types/form-builder-preview";
 
 export const meta: Route.MetaFunction = () => [
-  { title: "Form Builder · Program Cue" },
+  { title: "Form builder · Program Cue" },
 ];
 
 async function viewerFor(
@@ -367,9 +367,9 @@ export default function FormBuilder({ loaderData }: Route.ComponentProps) {
         value={JSON.stringify(input.routing)}
       />
 
-      <div className="page-head fb-page-head pc-page-header-compact">
+      <div className="page-head fb-page-head">
         <div>
-          <h1>Call for Speakers Form Builder</h1>
+          <h1>Form builder</h1>
         </div>
       </div>
 

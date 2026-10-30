@@ -16,7 +16,7 @@ export function ReviewWorkbenchHeader() {
   } = useReviewWorkbenchModel();
   const hasSavedDraft = Boolean(workspace.review);
   return (
-    <div className="page-head review-page-head pc-page-header-compact">
+    <div className="page-head review-page-head">
       <div>
         <h1>Review workbench</h1>
       </div>

@@ -456,7 +456,7 @@ test.describe
       await waitForSurfaceReady(page, "form-builder");
       await expect(
         page.getByRole("heading", {
-          name: "Call for Speakers Form Builder",
+          name: "Form builder",
           exact: true,
         }),
       ).toBeInViewport();
@@ -566,12 +566,14 @@ test.describe
       await resetDemoEvent(request);
     });
 
-    test("ordinary administration pages share one title role per viewport", async ({
+    test("operational pages and workbenches share one title role per viewport", async ({
       page,
     }) => {
       const styles = [];
       for (const route of [
+        "/admin/command",
         "/admin/submissions",
+        "/admin/submissions/form",
         "/admin/communications",
         "/admin/event",
         "/admin/branding",
@@ -583,7 +585,12 @@ test.describe
         "/admin/programme",
         "/admin/tasks",
         "/admin/resources",
+        "/admin/schedule",
+        "/review/workbench",
       ]) {
+        if (route === "/review/workbench") {
+          await selectDemoRole(page, "evaluator");
+        }
         await openHydrated(page, route);
         if (
           route === "/admin/resources" &&
@@ -622,6 +629,10 @@ test.describe
             }),
         );
       }
+      expect(styles[0]).toMatchObject({
+        fontSize: (page.viewportSize()?.width ?? 0) <= 760 ? "30px" : "34px",
+        fontWeight: "700",
+      });
       for (const style of styles) expect(style).toEqual(styles[0]);
     });
 

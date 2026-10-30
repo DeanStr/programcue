@@ -8,7 +8,7 @@ export const surfaces = [
   {
     id: "form-builder",
     route: "/admin/submissions/form",
-    heading: "Call for Speakers Form Builder",
+    heading: "Form builder",
   },
   { id: "communications", route: "/admin/communications", heading: "Communications" },
   { id: "event-settings", route: "/admin/event" },

@@ -113,7 +113,7 @@ test.describe
       const unique = Date.now();
       await page.goto("/admin/submissions/form");
       await expect(
-        page.getByRole("heading", { name: "Call for Speakers Form Builder" }),
+        page.getByRole("heading", { name: "Form builder" }),
       ).toBeVisible();
       await expect(
         page.getByRole("button", { name: "Save draft" }),
@@ -387,7 +387,7 @@ test.describe
         await noScriptPage.goto("/admin/submissions/form");
         await expect(
           noScriptPage.getByRole("heading", {
-            name: "Call for Speakers Form Builder",
+            name: "Form builder",
           }),
         ).toBeVisible();
         await expect(
@@ -1096,7 +1096,7 @@ test.describe
       const unique = Date.now();
       await page.goto("/admin/submissions/form");
       await expect(
-        page.getByRole("heading", { name: "Call for Speakers Form Builder" }),
+        page.getByRole("heading", { name: "Form builder" }),
       ).toBeVisible();
       await page.locator("body[data-hydrated='true']").waitFor();
       await page.getByLabel("Applicant layout").selectOption("steps");
@@ -1206,7 +1206,7 @@ test.describe
       const unique = Date.now();
       await page.goto("/admin/submissions/form");
       await expect(
-        page.getByRole("heading", { name: "Call for Speakers Form Builder" }),
+        page.getByRole("heading", { name: "Form builder" }),
       ).toBeVisible();
       await page.locator("body[data-hydrated='true']").waitFor();
       await page.getByLabel("Applicant layout").selectOption("steps");

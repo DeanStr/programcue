@@ -369,15 +369,9 @@
 }
 .schedule-page-head {
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-2);
   margin-bottom: 0;
-  flex-wrap: nowrap;
-}
-.app-admin .schedule-page-head h1 {
-  font-size: var(--text-xl);
-  line-height: 1.2;
-  white-space: nowrap;
-  text-wrap: nowrap;
+  flex-wrap: wrap;
 }
 .schedule-page-stats {
   margin: var(--space-1) 0 0;
@@ -396,7 +390,6 @@
   cursor: pointer;
 }
 .schedule-page-actions {
-  flex-wrap: nowrap;
   align-items: center;
 }
 .schedule-page-version {

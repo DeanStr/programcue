@@ -717,7 +717,7 @@ a {
   margin-bottom: var(--space-4);
 }
 /* --- Heading ladder ------------------------------------------------------
-   Page titles use 34px bold, with compact workbench variants. Section titles
+   Operational page titles use 34px bold, or 30px on phones. Section titles
    use 23px on desktop and 19px on phones; card titles use 16px. */
 .page-head h1 {
   margin: 0;
@@ -736,7 +736,8 @@ a {
 .reviewer-shell :is(h1, h2, h3) {
   font-family: var(--font);
 }
-/* One operational title role, with an explicit compact workbench variant. */
+/* One title role across administration, participant and reviewer workspaces;
+   the reviewer shell is also a speaker shell. */
 .app-admin .page-head h1,
 .speaker-shell .page-head h1,
 .speaker-shell .speaker-portal-head h1 {
@@ -744,9 +745,6 @@ a {
   font-weight: var(--weight-bold);
   letter-spacing: var(--tracking-tight);
   line-height: var(--leading-tight);
-}
-.page-head.pc-page-header-compact {
-  --page-title-size: var(--text-xl);
 }
 /* Named page regions share one section role across desktop and mobile. */
 .pc-admin-section-head h2,
