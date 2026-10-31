@@ -3,6 +3,7 @@ import { ZodError, z } from "zod";
 import { Button, ButtonLink } from "~/components/ui/button";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EventDateTime } from "~/components/ui/event-date-time";
+import { useLiveFilters } from "~/components/use-live-filters";
 import { CommunicationDraftService } from "~/modules/communications/communication-draft-service.server";
 import {
   CommunicationService,
@@ -13,6 +14,7 @@ import { namedRecipient } from "~/modules/communications/manual-recipients";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
 import {
   buildDeliverables,
+  type DeliverablesFilters,
   deliverableComplete,
   deliverableOverdue,
   deliverablesFilterSchema,
@@ -171,6 +173,53 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 }
 
+function DeliverableFilters({
+  filters,
+  columns,
+}: {
+  filters: DeliverablesFilters;
+  columns: Array<{ id: string; name: string }>;
+}) {
+  const live = useLiveFilters({
+    q: filters.q,
+    template: filters.template,
+    state: filters.state,
+  });
+  return (
+    <Form {...live.form} className="card pad deliverables-filters">
+      <label className="label">
+        Speaker
+        <input className="field" {...live.field("q")} maxLength={200} />
+      </label>
+      <label className="label">
+        Requirement
+        <select className="select" {...live.field("template")}>
+          <option value="">All requirements</option>
+          {columns.map((column) => (
+            <option key={column.id} value={column.id}>
+              {column.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="label">
+        Show speakers with
+        <select className="select" {...live.field("state")}>
+          <option value="all">Any status</option>
+          <option value="outstanding">Outstanding work</option>
+          <option value="overdue">Overdue work</option>
+          <option value="submitted">Evidence awaiting review</option>
+          <option value="complete">Completed work</option>
+          <option value="unassigned">Unassigned requirements</option>
+        </select>
+      </label>
+      <ButtonLink variant="ghost" to="/admin/tasks/deliverables">
+        Clear
+      </ButtonLink>
+    </Form>
+  );
+}
+
 export default function Deliverables({
   loaderData: d,
   actionData,
@@ -188,52 +237,7 @@ export default function Deliverables({
       {actionData && (
         <p role={actionData.ok ? "status" : "alert"}>{actionData.message}</p>
       )}
-      <Form
-        key={JSON.stringify(d.filters)}
-        method="get"
-        className="card pad deliverables-filters"
-      >
-        <label className="label">
-          Speaker
-          <input className="field" name="q" defaultValue={d.filters.q} />
-        </label>
-        <label className="label">
-          Requirement
-          <select
-            className="select"
-            name="template"
-            defaultValue={d.filters.template}
-          >
-            <option value="">All requirements</option>
-            {d.allColumns.map((column) => (
-              <option key={column.id} value={column.id}>
-                {column.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="label">
-          Show speakers with
-          <select
-            className="select"
-            name="state"
-            defaultValue={d.filters.state}
-          >
-            <option value="all">Any status</option>
-            <option value="outstanding">Outstanding work</option>
-            <option value="overdue">Overdue work</option>
-            <option value="submitted">Evidence awaiting review</option>
-            <option value="complete">Completed work</option>
-            <option value="unassigned">Unassigned requirements</option>
-          </select>
-        </label>
-        <Button type="submit" disabled={busy}>
-          Apply filters
-        </Button>
-        <ButtonLink variant="ghost" to="/admin/tasks/deliverables">
-          Clear
-        </ButtonLink>
-      </Form>
+      <DeliverableFilters filters={d.filters} columns={d.allColumns} />
       <section className="card pad mt" aria-label="Remind filtered speakers">
         <div className="card-title">
           <h2>Remind speakers</h2>
@@ -274,7 +278,7 @@ export default function Deliverables({
           </p>
         )}
       </section>
-      <p className="mt">
+      <p className="mt" aria-live="polite" aria-atomic="true">
         {d.total} {d.total === 1 ? "speaker" : "speakers"} · Speaker page{" "}
         {d.filters.page} of {d.pages} · Requirement page {d.filters.columns} of{" "}
         {d.columnPages}

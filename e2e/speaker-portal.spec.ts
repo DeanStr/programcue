@@ -738,7 +738,6 @@ test("administrator speaker filters use the event-scoped server list", async ({
 
   const readinessFilter = page.locator('select[name="readiness"]');
   await readinessFilter.selectOption("needs_attention");
-  await page.getByRole("button", { name: "Apply filters" }).click();
 
   await expect(page).toHaveURL(/readiness=needs_attention/u);
   await expect(readinessFilter).toHaveValue("needs_attention");

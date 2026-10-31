@@ -265,6 +265,96 @@ describe("submission form rules", () => {
     ).toEqual(["Enter a valid URL beginning with https://"]);
   });
 
+  it("validates checkbox, number, date, email and phone answers by type", () => {
+    const typedSchema = formSchemaSchema.parse({
+      ...DEFAULT_FORM_SCHEMA,
+      fields: [
+        ...DEFAULT_FORM_SCHEMA.fields,
+        ...(
+          [
+            ["consent", "I agree to the code of conduct", "checkbox"],
+            ["audience", "Expected audience", "number"],
+            ["available_from", "Available from", "date"],
+            ["assistant_email", "Assistant email", "email"],
+            ["mobile", "Mobile", "phone"],
+          ] as const
+        ).map(([id, label, type]) => ({
+          id,
+          label,
+          type,
+          required: true,
+          sectionId: DEFAULT_FORM_SCHEMA.sections[0]?.id,
+        })),
+      ],
+    });
+    const baseAnswers = {
+      title: "A useful session title",
+      description: "A useful session description with enough detail.",
+      category: ["AI & Innovation"],
+      format: "Presentation",
+    };
+    const validate = (answers: Record<string, string>) =>
+      validateFinalAnswers(
+        typedSchema,
+        { ...baseAnswers, ...answers },
+        [],
+        0,
+        null,
+      );
+
+    expect(
+      validate({
+        consent: "Yes",
+        audience: " 4.5 ",
+        available_from: "2027-05-20",
+        assistant_email: "assistant@example.com",
+        mobile: "+61 (2) 9876-5432",
+      }),
+    ).toEqual({});
+    expect(validate({})).toMatchObject({
+      consent: ["Tick “I agree to the code of conduct” to continue"],
+      audience: ["Expected audience is required"],
+      available_from: ["Available from is required"],
+      assistant_email: ["Assistant email is required"],
+      mobile: ["Mobile is required"],
+    });
+    expect(
+      validate({
+        consent: "true",
+        audience: "1e3",
+        available_from: "2027-02-30",
+        assistant_email: "assistant@",
+        mobile: "+61 12",
+      }),
+    ).toEqual({
+      consent: [
+        "I agree to the code of conduct must be ticked or left unticked",
+      ],
+      audience: ["Enter a number, such as 12 or 4.5"],
+      available_from: ["Enter a valid date"],
+      assistant_email: ["Enter a valid email address"],
+      mobile: [
+        "Enter a phone number using digits, spaces and an optional leading +",
+      ],
+    });
+    // Native checkbox and date controls cannot display padded values, so
+    // only the exact representations are accepted.
+    expect(
+      validate({
+        consent: " Yes ",
+        audience: "120",
+        available_from: " 2027-05-20 ",
+        assistant_email: "assistant@example.com",
+        mobile: "+61 2 9876 5432",
+      }),
+    ).toEqual({
+      consent: [
+        "I agree to the code of conduct must be ticked or left unticked",
+      ],
+      available_from: ["Enter a valid date"],
+    });
+  });
+
   it("rejects speakers with a missing or invalid email", () => {
     expect(
       validateFinalAnswers(
@@ -322,6 +412,39 @@ describe("submission form rules", () => {
       equals: "Panel",
     };
     expect(formSchemaSchema.safeParse(invalidCondition).success).toBe(false);
+  });
+
+  it("shows a follow-up question when a checkbox is ticked", () => {
+    const sectionId = DEFAULT_FORM_SCHEMA.sections[0]?.id;
+    const schemaWith = (equals: string) =>
+      formSchemaSchema.safeParse({
+        ...DEFAULT_FORM_SCHEMA,
+        fields: [
+          ...DEFAULT_FORM_SCHEMA.fields,
+          {
+            id: "travel_support",
+            label: "I need travel support",
+            type: "checkbox",
+            sectionId,
+          },
+          {
+            id: "travel_details",
+            label: "Travel details",
+            type: "long_text",
+            required: true,
+            sectionId,
+            condition: { fieldId: "travel_support", equals },
+          },
+        ],
+      });
+    expect(schemaWith("No").success).toBe(false);
+    const parsed = schemaWith("Yes");
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    const visibleIds = (answers: Record<string, string>) =>
+      visibleFields(parsed.data, answers).map((field) => field.id);
+    expect(visibleIds({ travel_support: "" })).not.toContain("travel_details");
+    expect(visibleIds({ travel_support: "Yes" })).toContain("travel_details");
   });
 
   it("validates conditional order using the applicant-visible section order", () => {

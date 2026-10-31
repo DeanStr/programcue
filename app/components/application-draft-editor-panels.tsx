@@ -12,9 +12,11 @@ import { Button, ButtonLink, IconButton } from "~/components/ui/button";
 import { CharacterCount } from "~/components/ui/character-count";
 import type { useConfirm } from "~/components/ui/confirm-dialog";
 import type { ParticipantApplicantDraft } from "~/modules/submissions/submission-repository.server";
-import type {
-  formSectionsForDisplay,
-  StoredFormField,
+import {
+  CHECKBOX_TICKED_ANSWER,
+  formFieldTextInputAttributes,
+  type formSectionsForDisplay,
+  type StoredFormField,
 } from "~/modules/submissions/submission-schema";
 import type { useDraftRecovery } from "~/platform/drafts/draft-recovery";
 
@@ -67,6 +69,17 @@ export function FieldControl({
         ))}
       </select>
     );
+  if (field.type === "checkbox")
+    return (
+      <input
+        {...common}
+        type="checkbox"
+        checked={value === CHECKBOX_TICKED_ANSWER}
+        onChange={(event) =>
+          onChange(event.target.checked ? CHECKBOX_TICKED_ANSWER : "")
+        }
+      />
+    );
   if (field.type === "multi_select") {
     const selected = Array.isArray(value) ? value : [];
     return (
@@ -94,8 +107,8 @@ export function FieldControl({
   return (
     <input
       {...common}
+      {...formFieldTextInputAttributes(field.type)}
       className="field"
-      type={field.type === "url" || field.type === "video" ? "url" : "text"}
       value={String(value ?? "")}
       onChange={(event) => onChange(event.target.value)}
       maxLength={field.id === "title" ? 180 : 5_000}
@@ -279,6 +292,38 @@ export function ApplicationAnswers({
                 </fieldset>
               );
             }
+            if (field.type === "checkbox")
+              return (
+                <div className="application-checkbox-field" key={field.id}>
+                  <FieldControl
+                    field={field}
+                    value={answers[field.id]}
+                    disabled={readOnly}
+                    invalid={Boolean(error)}
+                    describedBy={describedBy}
+                    onChange={update}
+                  />
+                  <label className="label" htmlFor={`answer-${field.id}`}>
+                    {field.label}
+                    {field.required ? (
+                      <span className="pc-required" aria-hidden="true">
+                        Required
+                      </span>
+                    ) : null}
+                  </label>
+                  {field.help ? (
+                    <span className="help" id={helpId}>
+                      {field.help}
+                    </span>
+                  ) : null}
+                  {exampleHelp}
+                  {error ? (
+                    <span className="field-error" id={errorId}>
+                      {error}
+                    </span>
+                  ) : null}
+                </div>
+              );
             if (field.type === "multi_select")
               return (
                 <fieldset

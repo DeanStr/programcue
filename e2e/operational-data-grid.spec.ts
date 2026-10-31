@@ -1,67 +1,188 @@
-import AxeBuilder from "@axe-core/playwright";
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 import { expectLongTrackFilterContained } from "./support/application-grid";
 import { openRecordPanel } from "./support/open-record-panel";
 import { prepareVisualBaseline } from "./support/prepare-visual-baseline";
 import { resetDemoEvent } from "./support/reset-demo-event";
 
-test("column changes preserve unapplied application filters", async ({
+// Hold each Applications data request open so typing, view changes and Clear
+// land while a filter request is still loading.
+async function slowApplicationRequests(page: Page) {
+  const requests: string[] = [];
+  await page.route(/\/admin\/submissions\.data/u, async (route) => {
+    requests.push(route.request().url());
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    await route.continue();
+  });
+  return requests;
+}
+
+test("application filters apply as the user types and keep focus and text", async ({
   page,
 }) => {
   await page.goto("/admin/review");
   await page.locator("body[data-hydrated='true']").waitFor();
   await page.goto("/admin/submissions");
   await page.locator("body[data-hydrated='true']").waitFor();
+  await expect(page.getByRole("button", { name: "Apply filters" })).toHaveCount(
+    0,
+  );
+  const requests = await slowApplicationRequests(page);
   const filters = page.getByRole("search");
-  await filters.getByLabel("Search", { exact: true }).fill("inclusive");
+  const search = filters.getByLabel("Search", { exact: true });
+  await search.click();
+  await page.keyboard.type("incl");
+  // The first request is loading; the rest of the word must survive it.
+  await expect.poll(() => requests.length).toBe(1);
+  await page.keyboard.type("usive");
+  await expect(page).toHaveURL(/query=inclusive/u);
+  await expect(search).toHaveValue("inclusive");
+  await expect(search).toBeFocused();
+  await expect(page.getByRole("table").locator("tbody tr")).toHaveCount(1);
+  await expect(page.locator(".submissions-pulse-line")).toHaveAttribute(
+    "aria-live",
+    "polite",
+  );
+
+  // A filter changed while a column change is loading keeps both.
   await filters
     .getByRole("combobox", { name: "Status", exact: true })
     .selectOption("assigned");
-  await filters
-    .getByRole("combobox", { name: "Sort", exact: true })
-    .selectOption("title-asc");
   await page.getByText("Columns", { exact: true }).click();
-  const submitter = page
+  await page
     .getByRole("group", { name: "Visible columns" })
-    .getByLabel("Submitter");
-  await submitter.uncheck();
-  await expect(page).toHaveURL(/columns=/);
+    .getByLabel("Submitter")
+    .uncheck();
+  await expect(page).toHaveURL(/status=assigned/u);
+  await expect(page).toHaveURL(/columns=route%2Cspeakers%2Cstatus/u);
+  await expect(page).toHaveURL(/query=inclusive/u);
   const header = page.getByRole("columnheader", { name: "Submitter" });
   await expect(header).toHaveCount(0);
-  await expect(filters.getByLabel("Search", { exact: true })).toHaveValue(
-    "inclusive",
-  );
+  await expect(search).toHaveValue("inclusive");
+
+  // Clear leaves the filtered entry in history; Back and Forward restore the
+  // form from each URL.
+  await filters.getByRole("link", { name: "Clear", exact: true }).click();
+  await expect(page).toHaveURL(/\/admin\/submissions$/u);
+  await expect(search).toHaveValue("");
   await expect(
     filters.getByRole("combobox", { name: "Status", exact: true }),
-  ).toHaveValue("assigned");
-  await expect(
-    filters.getByRole("combobox", { name: "Sort", exact: true }),
-  ).toHaveValue("title-asc");
-  expect(new URL(page.url()).searchParams.get("query")).toBeNull();
-  await expect(submitter).toBeFocused();
-  await page.goBack();
+  ).toHaveValue("");
   await expect(header).toBeVisible();
-  await page.goForward();
-  await expect(header).toHaveCount(0);
-  await expect(filters.getByLabel("Search", { exact: true })).toHaveValue(
-    "inclusive",
-  );
-  await page
-    .getByRole("button", { name: "Apply filters", exact: true })
-    .click();
-  await expect(page).toHaveURL(/query=inclusive/);
-  await expect(page.getByRole("table").locator("tbody tr")).toHaveCount(1);
-  await page.reload();
-  await expect(filters.getByLabel("Search", { exact: true })).toHaveValue(
-    "inclusive",
-  );
+  await page.goBack();
+  await expect(page).toHaveURL(/query=inclusive/u);
+  await expect(search).toHaveValue("inclusive");
   await expect(
     filters.getByRole("combobox", { name: "Status", exact: true }),
   ).toHaveValue("assigned");
-  await expect(
-    filters.getByRole("combobox", { name: "Sort", exact: true }),
-  ).toHaveValue("title-asc");
   await expect(header).toHaveCount(0);
+  await page.goForward();
+  await expect(search).toHaveValue("");
+  await page.goBack();
+  await page.reload();
+  await expect(search).toHaveValue("inclusive");
+  await expect(
+    filters.getByRole("combobox", { name: "Status", exact: true }),
+  ).toHaveValue("assigned");
+});
+
+test("Back during a loading filter restores the earlier entry exactly", async ({
+  page,
+}) => {
+  await page.goto("/admin/submissions");
+  await page.locator("body[data-hydrated='true']").waitFor();
+  await page
+    .getByRole("combobox", { name: "Density", exact: true })
+    .selectOption("compact");
+  await expect(page).toHaveURL(/density=compact/u);
+  const requests = await slowApplicationRequests(page);
+  const search = page.getByRole("search").getByLabel("Search", { exact: true });
+  await search.fill("inclusive");
+  // The filter request is still loading when the user goes back.
+  await expect.poll(() => requests.length).toBe(1);
+  await page.goBack();
+  await expect(page).toHaveURL(/\/admin\/submissions$/u);
+  await expect(
+    page.getByRole("combobox", { name: "Density", exact: true }),
+  ).toHaveValue("comfortable");
+  await expect(search).toHaveValue("");
+  // Nothing re-applies the abandoned search over the restored entry.
+  await page.waitForTimeout(900);
+  await expect(page).toHaveURL(/\/admin\/submissions$/u);
+  await expect(search).toHaveValue("");
+});
+
+test("Back restores an entry whose search matches a loading request", async ({
+  page,
+}) => {
+  await page.goto("/admin/submissions");
+  await page.locator("body[data-hydrated='true']").waitFor();
+  const filters = page.getByRole("search");
+  const search = filters.getByLabel("Search", { exact: true });
+  await search.fill("inclusive");
+  await expect(page).toHaveURL(/query=inclusive/u);
+  await filters.getByRole("link", { name: "Clear", exact: true }).click();
+  await expect(page).toHaveURL(/\/admin\/submissions$/u);
+
+  const requests = await slowApplicationRequests(page);
+  await search.click();
+  await page.keyboard.type("inclusive");
+  // The new request asks for exactly the entry Back returns to.
+  await expect.poll(() => requests.length).toBe(1);
+  await page.keyboard.type("-more");
+  await page.goBack();
+  await expect(page).toHaveURL(/query=inclusive(?:&|$)/u);
+  await expect(search).toHaveValue("inclusive");
+  // Neither the pending edit nor its debounce lands on the restored entry.
+  await page.waitForTimeout(900);
+  await expect(page).toHaveURL(/query=inclusive(?:&|$)/u);
+  await expect(search).toHaveValue("inclusive");
+});
+
+test("a select traversed from the keyboard applies once and Enter applies at once", async ({
+  page,
+}) => {
+  await page.goto("/admin/submissions");
+  await page.locator("body[data-hydrated='true']").waitFor();
+  const requests = await slowApplicationRequests(page);
+  const sort = page
+    .getByRole("search")
+    .getByRole("combobox", { name: "Sort", exact: true });
+  await sort.focus();
+  // A closed select changes, and fires change, on every arrow key.
+  for (let step = 0; step < 3; step += 1)
+    await page.keyboard.press("ArrowDown");
+  await expect(page).toHaveURL(/sort=title-desc/u);
+  await page.waitForTimeout(600);
+  expect(requests).toHaveLength(1);
+  await expect(sort).toBeFocused();
+
+  const search = page.getByRole("search").getByLabel("Search", { exact: true });
+  await search.fill("Designing");
+  await search.press("Enter");
+  await expect.poll(() => requests.length).toBe(2);
+  await expect(page).toHaveURL(/query=Designing/u);
+  await page.waitForTimeout(600);
+  expect(requests).toHaveLength(2);
+});
+
+test("a filter chosen before hydration is kept and applied", async ({
+  page,
+}) => {
+  // Controlled filters would otherwise put the loaded value back on their
+  // first render.
+  await page.route(/\/assets\/.*\.js$/u, async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    await route.continue();
+  });
+  await page.goto("/admin/submissions", { waitUntil: "domcontentloaded" });
+  const sort = page
+    .getByRole("search")
+    .getByRole("combobox", { name: "Sort", exact: true });
+  await sort.selectOption("title-asc");
+  await expect(page.locator("body[data-hydrated='true']")).toHaveCount(0);
+  await page.locator("body[data-hydrated='true']").waitFor();
+  await expect(page).toHaveURL(/sort=title-asc/u);
+  await expect(sort).toHaveValue("title-asc");
 });
 
 test("rapid view changes keep every change", async ({ page }) => {
@@ -69,10 +190,7 @@ test("rapid view changes keep every change", async ({ page }) => {
   await page.locator("body[data-hydrated='true']").waitFor();
   // Hold each view request open so the second change lands while the first
   // is still loading, which is when the rendered URL is stale.
-  await page.route(/\/admin\/submissions\.data/u, async (route) => {
-    await new Promise((resolve) => setTimeout(resolve, 400));
-    await route.continue();
-  });
+  await slowApplicationRequests(page);
   await page.getByText("Columns", { exact: true }).click();
   const columns = page.getByRole("group", { name: "Visible columns" });
   await columns.getByLabel("Submitter").uncheck();
@@ -85,11 +203,13 @@ test("rapid view changes keep every change", async ({ page }) => {
     page.getByRole("columnheader", { name: "Category route" }),
   ).toHaveCount(0);
 
-  // Apply submits the filter form while the density change is still loading.
+  // A filter change lands while the density change is still loading.
   await page.getByLabel("Density").selectOption("compact");
   await page
-    .getByRole("button", { name: "Apply filters", exact: true })
-    .click();
+    .getByRole("search")
+    .getByRole("combobox", { name: "Sort", exact: true })
+    .selectOption("title-asc");
+  await expect(page).toHaveURL(/sort=title-asc/u);
   await expect(page).toHaveURL(/density=compact/u);
   await expect(page).toHaveURL(/columns=speakers%2Cstatus/u);
 });
@@ -99,10 +219,7 @@ test("a view change replaced before it loads leaves no stale view", async ({
 }) => {
   await page.goto("/admin/submissions");
   await page.locator("body[data-hydrated='true']").waitFor();
-  await page.route(/\/admin\/submissions\.data/u, async (route) => {
-    await new Promise((resolve) => setTimeout(resolve, 400));
-    await route.continue();
-  });
+  await slowApplicationRequests(page);
   const density = page.getByLabel("Density");
   await density.selectOption("compact");
   await page.getByRole("link", { name: "Clear", exact: true }).click();
@@ -118,32 +235,24 @@ test("a view change replaced before it loads leaves no stale view", async ({
   await expect(page).toHaveURL(/\?columns=route%2Cspeakers%2Cstatus$/u);
 });
 
-test("application Apply remains readable during keyboard activation", async ({
+test("task filters without a text field apply from the keyboard", async ({
   page,
 }) => {
-  await page.goto("/admin/submissions");
+  await page.goto("/admin/tasks");
   await page.locator("body[data-hydrated='true']").waitFor();
-  await page
-    .getByRole("search")
-    .getByLabel("Search", { exact: true })
-    .fill("inclusive");
-  await page.mouse.move(0, 0);
-  const apply = page.getByRole("button", {
-    name: "Apply filters",
-    exact: true,
-  });
-  await apply.focus();
-  await page.keyboard.down("Space");
-  try {
-    const scan = await new AxeBuilder({ page })
-      .include(".submissions-filter-actions")
-      .withRules(["color-contrast"])
-      .analyze();
-    expect(scan.violations).toEqual([]);
-  } finally {
-    await page.keyboard.up("Space");
-  }
-  await expect(page).toHaveURL(/query=inclusive/);
+  const filters = page.locator(".tasks-filters");
+  await filters.locator("summary").focus();
+  await page.keyboard.press("Enter");
+  const status = filters.getByLabel("Status");
+  await status.focus();
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/state=not_started/u);
+  await expect(status).toHaveValue("not_started");
+  await expect(status).toBeFocused();
+  await expect(page.getByRole("button", { name: "Apply filters" })).toHaveCount(
+    0,
+  );
 });
 
 test("the submissions grid keeps server filters authoritative while managing the visible page", async ({
@@ -207,7 +316,12 @@ test("the submissions grid keeps server filters authoritative while managing the
   await expect(page).toHaveURL(/density=compact/u);
   await expect(table).toHaveClass(/is-compact/);
   await expect(density).toBeFocused();
-  await page.getByRole("button", { name: "Apply filters" }).click();
+  // A filter change keeps the selected density.
+  await page
+    .getByRole("search")
+    .getByRole("combobox", { name: "Sort", exact: true })
+    .selectOption("title-asc");
+  await expect(page).toHaveURL(/sort=title-asc/u);
   await expect(page).toHaveURL(/density=compact/u);
   await page.getByText("Columns", { exact: true }).click();
   const visibleColumns = page.getByRole("group", {

@@ -1,4 +1,7 @@
-export { ApplicantPreviewPanel } from "./form-builder-applicant-preview-panel";
+export {
+  APPLICANT_PREVIEW_FORM_ID,
+  ApplicantPreviewPanel,
+} from "./form-builder-applicant-preview-panel";
 export { FieldSettingsPanel } from "./form-builder-field-settings-panel";
 export { PresentationSettingsPanel } from "./form-builder-presentation-panel";
 export {

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   conditionalFieldOrderIssue,
   createFormField,
+  formConditionDescription,
   formConditionSourceLabel,
   formFieldCreationIssue,
   formFieldTypeLabel,
@@ -125,6 +126,24 @@ describe("form builder field rules", () => {
       "Long text",
       "Video upload or URL",
     ]);
+  });
+
+  it("describes checkbox conditions as ticked and choice conditions by value", () => {
+    const checkbox = createFormField(
+      DEFAULT_FORM_SCHEMA.fields,
+      "checkbox",
+      "proposal",
+    );
+    const fields = [
+      ...DEFAULT_FORM_SCHEMA.fields,
+      { ...checkbox, label: "I need travel support" },
+    ];
+    expect(
+      formConditionDescription(fields, { fieldId: checkbox.id, equals: "Yes" }),
+    ).toBe("Shown when I need travel support is ticked");
+    expect(
+      formConditionDescription(fields, { fieldId: "format", equals: "" }),
+    ).toBe("Shown when Format = …");
   });
 
   it("uses human-readable labels for conditional dependencies", () => {

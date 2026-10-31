@@ -162,9 +162,7 @@ test("deliverables matrix supports filters, evidence navigation and event-local 
     page.getByRole("heading", { name: "Speaker deliverables", exact: true }),
   ).toBeVisible();
   await page.getByLabel("Speaker", { exact: true }).fill("Priya");
-  await page
-    .getByRole("button", { name: "Apply filters", exact: true })
-    .click();
+  await expect(page).toHaveURL(/q=Priya/);
   const matrix = page.getByRole("region", {
     name: "Speaker deliverables matrix",
   });
@@ -206,9 +204,6 @@ test("deliverables matrix supports filters, evidence navigation and event-local 
   await page
     .getByRole("combobox", { name: "Show speakers with", exact: true })
     .selectOption("unassigned");
-  await page
-    .getByRole("button", { name: "Apply filters", exact: true })
-    .click();
   await expect(page).toHaveURL(/state=unassigned/);
   await page
     .getByRole("combobox", { name: "Show speakers with", exact: true })
@@ -216,10 +211,9 @@ test("deliverables matrix supports filters, evidence navigation and event-local 
   await page
     .getByRole("combobox", { name: "Requirement", exact: true })
     .selectOption("task-template-handbook");
-  await page
-    .getByRole("button", { name: "Apply filters", exact: true })
-    .click();
-  await expect(page).toHaveURL(/state=outstanding/);
+  await expect(page).toHaveURL(
+    /template=task-template-handbook&state=outstanding/,
+  );
   await page.getByRole("link", { name: "Clear", exact: true }).click();
   await expect(page).toHaveURL(/\/admin\/tasks\/deliverables$/);
   await expect(page.getByLabel("Speaker", { exact: true })).toHaveValue("");
@@ -238,9 +232,8 @@ test("deliverables matrix supports filters, evidence navigation and event-local 
   ).toHaveValue("outstanding");
   await page.goForward();
   await expect(page.getByLabel("Speaker", { exact: true })).toHaveValue("");
-  await page
-    .getByRole("button", { name: "Apply filters", exact: true })
-    .click();
+  // Enter applies the unchanged filters at once.
+  await page.getByLabel("Speaker", { exact: true }).press("Enter");
   await expect(page).toHaveURL(/state=all/);
   expect(new URL(page.url()).searchParams.get("q")).toBe("");
   expect(new URL(page.url()).searchParams.get("template")).toBe("");

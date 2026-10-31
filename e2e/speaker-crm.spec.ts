@@ -332,16 +332,17 @@ test("organization CRM covers directory, relationship, pipeline, handoff and out
   await expect(page.getByRole("link", { name: "Marcus Okafor" })).toBeVisible();
 
   await page.getByLabel("Search contacts").fill("Priya");
-  await page.getByRole("button", { name: "Apply filters" }).click();
+  await expect(page).toHaveURL(/query=Priya/u);
   await expect(page.getByRole("link", { name: "Priya Raman" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Marcus Okafor" })).toHaveCount(
     0,
   );
   await page.getByRole("link", { name: "Clear filters" }).click();
+  await expect(page).toHaveURL(/\/admin\/crm$/u);
+  await expect(page.getByLabel("Search contacts")).toHaveValue("");
   await page
     .locator('select[name="company"]')
     .selectOption({ label: "Latticework Systems" });
-  await page.getByRole("button", { name: "Apply filters" }).click();
   await expect(page.getByLabel("Active directory filters")).toContainText(
     "Latticework Systems",
   );
@@ -365,7 +366,7 @@ test("organization CRM covers directory, relationship, pipeline, handoff and out
     .click();
   await expect(page).toHaveURL(/\/admin\/crm$/u);
   await page.locator('select[name="tag"]').selectOption("AI");
-  await page.getByRole("button", { name: "Apply filters" }).click();
+  await expect(page).toHaveURL(/tag=AI/u);
   await page.getByLabel("Segment name").fill("AI Experts");
   await page.getByRole("button", { name: "Save dynamic segment" }).click();
   await page.getByRole("link", { name: "AI Experts" }).click();

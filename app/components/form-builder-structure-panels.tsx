@@ -4,7 +4,7 @@ import { requireValue } from "~/lib/required-value";
 
 import {
   conditionalFieldOrderIssue,
-  formConditionSourceLabel,
+  formConditionDescription,
   formFieldTypeLabel,
 } from "~/modules/submissions/form-builder-fields";
 import {
@@ -302,12 +302,7 @@ export function FormStructurePanel({
                   </span>
                   {field.condition ? (
                     <span className="fb-field-condition">
-                      Shown when{" "}
-                      {formConditionSourceLabel(
-                        fields,
-                        field.condition.fieldId,
-                      )}{" "}
-                      = {field.condition.equals}
+                      {formConditionDescription(fields, field.condition)}
                     </span>
                   ) : null}
                 </span>

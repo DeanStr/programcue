@@ -1,6 +1,7 @@
 import { Form, useNavigation, useSubmit } from "react-router";
 import { Button, ButtonLink } from "~/components/ui/button";
 import { useConfirm } from "~/components/ui/confirm-dialog";
+import { useLiveFilters } from "~/components/use-live-filters";
 import { fieldLabel } from "~/lib/record-labels";
 import { shortReference } from "~/lib/short-reference";
 import {
@@ -72,6 +73,10 @@ export function OperationFiltersPanel({
 }: {
   loaderData: OperationCentreData;
 }) {
+  const liveFilters = useLiveFilters({
+    status: loaderData.filters.status,
+    type: loaderData.filters.type,
+  });
   return (
     <section
       className="ops-filters mb"
@@ -80,14 +85,10 @@ export function OperationFiltersPanel({
       <h2 id="operation-filters-heading" className="sr-only">
         Filter operations
       </h2>
-      <Form method="get" className="ops-filters-form">
+      <Form {...liveFilters.form} className="ops-filters-form">
         <label className="label">
           Status
-          <select
-            className="select"
-            name="status"
-            defaultValue={loaderData.filters.status}
-          >
+          <select className="select" {...liveFilters.field("status")}>
             <option value="">All statuses</option>
             <option value="queued">Queued</option>
             <option value="running">Running</option>
@@ -98,11 +99,7 @@ export function OperationFiltersPanel({
         </label>
         <label className="label">
           Operation type
-          <select
-            className="select"
-            name="type"
-            defaultValue={loaderData.filters.type}
-          >
+          <select className="select" {...liveFilters.field("type")}>
             <option value="">All types</option>
             {loaderData.types.map((type) => (
               <option value={type} key={type}>
@@ -111,14 +108,13 @@ export function OperationFiltersPanel({
             ))}
           </select>
         </label>
-        <div className="page-actions">
-          <Button type="submit">Apply filters</Button>
-          {loaderData.filterActive ? (
+        {loaderData.filterActive ? (
+          <div className="page-actions">
             <ButtonLink variant="ghost" to="/admin/operations">
               Clear
             </ButtonLink>
-          ) : null}
-        </div>
+          </div>
+        ) : null}
       </Form>
     </section>
   );

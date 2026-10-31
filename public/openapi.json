@@ -7759,6 +7759,11 @@
                         "long_text",
                         "select",
                         "multi_select",
+                        "checkbox",
+                        "number",
+                        "date",
+                        "email",
+                        "phone",
                         "url",
                         "video"
                       ]

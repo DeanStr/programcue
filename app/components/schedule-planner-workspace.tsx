@@ -203,10 +203,17 @@ export function SchedulePlannerWorkspace({
                 : "Preparing auto-place preview…"}
             </Button>
           ) : null}
+          {/* Beside the action that changes it. A full-width bar above the
+              board used to repeat this version; the board now carries the
+              read-only marker. */}
           {workspace.version ? (
             <span className="schedule-page-version">
               Version {workspace.version.versionNumber} ·{" "}
               {statusPresentation("version", workspace.version.status).label}
+            </span>
+          ) : editLock.reason ? (
+            <span className="schedule-page-version">
+              {editLock.reason.title}
             </span>
           ) : null}
           {placementAvailable ? (
@@ -245,15 +252,6 @@ export function SchedulePlannerWorkspace({
           )}
         </div>
       </div>
-      {editLock.reason ? (
-        <StatusNotice
-          className="schedule-read-only-notice"
-          tone={editLock.reason.tone}
-          title={`Schedule read-only · ${editLock.reason.title}`}
-        >
-          {editLock.reason.detail} {editLock.reason.remedy}.
-        </StatusNotice>
-      ) : null}
       {breakNotice ? (
         <StatusNotice
           tone={breakNotice.warning ? "warning" : "success"}
@@ -543,6 +541,7 @@ export function SchedulePlannerWorkspace({
               eventDays={eventDays}
               setSelectedDay={setSelectedDay}
               placementAvailable={placementAvailable}
+              editLock={editLock}
               placementBusy={placementBusy}
               moveInStandardCalendar={moveInStandardCalendar}
               resize={resize}
@@ -599,11 +598,11 @@ export function SchedulePlannerWorkspace({
                   <p className="help">{quickSession.title}</p>
                 ) : null}
               </div>
-              {/* No read-only marker here. The page-level bar stays on screen
-                  in this fixed-height layout, each editor below carries its own
-                  caption, and the frozen fields now render inert — a pill added
-                  a fourth copy at the cost of wrapping the heading and
-                  truncating the session name in a 320px column. */}
+              {/* No read-only marker here. The page header status stays on
+                  screen in this fixed-height layout, each editor below carries
+                  its own caption, and the frozen fields now render inert — a
+                  pill added another copy at the cost of wrapping the heading
+                  and truncating the session name in a 320px column. */}
               {/* An icon: the head is 320px at its narrowest, and a spelled-out
                   label crowds the session name it sits beside. */}
               <IconButton

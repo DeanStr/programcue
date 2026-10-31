@@ -15,8 +15,10 @@ import { programmeAccentPalette } from "~/modules/programme/programme-presentati
 import {
   APPLICANT_SPEAKERS_STEP_ID,
   applicantFormStepIdForErrors,
+  CHECKBOX_TICKED_ANSWER,
   deriveInitialApplicantFormStepId,
   formApplicantSteps,
+  formFieldTextInputAttributes,
   formLayout,
   formSectionsForDisplay,
   heroImagePathSchema,
@@ -29,6 +31,12 @@ import {
 } from "~/modules/submissions/submission-schema";
 
 const PREVIEW_WIDTHS = { mobile: 390, desktop: 960 } as const;
+
+/** The preview renders inside the builder's form, so its test answers would
+ *  otherwise take part in the builder's native validation and an invalid test
+ *  value would silently block Save draft. Every preview control belongs to
+ *  this separate, never-submitted form instead. */
+export const APPLICANT_PREVIEW_FORM_ID = "form-builder-applicant-preview";
 
 /**
  * An event accent is customer-chosen and carries no contrast guarantee against
@@ -56,6 +64,7 @@ function FieldPreview({
   if (field.type === "long_text")
     return (
       <textarea
+        form={APPLICANT_PREVIEW_FORM_ID}
         className="textarea"
         maxLength={5_000}
         value={String(value ?? "")}
@@ -65,6 +74,7 @@ function FieldPreview({
   if (field.type === "select")
     return (
       <select
+        form={APPLICANT_PREVIEW_FORM_ID}
         className="select"
         value={String(value ?? "")}
         onChange={(event) => onChange(event.target.value)}
@@ -75,6 +85,17 @@ function FieldPreview({
         ))}
       </select>
     );
+  if (field.type === "checkbox")
+    return (
+      <input
+        form={APPLICANT_PREVIEW_FORM_ID}
+        type="checkbox"
+        checked={value === CHECKBOX_TICKED_ANSWER}
+        onChange={(event) =>
+          onChange(event.target.checked ? CHECKBOX_TICKED_ANSWER : "")
+        }
+      />
+    );
   if (field.type === "multi_select") {
     const selected = Array.isArray(value) ? value : [];
     return (
@@ -82,6 +103,7 @@ function FieldPreview({
         {field.options.map((option) => (
           <label key={option}>
             <input
+              form={APPLICANT_PREVIEW_FORM_ID}
               type="checkbox"
               checked={selected.includes(option)}
               onChange={(event) =>
@@ -100,8 +122,9 @@ function FieldPreview({
   }
   return (
     <input
+      form={APPLICANT_PREVIEW_FORM_ID}
+      {...formFieldTextInputAttributes(field.type)}
       className="field"
-      type={field.type === "url" || field.type === "video" ? "url" : "text"}
       maxLength={field.id === "title" ? 180 : 5_000}
       value={String(value ?? "")}
       onChange={(event) => onChange(event.target.value)}
@@ -362,7 +385,36 @@ export function ApplicantPreviewPanel({
                       </header>
                     ) : null}
                     {section.fields.map((field) =>
-                      field.type === "multi_select" ? (
+                      field.type === "checkbox" ? (
+                        // biome-ignore lint/a11y/noLabelWithoutControl: FieldPreview renders the wrapped checkbox.
+                        <label
+                          className="application-checkbox-field"
+                          key={field.id}
+                        >
+                          <FieldPreview
+                            field={field}
+                            value={answers[field.id]}
+                            onChange={(value) => updateAnswer(field.id, value)}
+                          />
+                          <span className="label">
+                            {field.label}
+                            {field.required ? " *" : ""}
+                          </span>
+                          {field.help ? (
+                            <span className="help">{field.help}</span>
+                          ) : null}
+                          {field.example ? (
+                            <span className="help">
+                              Example: {field.example}
+                            </span>
+                          ) : null}
+                          {errors[field.id]?.[0] ? (
+                            <span className="field-error">
+                              {errors[field.id][0]}
+                            </span>
+                          ) : null}
+                        </label>
+                      ) : field.type === "multi_select" ? (
                         <fieldset
                           className="application-choice-field"
                           key={field.id}
@@ -429,6 +481,7 @@ export function ApplicantPreviewPanel({
                     <label className="label">
                       Test speaker count
                       <input
+                        form={APPLICANT_PREVIEW_FORM_ID}
                         className="field"
                         type="number"
                         min={1}

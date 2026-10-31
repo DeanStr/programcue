@@ -17,6 +17,7 @@ function renderGrid(submissions: AdminSubmission[], detailSearchParams = "") {
             density="comfortable"
             sort="submittedAt-desc"
             detailSearchParams={detailSearchParams}
+            resultKey="1"
           />
         ),
       },

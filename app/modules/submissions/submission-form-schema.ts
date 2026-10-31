@@ -5,9 +5,19 @@ export const fieldTypeSchema = z.enum([
   "long_text",
   "select",
   "multi_select",
+  "checkbox",
+  "number",
+  "date",
+  "email",
+  "phone",
   "url",
   "video",
 ]);
+
+/** A ticked checkbox stores this readable answer; unticked stores "". Review,
+ *  export and AI evidence then read "Yes" without type-specific formatting,
+ *  and a condition on a checkbox matches this value. */
+export const CHECKBOX_TICKED_ANSWER = "Yes";
 
 const legacyFormFieldSchema = z
   .object({
@@ -176,7 +186,15 @@ function validateFormFields(
       });
     } else {
       const dependency = orderedFields[dependencyIndex];
-      if (
+      if (dependency?.type === "checkbox") {
+        if (field.condition.equals !== CHECKBOX_TICKED_ANSWER) {
+          context.addIssue({
+            code: "custom",
+            path: ["fields", schemaIndex, "condition"],
+            message: "A checkbox condition shows the field when it is ticked",
+          });
+        }
+      } else if (
         dependency &&
         dependency.type !== "select" &&
         dependency.type !== "multi_select"
@@ -184,7 +202,8 @@ function validateFormFields(
         context.addIssue({
           code: "custom",
           path: ["fields", schemaIndex, "condition"],
-          message: "Conditional fields must depend on a choice field",
+          message:
+            "Conditional fields must depend on a choice field or checkbox",
         });
       } else if (
         dependency &&

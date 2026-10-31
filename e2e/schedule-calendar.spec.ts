@@ -364,13 +364,32 @@ test("states why the published planner is read-only and clears it on the next dr
   page,
 }) => {
   await waitForInterface(page, "/admin/schedule?session=demo-session-1");
-  const notice = page.locator(".schedule-read-only-notice");
-  await expect(notice).toContainText(
-    "Schedule read-only · Version 1 is published",
+  // The version and its way out sit together in the page header; the board
+  // carries the marker where a drag fails, with the full reason for screen
+  // readers, instead of a separate full-width bar repeating the version.
+  await expect(page.locator(".schedule-page-version")).toHaveText(
+    "Version 1 · Published",
   );
-  await expect(notice).toContainText(
+  await expect(
+    page.getByRole("button", { name: "Edit next version", exact: true }),
+  ).toBeVisible();
+  const boardMarker = page
+    .locator(".schedule-canvas-title")
+    .getByTestId("schedule-read-only-marker");
+  await expect(boardMarker).toBeVisible();
+  await expect(boardMarker).toContainText("Version 1 is published");
+  await expect(boardMarker).toContainText(
     "Select Edit next version to make changes",
   );
+  await page
+    .getByRole("group", { name: "Schedule view" })
+    .getByRole("button", { name: "Week", exact: true })
+    .click();
+  await expect(boardMarker).toBeVisible();
+  await page
+    .getByRole("group", { name: "Schedule view" })
+    .getByRole("button", { name: "Room", exact: true })
+    .click();
 
   const inspector = page.getByRole("complementary", {
     name: "Notes and session content",
@@ -409,7 +428,7 @@ test("states why the published planner is read-only and clears it on the next dr
 
   await createNextScheduleDraft(page);
   await expect(page.getByText(/Version \d+ · Draft/)).toBeVisible();
-  await expect(notice).toBeHidden();
+  await expect(boardMarker).toBeHidden();
   await expect(page.getByTestId("schedule-read-only-marker")).toHaveCount(0);
   await expect(
     inspector.getByRole("textbox", { name: "Schedule notes" }),

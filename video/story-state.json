@@ -48,11 +48,11 @@
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/form-builder-desktop-chromium-linux.png",
-      "sha256": "09d93c4d9f8ded0b5187e279923a0067dba93313f71e22094746dcf4368bda8a"
+      "sha256": "f565c1691af5c1db9b9c7c9a95cd535a3c151df124e7c4edc0d5f8194aa55774"
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/form-builder-laptop-chromium-linux.png",
-      "sha256": "3776a4e1cf434fb88b23457a258ac183383e77760378a8165b9ccde7eb69aa71"
+      "sha256": "448eb2fc093149c1f7c6b5df9dd7394521992908ef1231ff174534c14843a21c"
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/programme-admin-desktop-chromium-linux.png",
@@ -88,7 +88,7 @@
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/schedule-planner-laptop-chromium-linux.png",
-      "sha256": "fc834ac8c335acf92d4e85ab48d74ee1b3120cf59bbbc47a56696093ae435925"
+      "sha256": "24aca026010a800a0f66e80c02620dd206ff643dfd91ca9f8f18fc1c9b5baf21"
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/speaker-dashboard-desktop-chromium-linux.png",

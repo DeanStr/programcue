@@ -2,7 +2,7 @@ import { useSyncExternalStore } from "react";
 import { Form } from "react-router";
 
 import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
-import { Button } from "~/components/ui/button";
+import { useLiveFilters } from "~/components/use-live-filters";
 
 function subscribeDesktopFilters(onChange: () => void) {
   const media = window.matchMedia("(min-width: 761px)");
@@ -17,6 +17,12 @@ export function EvaluationResultsToolbar() {
     () => window.matchMedia("(min-width: 761px)").matches,
     () => true,
   );
+  const liveFilters = useLiveFilters({
+    preset: loaderData.resultPreset,
+    filter: loaderData.reviewFilter ?? "",
+    resultsRound: loaderData.resultsRoundId ?? "",
+    sort: loaderData.resultSort,
+  });
 
   return (
     <>
@@ -25,15 +31,11 @@ export function EvaluationResultsToolbar() {
         open={desktopFilters ? true : undefined}
       >
         <summary>Filter and sort</summary>
-        <Form method="get" className="inline-form pc-eval-toolbar">
+        <Form {...liveFilters.form} className="inline-form pc-eval-toolbar">
           <input type="hidden" name="view" value="results" />
           <label className="label">
             View preset
-            <select
-              className="select"
-              name="preset"
-              defaultValue={loaderData.resultPreset}
-            >
+            <select className="select" {...liveFilters.field("preset")}>
               <option value="all">All targets</option>
               <option value="coverage">Coverage</option>
               <option value="decision_ready">Decision-ready</option>
@@ -42,11 +44,7 @@ export function EvaluationResultsToolbar() {
           </label>
           <label className="label">
             Coverage filter
-            <select
-              className="select"
-              name="filter"
-              defaultValue={loaderData.reviewFilter ?? ""}
-            >
+            <select className="select" {...liveFilters.field("filter")}>
               <option value="">Any coverage</option>
               <option value="incomplete">Incomplete reviews</option>
               <option value="unassigned">Unassigned</option>
@@ -54,11 +52,7 @@ export function EvaluationResultsToolbar() {
           </label>
           <label className="label">
             Results round
-            <select
-              className="select"
-              name="resultsRound"
-              defaultValue={loaderData.resultsRoundId ?? ""}
-            >
+            <select className="select" {...liveFilters.field("resultsRound")}>
               {loaderData.plan?.rounds.map((round) => (
                 <option key={round.id} value={round.id}>
                   {round.name}
@@ -68,26 +62,21 @@ export function EvaluationResultsToolbar() {
           </label>
           <label className="label">
             Sort results
-            <select
-              className="select"
-              name="sort"
-              defaultValue={loaderData.resultSort}
-            >
+            <select className="select" {...liveFilters.field("sort")}>
               <option value="score_desc">Score, high to low</option>
               <option value="score_asc">Score, low to high</option>
               <option value="completion_desc">Review completion</option>
               <option value="title_asc">Title</option>
             </select>
           </label>
-          <Button type="submit" size="small">
-            Apply filters
-          </Button>
         </Form>
       </details>
       <div className="help pc-eval-results-meta">
-        Showing {loaderData.results.length} of {loaderData.resultsTotal}{" "}
-        matching targets · page {loaderData.resultsPage} of{" "}
-        {loaderData.resultsPageCount}
+        <span aria-live="polite" aria-atomic="true">
+          Showing {loaderData.results.length} of {loaderData.resultsTotal}{" "}
+          matching targets · page {loaderData.resultsPage} of{" "}
+          {loaderData.resultsPageCount}
+        </span>
         {loaderData.resultsRoundId ? (
           <>
             {" · "}

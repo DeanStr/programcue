@@ -20,6 +20,9 @@ export type ScheduleEditLockVersion = {
 export type ScheduleEditLockReason = {
   /** Names the state, for example "Version 3 is published". */
   title: string;
+  /** The state alone, for example "published": short enough to sit beside
+   *  "Read-only" under the board heading without widening it. */
+  state: string;
   /** Why editing is frozen, in one sentence. */
   detail: string;
   /** Short enough for a disabled control's accessible name. */
@@ -45,6 +48,7 @@ export function scheduleEditLock(
       editable: false,
       reason: {
         title: "No schedule version yet",
+        state: "no version yet",
         detail:
           "Sessions cannot be placed and notes and session content cannot be edited yet.",
         remedy: "Create a schedule to edit",
@@ -61,6 +65,7 @@ export function scheduleEditLock(
         editable: false,
         reason: {
           title: `${label} is publishing`,
+          state: "publishing",
           detail: `${FROZEN_SURFACES} while publication runs.`,
           remedy: "Wait for publication to finish",
           tone: "info",
@@ -71,6 +76,7 @@ export function scheduleEditLock(
         editable: false,
         reason: {
           title: `${label} is published`,
+          state: "published",
           detail: `${FROZEN_SURFACES}.`,
           remedy: NEXT_VERSION_REMEDY,
           tone: "info",
@@ -81,6 +87,7 @@ export function scheduleEditLock(
         editable: false,
         reason: {
           title: `${label} is archived`,
+          state: "archived",
           detail: `${FROZEN_SURFACES} on an archived version.`,
           remedy: NEXT_VERSION_REMEDY,
           tone: "info",
@@ -91,6 +98,7 @@ export function scheduleEditLock(
         editable: false,
         reason: {
           title: `${label} failed to publish`,
+          state: "publication failed",
           detail: `${FROZEN_SURFACES} after a failed publication.`,
           remedy: NEXT_VERSION_REMEDY,
           tone: "warning",

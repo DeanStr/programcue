@@ -731,13 +731,26 @@
   margin-top: 2px;
   max-width: 42ch;
 }
+/* The board's read-only marker stacks under the heading, inside the height
+   the two-line day tabs already give the row. */
+.schedule-canvas-title {
+  display: grid;
+  justify-items: start;
+  gap: 2px;
+}
+.schedule-canvas-title h2 {
+  margin: 0;
+}
+/* A toolbar item: it sits beside the tabs when they leave room and wraps
+   onto its own toolbar row otherwise. */
 .schedule-canvas-meta {
   display: flex;
+  flex: 1 1 15rem;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-3);
+  gap: var(--space-1) var(--space-3);
   flex-wrap: wrap;
-  padding: 0 var(--space-4) var(--space-2);
+  min-width: 0;
 }
 .schedule-format-key {
   display: flex;
@@ -1236,37 +1249,9 @@
 
 /* Read-only planner state. A published, publishing, archived or failed version
    freezes the board, the session source, the schedule notes and the session
-   editor at once, so the state is announced once at page level and repeated
-   beside each frozen editor, which sits in its own scroll region. */
-/* Qualified with .pc-status-notice: design-primitives.css owns the base
-   padding and is imported after this sheet, so an unqualified selector loses
-   the tie at equal specificity and the bar keeps its full-size padding. */
-.pc-status-notice.schedule-read-only-notice {
-  flex: 0 0 auto;
-  padding: var(--space-2) var(--space-3);
-}
-/* A published version is the healthy end state, not a fault, so the page-level
-   bar stays neutral. Only a failed publication keeps the warning tint. */
-.schedule-read-only-notice.is-info {
-  border-color: var(--border);
-  background: var(--surface-sunken);
-  color: var(--text-secondary);
-}
-.schedule-read-only-notice.is-info strong {
-  color: var(--ink);
-}
-/* The planner is a fixed-height workspace, so every row the bar takes comes
-   straight off the board. Title and explanation share one line until the
-   viewport is too narrow to hold them. */
-.schedule-read-only-notice .pc-status-notice-copy {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0 var(--space-2);
-}
-.schedule-read-only-notice .pc-status-notice-copy > div {
-  margin-top: 0;
-}
+   editor at once, so the state is stated once in the page header, beside the
+   action that unfreezes it, and marked on the board and beside each frozen
+   editor, which sits in its own scroll region. */
 .schedule-inspector-head > div:first-child {
   min-width: 0;
 }
@@ -1288,6 +1273,9 @@
   font-size: var(--text-2xs);
   font-weight: var(--weight-medium);
   line-height: 1.5;
+}
+.schedule-canvas-title .schedule-read-only-marker {
+  margin: 0;
 }
 /* A grab cursor promises a move the version cannot accept. Cards stay
    clickable, because inspecting a placement is still useful when frozen. */

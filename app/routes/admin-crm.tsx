@@ -1,5 +1,5 @@
 import { FilterX, Mail, Upload, UserPlus, UsersRound } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   data,
   Form,
@@ -7,11 +7,11 @@ import {
   redirect,
   useActionData,
   useNavigation,
-  useSubmit,
 } from "react-router";
 import { ZodError } from "zod";
 import { Button, ButtonLink } from "~/components/ui/button";
 import { EmptyState } from "~/components/ui/states";
+import { useLiveFilters } from "~/components/use-live-filters";
 import {
   type CrmFilters,
   CrmService,
@@ -175,16 +175,16 @@ function directoryPageQuery(
 export default function AdminCrm({ loaderData }: Route.ComponentProps) {
   const actionData = useActionData<ActionResult>();
   const navigation = useNavigation();
-  const submit = useSubmit();
-  const searchTimer = useRef<number | null>(null);
   const { directory, dashboard, segment } = loaderData;
-  const [searchQuery, setSearchQuery] = useState(directory.filters.query);
+  const liveFilters = useLiveFilters({
+    query: directory.filters.query,
+    company: directory.filters.company,
+    jobTitle: directory.filters.jobTitle,
+    tag: directory.filters.tag,
+  });
   const [selectedCount, setSelectedCount] = useState(0);
   const filtersActive = Object.values(directory.filters).some(Boolean);
   const busy = navigation.state !== "idle";
-  useEffect(() => {
-    setSearchQuery(directory.filters.query);
-  }, [directory.filters.query]);
   const selectionResetKey = [
     directory.filters.query,
     directory.filters.company,
@@ -197,23 +197,6 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
   useEffect(() => {
     setSelectedCount(0);
   }, [selectionResetKey]);
-  useEffect(
-    () => () => {
-      if (searchTimer.current) window.clearTimeout(searchTimer.current);
-    },
-    [],
-  );
-  function submitDirectoryFilters(form: HTMLFormElement | null) {
-    if (!form) return;
-    submit(form, { method: "get", replace: true });
-  }
-  function scheduleDirectorySearch(form: HTMLFormElement | null) {
-    if (searchTimer.current) window.clearTimeout(searchTimer.current);
-    searchTimer.current = window.setTimeout(
-      () => submitDirectoryFilters(form),
-      250,
-    );
-  }
   const pulseParts = [
     `${dashboard.totalContacts} ${dashboard.totalContacts === 1 ? "contact" : "contacts"}`,
     `${dashboard.eventCount} ${dashboard.eventCount === 1 ? "event" : "events"}`,
@@ -277,39 +260,28 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
           <h2 id="crm-directory-heading">
             {segment ? `${segment.name} segment` : "Organisation contacts"}
           </h2>
-          <span className="crm-board-meta">
+          <span
+            className="crm-board-meta"
+            aria-live="polite"
+            aria-atomic="true"
+          >
             Showing {directory.contacts.length}{" "}
             {directory.contacts.length === 1 ? "contact" : "contacts"}
           </span>
         </div>
-        <Form
-          method="get"
-          className="crm-toolbar"
-          key={`${directory.filters.company}:${directory.filters.jobTitle}:${directory.filters.tag}`}
-        >
+        <Form {...liveFilters.form} className="crm-toolbar">
           <label className="crm-filter crm-filter-search">
             <span className="sr-only">Search contacts</span>
             <input
               className="field"
-              name="query"
-              value={searchQuery}
-              onChange={(event) => {
-                setSearchQuery(event.currentTarget.value);
-                scheduleDirectorySearch(event.currentTarget.form);
-              }}
+              {...liveFilters.field("query")}
+              maxLength={120}
               placeholder="Name or email"
             />
           </label>
           <label className="crm-filter">
             <span className="sr-only">Company</span>
-            <select
-              className="select"
-              name="company"
-              defaultValue={directory.filters.company}
-              onChange={(event) =>
-                submitDirectoryFilters(event.currentTarget.form)
-              }
-            >
+            <select className="select" {...liveFilters.field("company")}>
               <option value="">All companies</option>
               {directory.facets.companies.map((company) => (
                 <option key={company}>{company}</option>
@@ -318,14 +290,7 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
           </label>
           <label className="crm-filter">
             <span className="sr-only">Job title</span>
-            <select
-              className="select"
-              name="jobTitle"
-              defaultValue={directory.filters.jobTitle}
-              onChange={(event) =>
-                submitDirectoryFilters(event.currentTarget.form)
-              }
-            >
+            <select className="select" {...liveFilters.field("jobTitle")}>
               <option value="">All job titles</option>
               {directory.facets.jobTitles.map((title) => (
                 <option key={title}>{title}</option>
@@ -334,28 +299,20 @@ export default function AdminCrm({ loaderData }: Route.ComponentProps) {
           </label>
           <label className="crm-filter">
             <span className="sr-only">Tag</span>
-            <select
-              className="select"
-              name="tag"
-              defaultValue={directory.filters.tag}
-              onChange={(event) =>
-                submitDirectoryFilters(event.currentTarget.form)
-              }
-            >
+            <select className="select" {...liveFilters.field("tag")}>
               <option value="">All tags</option>
               {directory.facets.tags.map((tag) => (
                 <option key={tag}>{tag}</option>
               ))}
             </select>
           </label>
-          <div className="crm-filter-actions">
-            <Button type="submit">Apply filters</Button>
-            {filtersActive ? (
+          {filtersActive ? (
+            <div className="crm-filter-actions">
               <Link className="crm-text-action" to="/admin/crm">
                 <FilterX aria-hidden size={15} /> Clear filters
               </Link>
-            ) : null}
-          </div>
+            </div>
+          ) : null}
         </Form>
         {filtersActive ? (
           <fieldset

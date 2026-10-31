@@ -192,6 +192,7 @@ export function SubmissionDataGrid({
   density,
   sort: _sort,
   detailSearchParams = "",
+  resultKey,
 }: {
   submissions: AdminSubmission[];
   filters: ReactNode;
@@ -199,6 +200,8 @@ export function SubmissionDataGrid({
   density: AdminSubmissionDensity;
   sort: AdminSubmissionSort;
   detailSearchParams?: string;
+  /** Identifies the filtered result page. A new page clears the selection. */
+  resultKey: string;
 }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
@@ -263,6 +266,14 @@ export function SubmissionDataGrid({
   ) {
     requestView(withAdminSubmissionColumn(viewSearch, column, visible));
   }
+
+  // The grid stays mounted across filter changes so the filter form keeps
+  // focus and typed text; a selection still belongs to one result page.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: A new result page is the trigger.
+  useEffect(() => {
+    table.resetRowSelection(true);
+    setClipboardFeedback(null);
+  }, [resultKey]);
 
   const selectedRows = table
     .getSelectedRowModel()
@@ -362,7 +373,7 @@ export function SubmissionDataGrid({
       </div>
 
       {/* The filter form submits the view as last requested, not as last
-          loaded, so Apply during a pending view change keeps that change. */}
+          loaded, so a filter change during a pending view change keeps it. */}
       <input
         type="hidden"
         form={SUBMISSION_FILTER_FORM_ID}

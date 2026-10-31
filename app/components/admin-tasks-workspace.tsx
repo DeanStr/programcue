@@ -7,9 +7,10 @@ import {
   type TaskCompletionUndoNotice,
 } from "~/components/task-completion-undo-control";
 import { AdminWorkspaceTabs } from "~/components/ui/admin-workspace-tabs";
-import { Button, ButtonLink } from "~/components/ui/button";
+import { ButtonLink } from "~/components/ui/button";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { ReadinessWeightingCard } from "~/components/ui/readiness-weighting";
+import { useLiveFilters } from "~/components/use-live-filters";
 import {
   type TaskTemplateDraftValues,
   taskTargetTypeLabel,
@@ -60,6 +61,83 @@ function TaskActionNotice({ notice }: { notice?: AdminTasksActionNotice }) {
         <TaskCompletionUndoControl notice={notice} />
       </div>
     </div>
+  );
+}
+
+function TaskFilters({ filters }: { filters: AdminTasksData["filters"] }) {
+  const live = useLiveFilters({
+    state: filters.state,
+    target: filters.target,
+    type: filters.type,
+    impact: filters.impact,
+    owner: filters.owner,
+  });
+  return (
+    <Form {...live.form} className="grid grid-5">
+      <input type="hidden" name="view" value="assigned" />
+      {filters.task ? (
+        <input type="hidden" name="task" value={filters.task} />
+      ) : null}
+      <label className="label">
+        Status
+        <select className="select" {...live.field("state")}>
+          <option value="">All statuses</option>
+          <option value="open">Outstanding</option>
+          <option value="not_started">Not started</option>
+          <option value="in_progress">In progress</option>
+          <option value="blocked">Blocked</option>
+          <option value="submitted">Needs review</option>
+          <option value="completed">Completed</option>
+          <option value="waived">Waived</option>
+          <option value="overdue">Overdue</option>
+          <option value="due_soon">Due in 7 days</option>
+        </select>
+      </label>
+      <label className="label">
+        Scope
+        <select className="select" {...live.field("target")}>
+          <option value="">All scopes</option>
+          <option value="speaker">Speaker</option>
+          <option value="session">Session</option>
+          <option value="event">Event</option>
+        </select>
+      </label>
+      <label className="label">
+        Task type
+        <select className="select" {...live.field("type")}>
+          <option value="">All task types</option>
+          <option value="checklist">Checklist</option>
+          <option value="acknowledgement">Acknowledgement</option>
+          <option value="short_form">Short form</option>
+          <option value="file_upload">File upload</option>
+          <option value="link_visit">Link visit</option>
+          <option value="administrator_only">Administrator only</option>
+        </select>
+      </label>
+      <label className="label">
+        Impact
+        <select className="select" {...live.field("impact")}>
+          <option value="">All impacts</option>
+          <option value="critical">Critical</option>
+          <option value="high">High</option>
+          <option value="medium">Medium</option>
+          <option value="low">Low</option>
+          <option value="non_critical">High, medium or low</option>
+        </select>
+      </label>
+      <label className="label">
+        Owner
+        <select className="select" {...live.field("owner")}>
+          <option value="">All owners</option>
+          <option value="participant">Participants</option>
+        </select>
+      </label>
+      <div className="page-actions" style={{ alignItems: "end" }}>
+        <ButtonLink variant="ghost" to="/admin/tasks">
+          Clear
+        </ButtonLink>
+      </div>
+    </Form>
   );
 }
 
@@ -172,96 +250,7 @@ export function AdminTasksWorkspace({
                 ? " · Active"
                 : ""}
             </summary>
-            <Form
-              method="get"
-              className="grid grid-5"
-              key={data.filterSignature}
-            >
-              <input type="hidden" name="view" value="assigned" />
-              {data.filters.task ? (
-                <input type="hidden" name="task" value={data.filters.task} />
-              ) : null}
-              <label className="label">
-                Status
-                <select
-                  className="select"
-                  name="state"
-                  defaultValue={data.filters.state}
-                >
-                  <option value="">All statuses</option>
-                  <option value="open">Outstanding</option>
-                  <option value="not_started">Not started</option>
-                  <option value="in_progress">In progress</option>
-                  <option value="blocked">Blocked</option>
-                  <option value="submitted">Needs review</option>
-                  <option value="completed">Completed</option>
-                  <option value="waived">Waived</option>
-                  <option value="overdue">Overdue</option>
-                  <option value="due_soon">Due in 7 days</option>
-                </select>
-              </label>
-              <label className="label">
-                Scope
-                <select
-                  className="select"
-                  name="target"
-                  defaultValue={data.filters.target}
-                >
-                  <option value="">All scopes</option>
-                  <option value="speaker">Speaker</option>
-                  <option value="session">Session</option>
-                  <option value="event">Event</option>
-                </select>
-              </label>
-              <label className="label">
-                Task type
-                <select
-                  className="select"
-                  name="type"
-                  defaultValue={data.filters.type}
-                >
-                  <option value="">All task types</option>
-                  <option value="checklist">Checklist</option>
-                  <option value="acknowledgement">Acknowledgement</option>
-                  <option value="short_form">Short form</option>
-                  <option value="file_upload">File upload</option>
-                  <option value="link_visit">Link visit</option>
-                  <option value="administrator_only">Administrator only</option>
-                </select>
-              </label>
-              <label className="label">
-                Impact
-                <select
-                  className="select"
-                  name="impact"
-                  defaultValue={data.filters.impact}
-                >
-                  <option value="">All impacts</option>
-                  <option value="critical">Critical</option>
-                  <option value="high">High</option>
-                  <option value="medium">Medium</option>
-                  <option value="low">Low</option>
-                  <option value="non_critical">High, medium or low</option>
-                </select>
-              </label>
-              <label className="label">
-                Owner
-                <select
-                  className="select"
-                  name="owner"
-                  defaultValue={data.filters.owner}
-                >
-                  <option value="">All owners</option>
-                  <option value="participant">Participants</option>
-                </select>
-              </label>
-              <div className="page-actions" style={{ alignItems: "end" }}>
-                <Button type="submit">Apply filters</Button>
-                <ButtonLink variant="ghost" to="/admin/tasks">
-                  Clear
-                </ButtonLink>
-              </div>
-            </Form>
+            <TaskFilters filters={data.filters} />
           </details>
           <a className="tasks-readiness-link" href="#readiness-weighting">
             <strong>{data.taskSummary.readiness}%</strong> event readiness

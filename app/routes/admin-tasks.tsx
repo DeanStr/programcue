@@ -198,13 +198,11 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       })),
     ).percentage,
   };
-  const filterSignature = JSON.stringify(filters);
   return {
     ...workspace,
     view,
     tasks,
     filters,
-    filterSignature,
     focusedTaskId: requestedTaskId || null,
     focusedSpeakerId,
     totalTaskCount: workspace.tasks.length,

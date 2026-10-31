@@ -56,14 +56,9 @@
     padding: var(--space-2) var(--space-3);
     gap: var(--space-2);
   }
-  .schedule-canvas-meta,
   .schedule-room-frame {
     margin-left: var(--space-3);
     margin-right: var(--space-3);
-  }
-  .schedule-canvas-meta {
-    padding-left: 0;
-    padding-right: 0;
   }
   .schedule-day-long {
     display: none;
@@ -199,14 +194,9 @@
   .schedule-canvas-toolbar {
     padding: var(--space-3);
   }
-  .schedule-canvas-meta,
   .schedule-room-frame {
     margin-left: var(--space-3);
     margin-right: var(--space-3);
-  }
-  .schedule-canvas-meta {
-    padding-left: 0;
-    padding-right: 0;
   }
   .schedule-day-tabs {
     width: 100%;

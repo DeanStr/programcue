@@ -5,13 +5,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import {
-  Form,
-  Link,
-  useActionData,
-  useNavigation,
-  useSubmit,
-} from "react-router";
+import { Form, Link, useActionData, useNavigation } from "react-router";
 import { AdminSpeakerNextSteps } from "~/components/admin-speaker-next-steps";
 import {
   buildSpeakerRosterPulse,
@@ -29,6 +23,7 @@ import {
   statusPresentation,
 } from "~/components/ui/domain-status-badge";
 import { EventDateTime } from "~/components/ui/event-date-time";
+import { useLiveFilters } from "~/components/use-live-filters";
 import type { Route } from "./+types/admin-speakers";
 import type { ActionResult } from "./admin-speakers.server";
 
@@ -47,8 +42,6 @@ function openAddSpeakerRecord() {
 export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
   const actionData = useActionData<ActionResult>();
   const navigation = useNavigation();
-  const submit = useSubmit();
-  const searchTimer = useRef<number | null>(null);
   const nextStepsRef = useRef<HTMLHeadingElement>(null);
   const nextStepsSpeaker =
     actionData?.ok && actionData.addedSpeaker
@@ -89,33 +82,18 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
   ).length;
   const expiredInvitationCount =
     pendingInvitations.length - activePendingInvitationCount;
-  const [searchQuery, setSearchQuery] = useState(filters.query);
-  useEffect(() => {
-    setSearchQuery(filters.query);
-  }, [filters.query]);
-  useEffect(
-    () => () => {
-      if (searchTimer.current) window.clearTimeout(searchTimer.current);
-    },
-    [],
-  );
+  const liveFilters = useLiveFilters({
+    query: filters.query,
+    profileStatus: filters.profileStatus ?? "",
+    workflowStatus: filters.workflowStatus ?? "",
+    readiness: filters.readiness ?? "",
+  });
   const filtersActive = Boolean(
     filters.query ||
       filters.profileStatus ||
       filters.readiness ||
       filters.workflowStatus,
   );
-  function submitRosterFilters(form: HTMLFormElement | null) {
-    if (!form) return;
-    submit(form, { method: "get", replace: true });
-  }
-  function scheduleRosterSearch(form: HTMLFormElement | null) {
-    if (searchTimer.current) window.clearTimeout(searchTimer.current);
-    searchTimer.current = window.setTimeout(
-      () => submitRosterFilters(form),
-      250,
-    );
-  }
   const queryParams = (targetPage: number) =>
     new URLSearchParams({
       query: filters.query,
@@ -194,21 +172,12 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
           </span>
         </div>
         <search>
-          <Form
-            method="get"
-            className="crm-toolbar"
-            key={`${filters.profileStatus ?? ""}:${filters.workflowStatus ?? ""}:${filters.readiness ?? ""}`}
-          >
+          <Form {...liveFilters.form} className="crm-toolbar">
             <label className="crm-filter crm-filter-search">
               <span className="sr-only">Search</span>
               <input
                 className="field"
-                name="query"
-                value={searchQuery}
-                onChange={(event) => {
-                  setSearchQuery(event.currentTarget.value);
-                  scheduleRosterSearch(event.currentTarget.form);
-                }}
+                {...liveFilters.field("query")}
                 placeholder="Name or email"
               />
             </label>
@@ -216,11 +185,7 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
               <span className="sr-only">Profile</span>
               <select
                 className="select"
-                name="profileStatus"
-                defaultValue={filters.profileStatus ?? ""}
-                onChange={(event) =>
-                  submitRosterFilters(event.currentTarget.form)
-                }
+                {...liveFilters.field("profileStatus")}
               >
                 <option value="">All profiles</option>
                 <option value="published">Published</option>
@@ -232,11 +197,7 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
               <span className="sr-only">Workflow</span>
               <select
                 className="select"
-                name="workflowStatus"
-                defaultValue={filters.workflowStatus ?? ""}
-                onChange={(event) =>
-                  submitRosterFilters(event.currentTarget.form)
-                }
+                {...liveFilters.field("workflowStatus")}
               >
                 <option value="">All workflow states</option>
                 <option value="prospect">Prospect</option>
@@ -248,27 +209,19 @@ export default function AdminSpeakers({ loaderData }: Route.ComponentProps) {
             </label>
             <label className="crm-filter">
               <span className="sr-only">Readiness</span>
-              <select
-                className="select"
-                name="readiness"
-                defaultValue={filters.readiness ?? ""}
-                onChange={(event) =>
-                  submitRosterFilters(event.currentTarget.form)
-                }
-              >
+              <select className="select" {...liveFilters.field("readiness")}>
                 <option value="">All readiness</option>
                 <option value="ready">Ready</option>
                 <option value="needs_attention">Needs attention</option>
               </select>
             </label>
-            <div className="crm-filter-actions">
-              <Button type="submit">Apply filters</Button>
-              {filtersActive ? (
+            {filtersActive ? (
+              <div className="crm-filter-actions">
                 <ButtonLink variant="ghost" to="/admin/speakers">
                   Clear
                 </ButtonLink>
-              ) : null}
-            </div>
+              </div>
+            ) : null}
           </Form>
         </search>
         <div className="crm-aux">

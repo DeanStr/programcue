@@ -4,8 +4,52 @@ import { isCredentialFreeHttpsUrl } from "~/modules/events/https-url";
 import type { UploadReference } from "./submission-application-schema";
 import type { FieldErrors } from "./submission-form-display";
 import { visibleFields } from "./submission-form-display";
-import type { StoredSubmissionFormSchema } from "./submission-form-schema";
-import { MAX_SUBMISSION_SPEAKERS } from "./submission-form-schema";
+import {
+  CHECKBOX_TICKED_ANSWER,
+  MAX_SUBMISSION_SPEAKERS,
+  type StoredFormField,
+  type StoredSubmissionFormSchema,
+} from "./submission-form-schema";
+
+const NUMBER_ANSWER = /^-?(?:\d+(?:\.\d+)?|\.\d+)$/u;
+const PHONE_ANSWER = /^\+?[\d\s().-]+$/u;
+
+function answerFormatIssue(field: StoredFormField, value: string) {
+  const answer = value.trim();
+  switch (field.type) {
+    case "url":
+    case "video":
+      return isCredentialFreeHttpsUrl(value)
+        ? null
+        : "Enter a valid URL beginning with https://";
+    case "email":
+      return z.email().safeParse(answer).success
+        ? null
+        : "Enter a valid email address";
+    case "number":
+      return NUMBER_ANSWER.test(answer) && answer.length <= 32
+        ? null
+        : "Enter a number, such as 12 or 4.5";
+    case "date":
+      // Exact, untrimmed: a padded value passes a trimmed check but a native
+      // date input cannot display it.
+      return z.iso.date().safeParse(value).success
+        ? null
+        : "Enter a valid date";
+    case "phone": {
+      const digits = answer.replace(/\D/gu, "").length;
+      return PHONE_ANSWER.test(answer) && digits >= 6 && digits <= 15
+        ? null
+        : "Enter a phone number using digits, spaces and an optional leading +";
+    }
+    case "checkbox":
+      return value === CHECKBOX_TICKED_ANSWER
+        ? null
+        : `${field.label} must be ticked or left unticked`;
+    default:
+      return null;
+  }
+}
 
 export function validateFinalAnswers(
   schema: StoredSubmissionFormSchema,
@@ -22,7 +66,11 @@ export function validateFinalAnswers(
       ? answer.length === 0
       : !String(answer ?? "").trim();
     if (field.required && missing && !uploads[field.id])
-      errors[field.id] = [`${field.label} is required`];
+      errors[field.id] = [
+        field.type === "checkbox"
+          ? `Tick “${field.label}” to continue`
+          : `${field.label} is required`,
+      ];
     if (
       !missing &&
       (field.type === "select" || field.type === "multi_select")
@@ -36,10 +84,9 @@ export function validateFinalAnswers(
         errors[field.id] = [`${field.label} contains an invalid choice`];
       }
     }
-    if (!missing && (field.type === "url" || field.type === "video")) {
-      if (!isCredentialFreeHttpsUrl(String(answer))) {
-        errors[field.id] = ["Enter a valid URL beginning with https://"];
-      }
+    if (!missing && !Array.isArray(answer)) {
+      const issue = answerFormatIssue(field, String(answer));
+      if (issue) errors[field.id] = [issue];
     }
   }
 

@@ -11,6 +11,27 @@ import type {
 
 export type FieldErrors = Record<string, string[]>;
 
+/** Native input attributes for single-line answer types. Numbers use a text
+ *  input with a decimal keypad so invalid entries reach validation instead of
+ *  being reported by the browser as an empty value. */
+export function formFieldTextInputAttributes(type: StoredFormField["type"]) {
+  switch (type) {
+    case "url":
+    case "video":
+      return { type: "url" } as const;
+    case "email":
+      return { type: "email" } as const;
+    case "phone":
+      return { type: "tel" } as const;
+    case "number":
+      return { type: "text", inputMode: "decimal" } as const;
+    case "date":
+      return { type: "date" } as const;
+    default:
+      return { type: "text" } as const;
+  }
+}
+
 export function validateAnswerShapes(
   schema: StoredSubmissionFormSchema,
   answers: Record<string, string | string[]>,

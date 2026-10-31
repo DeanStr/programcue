@@ -20,6 +20,7 @@ describe("schedule edit lock", () => {
 
     expect(published.editable).toBe(false);
     expect(published.reason?.title).toBe("Version 3 is published");
+    expect(published.reason?.state).toBe("published");
     expect(published.reason?.remedy).toBe(
       "Select Edit next version to make changes",
     );
@@ -28,6 +29,7 @@ describe("schedule edit lock", () => {
       "Select Edit next version to make changes",
     );
     expect(failed.reason?.title).toBe("Version 5 failed to publish");
+    expect(failed.reason?.state).toBe("publication failed");
     expect(failed.reason?.tone).toBe("warning");
   });
 

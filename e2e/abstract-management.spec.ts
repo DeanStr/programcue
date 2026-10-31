@@ -376,7 +376,6 @@ test.describe
       await waitForInterface(page, "/admin/review");
       await openEvaluationView(page, "Results");
       await page.getByLabel("Sort results").selectOption("title_asc");
-      await page.getByRole("button", { name: "Apply filters" }).click();
       await expect(page).toHaveURL(/sort=title_asc/u);
       const exportIntentKeys: string[] = [];
       page.on("request", (request) => {

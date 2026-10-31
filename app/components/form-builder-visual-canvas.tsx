@@ -16,10 +16,15 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import {
   AlignLeft,
+  AtSign,
+  CalendarDays,
   ChevronsUpDown,
   GripVertical,
+  Hash,
   Link2,
   ListChecks,
+  Phone,
+  SquareCheck,
   Type,
   Video,
 } from "lucide-react";
@@ -31,7 +36,7 @@ import {
   createFormField,
   FORM_FIELD_TYPES,
   type FormFieldInsertionTarget,
-  formConditionSourceLabel,
+  formConditionDescription,
   formFieldCreationIssue,
   formFieldTypeLabel,
   insertFormFieldAtTarget,
@@ -41,7 +46,10 @@ import type {
   FormField,
   SaveFormInput,
 } from "~/modules/submissions/submission-schema";
-import { formSectionsForAuthoring } from "~/modules/submissions/submission-schema";
+import {
+  formFieldTextInputAttributes,
+  formSectionsForAuthoring,
+} from "~/modules/submissions/submission-schema";
 
 type DraggedItem =
   | { kind: "new-field"; fieldType: FormField["type"]; label: string }
@@ -52,6 +60,11 @@ const FIELD_TYPE_ICONS = {
   long_text: AlignLeft,
   select: ChevronsUpDown,
   multi_select: ListChecks,
+  checkbox: SquareCheck,
+  number: Hash,
+  date: CalendarDays,
+  email: AtSign,
+  phone: Phone,
   url: Link2,
   video: Video,
 } as const;
@@ -173,6 +186,20 @@ function FieldControlPreview({ field }: { field: FormField }) {
       </select>
     );
   }
+  if (field.type === "checkbox") {
+    return (
+      <span className="fb-canvas-checklist">
+        <span>
+          <input
+            type="checkbox"
+            disabled
+            aria-label={`${field.label} preview`}
+          />{" "}
+          {field.label}
+        </span>
+      </span>
+    );
+  }
   if (field.type === "multi_select") {
     return (
       <span className="fb-canvas-checklist">
@@ -196,7 +223,7 @@ function FieldControlPreview({ field }: { field: FormField }) {
     <input
       className="fb-canvas-preview-control"
       disabled
-      type={field.type === "url" || field.type === "video" ? "url" : "text"}
+      {...formFieldTextInputAttributes(field.type)}
       aria-label={`${field.label} preview`}
       placeholder={formFieldTypeLabel(field.type)}
     />
@@ -208,13 +235,13 @@ function CanvasField({
   selected,
   select,
   openSettings,
-  conditionSourceLabel,
+  conditionDescription,
 }: {
   field: FormField;
   selected: boolean;
   select(): void;
   openSettings(): void;
-  conditionSourceLabel: string | null;
+  conditionDescription: string | null;
 }) {
   const draggable = useDraggable({
     id: `form-field:${field.id}`,
@@ -265,10 +292,8 @@ function CanvasField({
       <div className="fb-canvas-control">
         <FieldControlPreview field={field} />
       </div>
-      {field.condition ? (
-        <small className="fb-canvas-condition">
-          Shown when {conditionSourceLabel} = {field.condition.equals || "…"}
-        </small>
+      {conditionDescription ? (
+        <small className="fb-canvas-condition">{conditionDescription}</small>
       ) : null}
       {selected ? (
         // biome-ignore lint/a11y/useValidAnchor: This control both reveals the settings panel and navigates to its fragment.
@@ -363,11 +388,11 @@ function CanvasPage({
                     selected={field.id === selectedId}
                     select={() => onSelect(field.id)}
                     openSettings={onOpenSettings}
-                    conditionSourceLabel={
+                    conditionDescription={
                       field.condition
-                        ? formConditionSourceLabel(
+                        ? formConditionDescription(
                             orderedFields,
-                            field.condition.fieldId,
+                            field.condition,
                           )
                         : null
                     }

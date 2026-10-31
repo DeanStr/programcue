@@ -44,7 +44,6 @@ function taskData(overrides: Partial<AdminTasksData> = {}) {
       target: "",
       type: "",
     },
-    filterSignature: "all",
     focusedTaskId: null,
     focusedSpeakerId: null,
     totalTaskCount: 0,

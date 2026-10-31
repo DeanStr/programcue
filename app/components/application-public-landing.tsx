@@ -269,9 +269,17 @@ export function PublicApplicationLanding({
                     ) : null}
                     {field.condition && dependency ? (
                       <p className="cfp-condition">
-                        Shown when {dependency.label}{" "}
-                        {dependency.type === "multi_select" ? "includes" : "is"}{" "}
-                        “{field.condition.equals}”.
+                        {dependency.type === "checkbox" ? (
+                          <>Shown when “{dependency.label}” is ticked.</>
+                        ) : (
+                          <>
+                            Shown when {dependency.label}{" "}
+                            {dependency.type === "multi_select"
+                              ? "includes"
+                              : "is"}{" "}
+                            “{field.condition.equals}”.
+                          </>
+                        )}
                       </p>
                     ) : null}
                     {example ? (

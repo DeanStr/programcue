@@ -764,6 +764,20 @@ body.dark-mode .program-cue-api-reference .scalar-api-reference {
 .application-choice-field > .stack {
   margin-top: 2px;
 }
+/* A single checkbox reads as a statement: the box leads, and the label, help
+   and error align in the text column beside it. */
+.application-checkbox-field {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-1) var(--space-2);
+  align-items: start;
+}
+.application-checkbox-field > input {
+  margin-top: 1px;
+}
+.application-checkbox-field > :not(input) {
+  grid-column: 2;
+}
 /* The dragged card lifts out of the layout and settles on drop. */
 .session-card.is-dragging {
   display: grid;

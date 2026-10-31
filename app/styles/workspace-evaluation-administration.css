@@ -292,12 +292,7 @@
   flex: 1 1 8rem;
 }
 /* A form button sits level with the select beside it: the assign button
-   matches its select's height, and the results Apply button lines up with
-   the labelled selects' bottom edge. */
-.pc-eval-toolbar > .btn {
-  align-self: flex-end;
-  min-height: var(--control-height);
-}
+   matches its select's height. */
 .pc-eval-admin .inline-form:not(.pc-eval-toolbar) > .btn {
   align-self: stretch;
 }
@@ -306,9 +301,6 @@
     flex: 0 0 auto;
     width: 100%;
     max-width: none;
-  }
-  .pc-eval-toolbar > .btn {
-    align-self: stretch;
   }
 }
 .pc-eval-datetime {

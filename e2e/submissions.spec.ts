@@ -371,6 +371,101 @@ test.describe
       await expect(fields).toHaveCount(initialFieldCount);
     });
 
+    test("typed answer fields use native controls and validate in the applicant preview", async ({
+      page,
+    }) => {
+      await page.goto("/admin/submissions/form");
+      const editor = page.getByLabel("Visual call-for-speakers form editor");
+      await expect(editor).toBeVisible();
+      const labelInput = page.getByLabel("Label", { exact: true });
+      for (const [type, label] of [
+        ["Checkbox", "I agree to the code of conduct"],
+        ["Number", "Expected audience"],
+        ["Date", "Available from"],
+        ["Email", "Assistant email"],
+        ["Phone", "Mobile number"],
+      ] as const) {
+        await editor.getByRole("button", { name: `Add ${type}` }).click();
+        await labelInput.fill(label);
+        await expect(
+          editor.locator(".fb-canvas-field").filter({ hasText: label }),
+        ).toContainText(type);
+        if (type === "Checkbox") {
+          await page.getByLabel("Required when visible").check();
+        }
+      }
+
+      await page.getByRole("button", { name: "Preview", exact: true }).click();
+      const preview = page.locator(".fb-preview");
+      await expect(preview.getByLabel("Expected audience")).toHaveAttribute(
+        "inputmode",
+        "decimal",
+      );
+      await expect(preview.getByLabel("Available from")).toHaveAttribute(
+        "type",
+        "date",
+      );
+      await expect(preview.getByLabel("Mobile number")).toHaveAttribute(
+        "type",
+        "tel",
+      );
+      const email = preview.getByLabel("Assistant email");
+      await expect(email).toHaveAttribute("type", "email");
+      await email.fill("assistant@");
+      await preview.getByLabel("Expected audience").fill("lots");
+
+      const validate = preview.getByRole("button", {
+        name: "Validate test submission",
+      });
+      await validate.click();
+      await expect(
+        preview.getByText("Tick “I agree to the code of conduct” to continue"),
+      ).toBeVisible();
+      await expect(
+        preview.getByText("Enter a valid email address"),
+      ).toBeVisible();
+      await expect(
+        preview.getByText("Enter a number, such as 12 or 4.5"),
+      ).toBeVisible();
+
+      await preview.getByLabel("I agree to the code of conduct").check();
+      await email.fill("assistant@example.com");
+      await preview.getByLabel("Expected audience").fill("120");
+      await validate.click();
+      await expect(
+        preview.getByText("Tick “I agree to the code of conduct” to continue"),
+      ).toHaveCount(0);
+      await expect(
+        preview.getByText("Enter a valid email address"),
+      ).toHaveCount(0);
+      await expect(
+        preview.getByText("Enter a number, such as 12 or 4.5"),
+      ).toHaveCount(0);
+    });
+
+    test("invalid applicant preview answers never block saving the form", async ({
+      page,
+    }) => {
+      // Saves the draft unchanged, so later tests publish the same form.
+      await page.goto("/admin/submissions/form");
+      await page.locator("body[data-hydrated='true']").waitFor();
+      await page.getByRole("button", { name: "Preview", exact: true }).click();
+      const speakerCount = page
+        .locator(".fb-preview")
+        .getByLabel("Test speaker count");
+      // Outside the input's 1–20 range, so native validation would object if
+      // the preview still belonged to the builder's form.
+      await speakerCount.fill("99");
+      await page.getByRole("button", { name: "Settings", exact: true }).click();
+      await expect(speakerCount).toBeHidden();
+      await page.getByRole("button", { name: "Save draft" }).click();
+      await expect(
+        page.locator(".validation-item.ok[role='status']").filter({
+          hasText: "Draft form saved.",
+        }),
+      ).toBeVisible();
+    });
+
     test("form builder fails closed before JavaScript is available", async ({
       baseURL,
       browser,
@@ -811,7 +906,7 @@ test.describe
       await page.goto("/admin/submissions");
       const filters = page.getByRole("search");
       await filters.getByLabel("Search", { exact: true }).fill(title);
-      await filters.getByRole("button", { name: "Apply filters" }).click();
+      await expect(page).toHaveURL(/query=/u);
       await expect(page.getByRole("link", { name: title })).toBeVisible();
       await page.getByRole("link", { name: title }).click();
       await expect(page.getByRole("heading", { name: title })).toBeVisible();
@@ -874,9 +969,7 @@ test.describe
       await routingFilters
         .getByLabel("Routing")
         .selectOption("missing_automatic");
-      await routingFilters
-        .getByRole("button", { name: "Apply filters" })
-        .click();
+      await expect(page).toHaveURL(/routing=missing_automatic/u);
       const filteredSubmissionRow = page.getByRole("row").filter({
         has: page.getByRole("link", { name: title }),
       });
@@ -950,7 +1043,6 @@ test.describe
 
       await page.getByLabel("Sort").selectOption("title-asc");
       await page.getByLabel("Density").selectOption("compact");
-      await page.getByRole("button", { name: "Apply filters" }).click();
       await expect(page).toHaveURL(/sort=title-asc/u);
       await expect(page).toHaveURL(/density=compact/u);
       const columns = page.locator(".pc-data-grid-columns");
@@ -1088,6 +1180,85 @@ test.describe
       await expect(page.getByLabel("Workshop prerequisites")).toBeVisible();
       await audienceLevel.selectOption("Beginner");
       await expect(page.getByLabel("Workshop prerequisites")).toBeHidden();
+    });
+
+    test("typed answer fields survive publication on the public form", async ({
+      page,
+    }) => {
+      const unique = Date.now();
+      await page.goto("/admin/submissions/form");
+      const editor = page.getByLabel("Visual call-for-speakers form editor");
+      await editor.getByRole("button", { name: "Add Checkbox" }).click();
+      await setStableFieldId(page, `speaker_dinner_${unique}`);
+      await page
+        .getByLabel("Label", { exact: true })
+        .fill("I can attend the speaker dinner");
+      await editor.getByRole("button", { name: "Add Date" }).click();
+      await setStableFieldId(page, `available_from_${unique}`);
+      await page.getByLabel("Label", { exact: true }).fill("Available from");
+      await editor.getByRole("button", { name: "Add Short text" }).click();
+      await setStableFieldId(page, `dietary_${unique}`);
+      await page
+        .getByLabel("Label", { exact: true })
+        .fill("Dietary requirements");
+      await page
+        .getByLabel("Show this field when")
+        .selectOption(`speaker_dinner_${unique}`);
+      await expect(
+        page.getByText("Shown when that box is ticked."),
+      ).toBeVisible();
+      await expect(
+        editor
+          .locator(".fb-canvas-field")
+          .filter({ hasText: "Dietary requirements" }),
+      ).toContainText("Shown when I can attend the speaker dinner is ticked");
+
+      await page.getByRole("button", { name: "Save draft" }).click();
+      await expect(
+        page.locator(".validation-item.ok[role='status']").filter({
+          hasText: "Draft form saved.",
+        }),
+      ).toBeVisible();
+      await page.getByRole("button", { name: "Publish version" }).click();
+      await page.getByRole("button", { name: "Confirm publication" }).click();
+      await expect(
+        page.locator(".validation-item.ok[role='status']").filter({
+          hasText: "Published a new immutable form version",
+        }),
+      ).toBeVisible();
+
+      await page.goto("/apply/form");
+      await expect(
+        page.getByText(
+          "Shown when “I can attend the speaker dinner” is ticked.",
+        ),
+      ).toBeVisible();
+      await page.getByRole("link", { name: "Continue to application" }).click();
+      await page
+        .getByLabel("Email address")
+        .fill(`typed-fields-${unique}@example.com`);
+      await page
+        .getByRole("button", { name: "Send verification code" })
+        .click();
+      await page.getByLabel("Six-digit code").fill("424242");
+      await page
+        .getByRole("button", { name: "Verify and open applications" })
+        .click();
+      await page.getByRole("button", { name: "Start application" }).click();
+
+      const dinner = page.getByRole("checkbox", {
+        name: "I can attend the speaker dinner",
+      });
+      await expect(dinner).not.toBeChecked();
+      const dietary = page.getByLabel("Dietary requirements");
+      await expect(dietary).toBeHidden();
+      await page.getByText("I can attend the speaker dinner").click();
+      await expect(dinner).toBeChecked();
+      await expect(dietary).toBeVisible();
+      const availableFrom = page.getByLabel("Available from");
+      await expect(availableFrom).toHaveAttribute("type", "date");
+      await availableFrom.fill("2027-05-19");
+      await expect(availableFrom).toHaveValue("2027-05-19");
     });
 
     test("stepped layout pages sections, keeps a speakers step, and submits", async ({

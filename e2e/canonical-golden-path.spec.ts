@@ -387,7 +387,7 @@ test.describe
       await page
         .getByLabel("Results round")
         .selectOption({ label: "Initial review" });
-      await page.getByRole("button", { name: "Apply filters" }).click();
+      await expect(page).toHaveURL(/resultsRound=/u);
       const historicalResult = page
         .getByRole("region", { name: "Unified evaluation results" })
         .getByRole("row", {

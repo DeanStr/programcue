@@ -2,7 +2,10 @@ import { type ReactNode, useEffect, useState } from "react";
 import { Link } from "react-router";
 import { Button } from "~/components/ui/button";
 import { requireValue } from "~/lib/required-value";
-import { formFieldTypeLabel } from "~/modules/submissions/form-builder-fields";
+import {
+  formFieldTypeLabel,
+  initialConditionValue,
+} from "~/modules/submissions/form-builder-fields";
 import type {
   FormField,
   SaveFormInput,
@@ -289,7 +292,14 @@ export function FieldSettingsPanel({
                   onChange={(event) =>
                     patchField({
                       condition: event.target.value
-                        ? { fieldId: event.target.value, equals: "" }
+                        ? {
+                            fieldId: event.target.value,
+                            equals: initialConditionValue(
+                              displayFields.find(
+                                (field) => field.id === event.target.value,
+                              ),
+                            ),
+                          }
                         : null,
                     })
                   }
@@ -300,7 +310,8 @@ export function FieldSettingsPanel({
                     .filter(
                       (field) =>
                         field.type === "select" ||
-                        field.type === "multi_select",
+                        field.type === "multi_select" ||
+                        field.type === "checkbox",
                     )
                     .map((field) => (
                       <option value={field.id} key={field.id}>
@@ -309,7 +320,12 @@ export function FieldSettingsPanel({
                     ))}
                 </select>
               </label>
-              {selected.condition ? (
+              {selected.condition &&
+              displayFields.find(
+                (field) => field.id === selected.condition?.fieldId,
+              )?.type === "checkbox" ? (
+                <p className="help mt">Shown when that box is ticked.</p>
+              ) : selected.condition ? (
                 <label className="label mt">
                   Equals
                   <select

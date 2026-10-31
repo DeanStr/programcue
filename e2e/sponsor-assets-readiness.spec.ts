@@ -78,10 +78,7 @@ test("organisers request private assets and prepare filtered reminders; accepted
   await readiness
     .getByRole("combobox", { name: "Readiness", exact: true })
     .selectOption("assets");
-  await readiness
-    .getByRole("button", { name: "Apply filters", exact: true })
-    .click();
-  await expect(page).toHaveURL(/state=assets/);
+  await expect(page).toHaveURL(/q=Readiness\+company&state=assets/);
   await readiness.getByRole("link", { name: "Clear", exact: true }).click();
   await expect(readiness.getByLabel("Company", { exact: true })).toHaveValue(
     "",
@@ -185,9 +182,7 @@ test("organisers request private assets and prepare filtered reminders; accepted
     await readiness
       .getByRole("combobox", { name: "Readiness", exact: true })
       .selectOption("assets");
-    await readiness
-      .getByRole("button", { name: "Apply filters", exact: true })
-      .click();
+    await expect(page).toHaveURL(/q=Readiness\+company&state=assets/);
     await expect(
       readiness.getByText("2 need sponsor action", { exact: false }),
     ).toBeVisible();

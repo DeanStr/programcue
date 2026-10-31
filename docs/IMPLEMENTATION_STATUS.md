@@ -1,11 +1,158 @@
 # Verified implementation status
 
-Evidence recorded through **28 October 2026**, including the shared workbench title follow-up, the navigation and page header pass, the local interface consistency pass and its visual review follow-up, the interface refinement and visual evaluation pass, assistant request presentation and partial task coverage, readiness source links, the sponsor/deliverables release, application/scanner releases, a controlled live invited-speaker journey and autonomous backup acceptance.
+Evidence recorded through **30 October 2026**, including review fixes for typed fields and live filters, typed application answer fields, live list filters and the planner chrome pass, the shared workbench title follow-up, the navigation and page header pass, the local interface consistency pass and its visual review follow-up, the interface refinement and visual evaluation pass, assistant request presentation and partial task coverage, readiness source links, the sponsor/deliverables release, application/scanner releases, a controlled live invited-speaker journey and autonomous backup acceptance.
 This is the current capability,
 requirements and acceptance index; consolidation does not constitute a new
 verification or deployment. The [product specification](../sessionboard-replacement-full-scope-implementation-specification-with-competition-ux.md)
 owns intended scope, [DECISIONS.md](DECISIONS.md) owns engineering decisions, and
 Git history retains earlier committed work logs.
+
+## Review fixes for typed fields and live filters — 30 October 2026
+
+**Local change; no API, schema or migration change; not deployed.** An
+independent review of the two entries below found two browser regressions
+and a validation inconsistency; all are fixed, with two product follow-ups.
+
+- The applicant preview renders inside the builder's form, so an invalid test
+  answer (an email, a URL, or a speaker count outside 1–20, even in a hidden
+  pane) silently blocked Save draft through native validation. This predates
+  the typed fields for URL and video answers. Preview controls now belong to a
+  separate, never-submitted form.
+- Back or Forward pressed while a filter edit was pending re-applied that edit
+  over the restored history entry. History traversal now restores its
+  destination exactly; other navigations still keep an unloaded edit, and the
+  first commit still keeps choices made before hydration.
+- A second review found that fix incomplete: after Clear, retyping the
+  earlier search and continuing to type, Back ended on the newer text. The
+  hook took a URL matching its loading request as proof the navigation was
+  its own, so Back skipped the traversal handling or a pending debounce
+  cancelled it. Each request now carries a fresh id in its history state and
+  only that id identifies it. The new tests failed in Chromium, Firefox and
+  WebKit before the change.
+- Checkbox and date answers must be exact. `" Yes "` and `" 2027-05-20 "`
+  passed a trimmed check but could not be displayed by the native controls;
+  they are now rejected at final submission.
+- A checkbox can control a follow-up question: the condition stores `Yes` and
+  the builder, canvas, structure list and public landing outline say "is
+  ticked".
+- The board's read-only marker shows the state ("Read-only · published")
+  instead of leaving the reason to screen readers; the full version, frozen
+  surfaces and remedy remain in its accessible text. The short state keeps the
+  laptop toolbar on one row, so the board position measured above is
+  unchanged.
+
+The Firefox and WebKit smoke projects now include a live-filter test: typing
+across a delayed request keeps text and focus, Back to an entry whose query
+matches a loading request restores it without applying the pending edit, and
+a select applies. Chromium adds the reviewer's density/Back reproduction, the
+second review's matching-query reproduction, an unchanged draft saved with
+an out-of-range preview value, and a published checkbox revealing its
+follow-up question. The laptop Schedule planner baseline and its
+launch-film pin were updated for the marker text.
+
+Validation (30 October): `npm run typecheck`, `npm run check:focused` (1,072
+tests in 101 files), `npm run design-system:check`, `npm run openapi:check`
+and the story-state check pass. One fresh-build run of the twelve affected
+Chromium specs, including the full visual inventory without updates, plus the
+Firefox and WebKit smoke projects passed all 137 tests. After the
+history-state id change, on a fresh build: the matching-query test passed
+five repeated runs, the eleven affected Chromium specs passed 100 tests (the
+visual inventory was not rerun; the change does not alter rendering), and
+the Firefox and WebKit smoke projects passed twice (12 tests).
+`npm run typecheck` and `npm run check:focused` (1,072 tests) pass again.
+The palette crowding and mobile Applications filter density noted by the
+review remain open; the full `npm run check` release gate and `npm run check:core` were not run.
+
+## Live list filters and planner chrome — 30 October 2026
+
+**Local presentation change; no API or schema change; not deployed.** See
+*Live list filters and planner chrome* in [DECISIONS.md](DECISIONS.md).
+
+- Nine administrator filter forms apply as they change, without an Apply
+  button: Applications, Event speakers, Speaker deliverables, Speaker
+  directory, Sponsor readiness, Tasks, Operation centre operations and
+  activity, and review results. Text waits 300ms, selects 250ms (one request
+  for a run of arrow keys on a closed select) and Enter applies at once.
+  Requests replace the history entry and keep the scroll position; filter
+  changes still return to page 1 and keep density and columns.
+- One hook (`app/components/use-live-filters.ts`) makes the controls
+  controlled. The keyed remounts that dropped focus and typed text are gone;
+  the Applications grid now resets its selection explicitly. Clear, Back and
+  Forward restore the form from the loaded URL. Existing result summaries are
+  polite live regions, and text filters carry the server length limits.
+- Schedule planner: the full-width read-only bar is removed. The header keeps
+  the version beside Edit next version; the board carries the Read-only
+  marker in every view, with the full reason as accessible text. The format
+  key and scroll hint are canvas-toolbar items that share a row with the day
+  tabs when there is room. Title role and breadcrumbs are unchanged.
+  Measured top of the first board time row (the bottom of the room header):
+  414px → 363px at 1280×720, 470px → 392px at 1440×1000 (the board is 28px
+  taller there), 475px → 405px at 1024×768 and 1026px → 934px on a Pixel 7.
+
+Browser coverage now checks typing across a delayed request (focus and text
+kept), keyboard traversal of a closed select making one request, Enter,
+Clear, Back/Forward restoration, a filter edit during a column or density
+change, a select-only Tasks form driven from the keyboard and a choice made
+before hydration. The planner's read-only test checks the header version, the
+board marker in Room and Week views and its removal on the next draft. Six
+baselines changed and were inspected: Applications desktop and mobile,
+Speaker directory filters desktop and mobile, the Speaker directory contact
+crop on mobile (a sub-pixel shift; the text is unchanged) and the laptop
+Schedule planner, whose launch-film pin was updated. The mobile directory
+filter baseline still showed Apply within the 1% tolerance and was
+regenerated deliberately.
+
+Validation (30 October, local): `npm run check:focused` (Biome, generated
+TypeScript checks and 124 affected unit tests), `npm run typecheck`,
+`npm run test:config` (98) and `npm run design-system:check` pass. A final
+Chromium run of the twelve affected specs, including the visual inventory
+without snapshot updates, passed 127 tests. Before that, an Applications
+queue test failed because a sort chosen before hydration was reset by the
+controlled form; the hook now keeps such choices. Real-browser checks on
+Applications and Event speakers with 500ms request delays confirmed typed
+text and focus survive requests, four arrow keys make one request, and Clear,
+Back and Forward restore the form. None of the nine filter pages makes a
+request on load. `npm run check:core`, the full `npm run check` and the
+Firefox/WebKit smoke projects were not run.
+
+## Typed application answer fields — 30 October 2026
+
+**Local production slice; API contract change; no schema migration; not
+deployed.** Application forms gain single checkbox, number, date, email and
+phone fields beside short/long text, dropdown, multiple choice, URL and the
+pitch video. The builder palette, canvas, applicant preview and public
+application render native controls (`checkbox`, decimal-keypad text, `date`,
+`email`, `tel`). Answers remain strings in drafts and immutable snapshots, so
+review, export, Airtable and AI evidence read them unchanged; a ticked
+checkbox stores `Yes`. Final submission validates each type on the shared
+client/server path, and a required checkbox must be ticked. The participant
+submission API and form schema in OpenAPI list the new types. A checkbox can
+also control a follow-up question (see the review fixes above). A general
+applicant file field is **not implemented**: native applicant uploads remain
+the single pitch-video asset.
+The applications user guide lists the available question types.
+
+The form-builder desktop, laptop and phone baselines changed for the larger
+palette (one extra chip row at laptop width); the two pinned launch-film
+snapshot hashes were updated deliberately because the film story is unchanged.
+
+Validation (30 October): `npm run check:focused` (Biome, generated TypeScript
+and 994 affected tests in 90 files), `npm run design-system:check`, the video
+story-state check and `npm run openapi:sync` pass. Unit tests cover type
+validation and the applicant controls. The complete `e2e/submissions.spec.ts`
+passes 14 tests, including builder preview validation and a published form
+whose checkbox and date fields work on the public application; the form-builder
+visual checks pass after the baseline update. The full `npm run check` release
+gate was not run.
+
+With the live-filter and planner changes above in the same tree,
+`npm run typecheck`, `npm run check:focused` (1,065 tests in 100 files),
+`npm run design-system:check` and the story-state check pass. A Chromium run
+of the twelve affected specs, including the visual inventory without
+updates, passed its first 41 tests before a local Wrangler proxy crash
+("Network connection lost") refused every later request; rerunning the eight
+specs from the crash onward on the same build passed all 100 tests, so all
+129 passed across the two runs.
 
 ## Shared workbench titles — 25–28 October 2026
 

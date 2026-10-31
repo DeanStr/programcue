@@ -1,5 +1,9 @@
 import { requireValue } from "~/lib/required-value";
-import { type FormField, MAX_FORM_FIELDS } from "./submission-schema";
+import {
+  CHECKBOX_TICKED_ANSWER,
+  type FormField,
+  MAX_FORM_FIELDS,
+} from "./submission-schema";
 
 function fieldIdFromLabel(fields: FormField[], label: string) {
   const existing = new Set(fields.map((field) => field.id));
@@ -30,6 +34,11 @@ const FORM_FIELD_TYPE_LABELS = {
   long_text: "Long text",
   select: "Dropdown",
   multi_select: "Multiple choice",
+  checkbox: "Checkbox",
+  number: "Number",
+  date: "Date",
+  email: "Email",
+  phone: "Phone",
   url: "URL",
   video: "Video upload or URL",
 } satisfies Record<FormField["type"], string>;
@@ -45,6 +54,23 @@ export function formFieldTypeLabel(type: FormField["type"]) {
 export function formConditionSourceLabel(fields: FormField[], fieldId: string) {
   const source = fields.find((field) => field.id === fieldId);
   return source?.label ?? `Missing field “${fieldId}”`;
+}
+
+export function formConditionDescription(
+  fields: FormField[],
+  condition: NonNullable<FormField["condition"]>,
+) {
+  const source = fields.find((field) => field.id === condition.fieldId);
+  const label = formConditionSourceLabel(fields, condition.fieldId);
+  return source?.type === "checkbox"
+    ? `Shown when ${label} is ticked`
+    : `Shown when ${label} = ${condition.equals || "…"}`;
+}
+
+/** The value a new condition on this source starts with: a checkbox has one
+ *  meaningful value, a choice field waits for the author to pick one. */
+export function initialConditionValue(source: FormField | undefined) {
+  return source?.type === "checkbox" ? CHECKBOX_TICKED_ANSWER : "";
 }
 
 export function formFieldCreationIssue(

@@ -3,8 +3,9 @@ import {
   SUBMISSION_FILTER_FORM_ID,
   SubmissionDataGrid,
 } from "~/components/submission-data-grid";
-import { Button, ButtonLink } from "~/components/ui/button";
+import { ButtonLink } from "~/components/ui/button";
 import { statusPresentation } from "~/components/ui/domain-status-badge";
+import { useLiveFilters } from "~/components/use-live-filters";
 import { adminRecordBreadcrumbLabelAtPath } from "~/modules/administration/admin-route-breadcrumb";
 import { EvaluationStateError } from "~/modules/evaluations/evaluation-errors";
 import {
@@ -211,6 +212,96 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 }
 
+const APPLICATION_STATUSES = [
+  "draft",
+  "submitted",
+  "assigned",
+  "in_review",
+  "decision_ready",
+  "accepted",
+  "waitlisted",
+  "rejected",
+  "withdrawn",
+] as const;
+
+function ApplicationFilters({
+  filters,
+  categories,
+}: {
+  filters: AdminSubmissionView["filters"];
+  categories: string[];
+}) {
+  const live = useLiveFilters({
+    query: filters.query ?? "",
+    routing: filters.routing ?? "",
+    status: filters.status ?? "",
+    category: filters.category ?? "",
+    sort: filters.sort ?? "submittedAt-desc",
+  });
+  return (
+    <Form
+      {...live.form}
+      id={SUBMISSION_FILTER_FORM_ID}
+      className="submissions-toolbar"
+      role="search"
+    >
+      <label className="submissions-filter">
+        <span>Search</span>
+        <input
+          className="field"
+          {...live.field("query")}
+          maxLength={200}
+          placeholder="Title, submitter or email"
+        />
+      </label>
+      <label className="submissions-filter submissions-filter-routing">
+        <span>Routing</span>
+        <select className="select" {...live.field("routing")}>
+          <option value="">All routing states</option>
+          <option value="missing_automatic">
+            No automatic review-team route
+          </option>
+          <option value="manual_override">Manual routing override</option>
+        </select>
+      </label>
+      <label className="submissions-filter">
+        <span>Status</span>
+        <select className="select" {...live.field("status")}>
+          <option value="">All statuses</option>
+          {APPLICATION_STATUSES.map((status) => (
+            <option key={status} value={status}>
+              {statusPresentation("submission", status).label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="submissions-filter">
+        <span>Track</span>
+        <select className="select" {...live.field("category")}>
+          <option value="">All tracks</option>
+          {categories.map((category) => (
+            <option key={category}>{category}</option>
+          ))}
+        </select>
+      </label>
+      <label className="submissions-filter submissions-filter-sort">
+        <span>Sort</span>
+        <select className="select" {...live.field("sort")}>
+          <option value="submittedAt-desc">Newest activity</option>
+          <option value="submittedAt-asc">Oldest activity</option>
+          <option value="title-asc">Application title A–Z</option>
+          <option value="title-desc">Application title Z–A</option>
+        </select>
+      </label>
+      <div className="submissions-filter-actions">
+        <ButtonLink variant="ghost" size="small" to="/admin/submissions">
+          Clear
+        </ButtonLink>
+      </div>
+    </Form>
+  );
+}
+
 export default function SubmissionsAdmin({ loaderData }: Route.ComponentProps) {
   const actionData = useActionData<typeof action>() as
     | SubmissionsAdminActionResult
@@ -241,7 +332,11 @@ export default function SubmissionsAdmin({ loaderData }: Route.ComponentProps) {
         </div>
       </div>
       <ActionNotice result={actionData} />
-      <p className="submissions-pulse-line">
+      <p
+        className="submissions-pulse-line"
+        aria-live="polite"
+        aria-atomic="true"
+      >
         {[
           `${summary.eventTotal} ${summary.eventTotal === 1 ? "application" : "applications"}`,
           ...(
@@ -269,103 +364,9 @@ export default function SubmissionsAdmin({ loaderData }: Route.ComponentProps) {
       </p>
       <section className="submissions-board">
         <SubmissionDataGrid
-          key={`${page}:${filters.status}:${filters.category}:${filters.query}:${filters.routing}:${filters.sort}`}
+          resultKey={`${page}:${filters.status}:${filters.category}:${filters.query}:${filters.routing}:${filters.sort}`}
           filters={
-            <Form
-              id={SUBMISSION_FILTER_FORM_ID}
-              method="get"
-              className="submissions-toolbar"
-              role="search"
-            >
-              <label className="submissions-filter">
-                <span>Search</span>
-                <input
-                  className="field"
-                  name="query"
-                  defaultValue={filters.query}
-                  placeholder="Title, submitter or email"
-                />
-              </label>
-              <label className="submissions-filter submissions-filter-routing">
-                <span>Routing</span>
-                <select
-                  className="select"
-                  name="routing"
-                  defaultValue={filters.routing}
-                >
-                  <option value="">All routing states</option>
-                  <option value="missing_automatic">
-                    No automatic review-team route
-                  </option>
-                  <option value="manual_override">
-                    Manual routing override
-                  </option>
-                </select>
-              </label>
-              <label className="submissions-filter">
-                <span>Status</span>
-                <select
-                  className="select"
-                  name="status"
-                  defaultValue={filters.status}
-                >
-                  <option value="">All statuses</option>
-                  {[
-                    "draft",
-                    "submitted",
-                    "assigned",
-                    "in_review",
-                    "decision_ready",
-                    "accepted",
-                    "waitlisted",
-                    "rejected",
-                    "withdrawn",
-                  ].map((status) => (
-                    <option key={status} value={status}>
-                      {statusPresentation("submission", status).label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="submissions-filter">
-                <span>Track</span>
-                <select
-                  className="select"
-                  name="category"
-                  defaultValue={filters.category}
-                >
-                  <option value="">All tracks</option>
-                  {categories.map((category) => (
-                    <option key={category}>{category}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="submissions-filter submissions-filter-sort">
-                <span>Sort</span>
-                <select
-                  className="select"
-                  name="sort"
-                  defaultValue={filters.sort ?? "submittedAt-desc"}
-                >
-                  <option value="submittedAt-desc">Newest activity</option>
-                  <option value="submittedAt-asc">Oldest activity</option>
-                  <option value="title-asc">Application title A–Z</option>
-                  <option value="title-desc">Application title Z–A</option>
-                </select>
-              </label>
-              <div className="submissions-filter-actions">
-                <Button size="small" type="submit">
-                  Apply filters
-                </Button>
-                <ButtonLink
-                  variant="ghost"
-                  size="small"
-                  to="/admin/submissions"
-                >
-                  Clear
-                </ButtonLink>
-              </div>
-            </Form>
+            <ApplicationFilters filters={filters} categories={categories} />
           }
           submissions={submissions}
           columns={view.columns}

@@ -5,13 +5,22 @@ import type {
   ScheduleWorkspace,
 } from "~/modules/schedule/schedule-service.server";
 
-/* Which version froze the panel and how to unfreeze it are on the page-level
-   bar, which never scrolls away on desktop. Repeating either here just wrote
-   the same two facts a third time down a 320px column, so the marker carries
-   only the fact the bar cannot: that this control, the one under the pointer,
-   is the frozen one. It stays per panel because the inspector body scrolls
-   independently, and on mobile the bar does scroll off. */
-export function ScheduleReadOnlyMarker() {
+/* Which version froze the planner and how to unfreeze it are in the page
+   header, beside Edit next version, which never scrolls away on desktop.
+   Repeating either here just wrote the same facts again down a 320px column,
+   so the marker carries only what the header cannot: that this control, the
+   one under the pointer, is the frozen one. It stays per panel because the
+   inspector body scrolls independently, and on mobile the header does scroll
+   off. The board's marker also names the reason visibly, so a failed drag
+   explains itself without hover; screen readers additionally hear the
+   detail and remedy that the removed page-level bar used to state. */
+export function ScheduleReadOnlyMarker({
+  reason,
+  description,
+}: {
+  reason?: string;
+  description?: string;
+}) {
   return (
     <p
       className="schedule-read-only-marker"
@@ -19,6 +28,8 @@ export function ScheduleReadOnlyMarker() {
     >
       <Lock aria-hidden size={13} />
       Read-only
+      {reason ? ` · ${reason}` : null}
+      {description ? <span className="sr-only">. {description}</span> : null}
     </p>
   );
 }

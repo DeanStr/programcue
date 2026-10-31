@@ -14,6 +14,7 @@ export const nodeOnlyTestFiles = [
   "app/components/admin-shell-dialogs.test.ts",
   "app/components/admin-shell-navigation.test.ts",
   "app/components/admin-tasks-workspace.test.tsx",
+  "app/components/application-draft-editor-panels.test.tsx",
   "app/components/application-public-landing.test.tsx",
   "app/components/retention-hold-form.test.tsx",
   "app/components/public-programme-surfaces.test.tsx",

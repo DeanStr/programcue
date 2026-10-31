@@ -12,6 +12,7 @@ import { SponsorProfileFields } from "~/components/sponsor-fields";
 import { Button, ButtonLink } from "~/components/ui/button";
 import { EventDateTime } from "~/components/ui/event-date-time";
 import { EmptyState } from "~/components/ui/states";
+import { useLiveFilters } from "~/components/use-live-filters";
 import { ensureDemoSpeakerData } from "~/modules/speakers/demo.server";
 import { SponsorAssetService } from "~/modules/sponsors/sponsor-assets.server";
 import {
@@ -272,28 +273,24 @@ function SponsorReadiness({
   busy: boolean;
   hidden(intent: string): React.ReactNode;
 }) {
+  const liveFilters = useLiveFilters({
+    q: d.readiness.filters.q,
+    state: d.readiness.filters.state,
+  });
   return (
     <>
-      <Form
-        key={JSON.stringify(d.readiness.filters)}
-        method="get"
-        className="pc-filter-row"
-      >
+      <Form {...liveFilters.form} className="pc-filter-row">
         <label className="label">
           Company
           <input
             className="field"
-            name="q"
-            defaultValue={d.readiness.filters.q}
+            {...liveFilters.field("q")}
+            maxLength={120}
           />
         </label>
         <label className="label">
           Readiness
-          <select
-            className="select"
-            name="state"
-            defaultValue={d.readiness.filters.state}
-          >
+          <select className="select" {...liveFilters.field("state")}>
             <option value="all">All sponsors</option>
             <option value="invitation">Invitation not accepted</option>
             <option value="sessions">Sessions to submit</option>
@@ -303,9 +300,6 @@ function SponsorReadiness({
             <option value="ready">Ready</option>
           </select>
         </label>
-        <Button type="submit" disabled={busy}>
-          Apply filters
-        </Button>
         <ButtonLink variant="ghost" to="/admin/sponsors">
           Clear
         </ButtonLink>

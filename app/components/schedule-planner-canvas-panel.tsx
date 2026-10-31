@@ -7,7 +7,9 @@ import {
   useEffect,
   useState,
 } from "react";
+import { ScheduleReadOnlyMarker } from "~/components/schedule-content-editor-shared";
 import { ScheduleStandardCalendar } from "~/components/schedule-standard-calendar";
+import type { ScheduleEditLock } from "~/modules/schedule/schedule-edit-lock";
 import type {
   ScheduleSession,
   ScheduleWorkspace,
@@ -195,6 +197,7 @@ export function ScheduleCanvasPanel({
   eventDays,
   setSelectedDay,
   placementAvailable,
+  editLock,
   placementBusy,
   moveInStandardCalendar,
   resize,
@@ -215,6 +218,7 @@ export function ScheduleCanvasPanel({
   eventDays: number[];
   setSelectedDay: StateSetter<number>;
   placementAvailable: boolean;
+  editLock: ScheduleEditLock;
   placementBusy: boolean;
   moveInStandardCalendar(
     entry: ScheduleEntry,
@@ -300,12 +304,20 @@ export function ScheduleCanvasPanel({
       className={`schedule-canvas${placementAvailable ? "" : " is-readonly"}`}
     >
       <div className="schedule-canvas-toolbar">
-        <div>
+        <div className="schedule-canvas-title">
           <h2>
             {view === "room"
               ? `${dateLabel(selectedDay, "UTC")} · Room view`
               : `${view[0].toUpperCase() + view.slice(1)} view`}
           </h2>
+          {/* Marks the board as frozen in every view, where a failed drag is
+              noticed. The version and the way out sit in the page header. */}
+          {editLock.reason ? (
+            <ScheduleReadOnlyMarker
+              reason={editLock.reason.state}
+              description={`${editLock.reason.title}. ${editLock.reason.detail} ${editLock.reason.remedy}.`}
+            />
+          ) : null}
         </div>
         <fieldset
           className="schedule-view-tabs pc-segmented"
@@ -323,6 +335,26 @@ export function ScheduleCanvasPanel({
           ))}
         </fieldset>
         {view === "room" || view === "day" ? dayTabs : null}
+        {/* The key and the scroll hint share the toolbar's rows. They take a
+            row of their own only when the tabs leave no room beside them. */}
+        {view === "room" && (placedFormats.length || roomsOverflow) ? (
+          <div className="schedule-canvas-meta">
+            {placedFormats.length ? (
+              <p className="schedule-format-key">
+                {placedFormats.map((format) => (
+                  <span className={format.key} key={format.key}>
+                    {format.label}
+                  </span>
+                ))}
+              </p>
+            ) : null}
+            <p
+              className={`schedule-scroll-hint${roomsOverflow ? " is-visible" : ""}`}
+            >
+              <span aria-hidden>↔</span> Scroll sideways to see every room
+            </p>
+          </div>
+        ) : null}
       </div>
       {view === "list" || view === "day" || view === "week" ? (
         <ScheduleStandardCalendar
@@ -364,24 +396,6 @@ export function ScheduleCanvasPanel({
         </section>
       ) : (
         <>
-          <div className="schedule-canvas-meta">
-            {placedFormats.length ? (
-              <p className="schedule-format-key">
-                {placedFormats.map((format) => (
-                  <span className={format.key} key={format.key}>
-                    {format.label}
-                  </span>
-                ))}
-              </p>
-            ) : (
-              <span />
-            )}
-            <p
-              className={`schedule-scroll-hint${roomsOverflow ? " is-visible" : ""}`}
-            >
-              <span aria-hidden>↔</span> Scroll sideways to see every room
-            </p>
-          </div>
           <ol className="schedule-agenda">
             {workspace.entries
               .filter(

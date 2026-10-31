@@ -283,7 +283,6 @@ test("task dashboard filters visible work and keeps template creation open", asy
 
   await filters.locator("summary").click();
   await filters.getByLabel("Status").selectOption("completed");
-  await filters.getByRole("button", { name: "Apply filters" }).click();
   await expect(page).toHaveURL(/state=completed/u);
   await expect(
     assignedWork.getByText("Complete your speaker profile", { exact: true }),
@@ -297,7 +296,6 @@ test("task dashboard filters visible work and keeps template creation open", asy
   await filters.locator("summary").click();
   await filters.getByLabel("Status").selectOption("not_started");
   await filters.getByLabel("Task type").selectOption("file_upload");
-  await filters.getByRole("button", { name: "Apply filters" }).click();
   await expect(page).toHaveURL(/state=not_started/u);
   await expect(page).toHaveURL(/type=file_upload/u);
   await expect(

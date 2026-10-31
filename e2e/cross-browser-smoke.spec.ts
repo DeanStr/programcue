@@ -38,3 +38,51 @@ test("admin, reviewer and public workflows render in the browser engine", async 
   await openHydrated(page, "/public/programme/future-of-events-2027");
   await expect(page.getByRole("main")).toContainText(/programme|session/i);
 });
+
+test("live list filters keep typing and restore history in the browser engine", async ({
+  page,
+}) => {
+  await openHydrated(page, "/admin/submissions");
+  const requests: string[] = [];
+  // Hold each data request open so typing lands while one is loading.
+  await page.route(/\/admin\/submissions\.data/u, async (route) => {
+    requests.push(route.request().url());
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    await route.continue();
+  });
+  const filters = page.getByRole("search");
+  const search = filters.getByLabel("Search", { exact: true });
+  await search.click();
+  await page.keyboard.type("incl");
+  await expect.poll(() => requests.length).toBe(1);
+  await page.keyboard.type("usive");
+  await expect(page).toHaveURL(/query=inclusive/u);
+  await expect(search).toHaveValue("inclusive");
+  await expect(search).toBeFocused();
+
+  // Clear pushes a new entry. A search typed after it asks for exactly the
+  // entry Back returns to; Back still restores that entry, and neither the
+  // pending edit nor its debounce lands on it.
+  await filters.getByRole("link", { name: "Clear", exact: true }).click();
+  await expect(page).toHaveURL(/\/admin\/submissions$/u);
+  await expect(search).toHaveValue("");
+  const sent = requests.length;
+  await search.click();
+  await page.keyboard.type("inclusive");
+  await expect.poll(() => requests.length).toBe(sent + 1);
+  await page.keyboard.type("-more");
+  await page.goBack();
+  await expect(page).toHaveURL(/query=inclusive(?:&|$)/u);
+  await expect(search).toHaveValue("inclusive");
+  await page.waitForTimeout(900);
+  await expect(page).toHaveURL(/query=inclusive(?:&|$)/u);
+  await expect(search).toHaveValue("inclusive");
+
+  const status = filters.getByRole("combobox", {
+    name: "Status",
+    exact: true,
+  });
+  await status.selectOption("assigned");
+  await expect(page).toHaveURL(/status=assigned/u);
+  await expect(search).toHaveValue("inclusive");
+});

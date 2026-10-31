@@ -9,6 +9,7 @@ import { Button, ButtonLink } from "~/components/ui/button";
 import { useConfirm } from "~/components/ui/confirm-dialog";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EmptyState } from "~/components/ui/states";
+import { useLiveFilters } from "~/components/use-live-filters";
 import { fieldLabel } from "~/lib/record-labels";
 import { requireValue } from "~/lib/required-value";
 import { shortReference } from "~/lib/short-reference";
@@ -20,6 +21,72 @@ import {
   operationTaskStatusLabel as statusLabel,
   taskImportTransitionSummary,
 } from "./operation-centre-shared";
+
+function ActivityFilters({ loaderData }: { loaderData: OperationCentreData }) {
+  const liveFilters = useLiveFilters({
+    activityScope: loaderData.activityScope,
+    activityArea: loaderData.activityFilters.area,
+    activityActorQuery: loaderData.activityFilters.actorSearch,
+    activityActor: loaderData.activityFilters.actorKey,
+    activityQuery: loaderData.activityFilters.query,
+  });
+  return (
+    <Form {...liveFilters.form} className="grid grid-3 mb">
+      <input type="hidden" name="panel" value="activity" />
+      {loaderData.canViewOrganisationActivity ? (
+        <label className="label">
+          Scope
+          <select className="select" {...liveFilters.field("activityScope")}>
+            <option value="event">Current event</option>
+            <option value="organisation">All organisation events</option>
+          </select>
+        </label>
+      ) : (
+        <input type="hidden" name="activityScope" value="event" />
+      )}
+      <label className="label">
+        Area
+        <select className="select" {...liveFilters.field("activityArea")}>
+          <option value="">All areas</option>
+          {loaderData.activityAreas.map((area) => (
+            <option value={area} key={area}>
+              {area.replace(/^./, (letter) => letter.toUpperCase())}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="label">
+        Find actors
+        <input
+          className="field"
+          {...liveFilters.field("activityActorQuery")}
+          maxLength={80}
+          placeholder="Name or role…"
+        />
+      </label>
+      <label className="label">
+        Actor result
+        <select className="select" {...liveFilters.field("activityActor")}>
+          <option value="">All actors</option>
+          {loaderData.activityActors.map((actor) => (
+            <option value={actor.key} key={actor.key}>
+              {actor.name} · {fieldLabel(actor.kind)}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="label">
+        Action or record
+        <input
+          className="field"
+          {...liveFilters.field("activityQuery")}
+          maxLength={120}
+          placeholder="schedule, decision, record id…"
+        />
+      </label>
+    </Form>
+  );
+}
 
 export function ActivityTimelinePanel({
   loaderData,
@@ -44,77 +111,7 @@ export function ActivityTimelinePanel({
         </h2>
         <span className="help right">Newest first</span>
       </div>
-      <Form method="get" className="grid grid-3 mb">
-        <input type="hidden" name="panel" value="activity" />
-        {loaderData.canViewOrganisationActivity ? (
-          <label className="label">
-            Scope
-            <select
-              className="select"
-              name="activityScope"
-              defaultValue={loaderData.activityScope}
-            >
-              <option value="event">Current event</option>
-              <option value="organisation">All organisation events</option>
-            </select>
-          </label>
-        ) : (
-          <input type="hidden" name="activityScope" value="event" />
-        )}
-        <label className="label">
-          Area
-          <select
-            className="select"
-            name="activityArea"
-            defaultValue={loaderData.activityFilters.area}
-          >
-            <option value="">All areas</option>
-            {loaderData.activityAreas.map((area) => (
-              <option value={area} key={area}>
-                {area.replace(/^./, (letter) => letter.toUpperCase())}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="label">
-          Find actors
-          <input
-            className="field"
-            name="activityActorQuery"
-            defaultValue={loaderData.activityFilters.actorSearch}
-            maxLength={80}
-            placeholder="Name or role…"
-          />
-        </label>
-        <label className="label">
-          Actor result
-          <select
-            className="select"
-            name="activityActor"
-            defaultValue={loaderData.activityFilters.actorKey}
-          >
-            <option value="">All actors</option>
-            {loaderData.activityActors.map((actor) => (
-              <option value={actor.key} key={actor.key}>
-                {actor.name} · {fieldLabel(actor.kind)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="label">
-          Action or record
-          <input
-            className="field"
-            name="activityQuery"
-            defaultValue={loaderData.activityFilters.query}
-            maxLength={120}
-            placeholder="schedule, decision, record id…"
-          />
-        </label>
-        <div className="page-actions">
-          <Button type="submit">Apply filters</Button>
-        </div>
-      </Form>
+      <ActivityFilters loaderData={loaderData} />
       {loaderData.canExportData && loaderData.activityScope === "event" ? (
         <Form
           method="post"

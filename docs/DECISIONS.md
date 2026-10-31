@@ -943,7 +943,7 @@ in the implementation audit.
 | Programme embed configuration | Stateless URLs and managed records share a strict presentation allowlist over published data; [managed embeds](#managed-programme-embed-decision) own persisted lifecycle/configuration. Generated cross-origin customer frames retain `allow-scripts allow-same-origin` because an opaque origin breaks framework modules and origin-backed APIs. Trusted same-origin admin previews omit the ineffective sandbox. Only public `/embed/*` responses allow wildcard inbound framing; private responses remain self-only. Resizing uses the exact-origin handshake described in [security boundaries](#privileged-and-provider-credential-security-boundaries). |
 | Admin visual shell | Dark navigation with a light work canvas. At 360px and below the top bar keeps two rows so the current event name stays visible, and search collapses to its icon. |
 | Command Centre hierarchy | Critical conditions and their next action precede the readiness score, workflow detail and generic creation. The score follows authoritative readiness: red for critical conditions, amber for risk or active warnings, green only for Ready, and neutral On track without warnings. Readiness/workflow meters use 6px tracks; completed workflows stay subdued. Global New is secondary; contextual page actions retain primary emphasis. |
-| Application grid controls | Search, routing, status, track and sort belong to the server-filter form. Density and Columns are adjacent view controls that update the URL while retaining applied filters and unapplied filter edits; submitting filters preserves the selected density. Column visibility follows the server-loaded URL without remounting the filter form, including Back/Forward navigation. Apply retains a contrasting primary treatment on hover and keyboard press. On mobile, selection actions occupy their own row below the view controls. Native select overflow is contained at the filter wrapper so the Columns menu can extend beyond short tables. |
+| Application grid controls | Search, routing, status, track and sort belong to the server-filter form, which applies as it changes (see [live list filters](#live-list-filters-and-planner-chrome--30-october-2026)). Density and Columns are adjacent view controls that update the URL while retaining applied filters and any filter edit still waiting to apply; a filter change keeps the selected density and columns, including one made while a view change loads. Column visibility follows the server-loaded URL. Neither the grid nor the filter form remounts on a filter, view or Back/Forward change; the grid clears its row selection and copy feedback explicitly when the filtered result page changes. On mobile, selection actions occupy their own row below the view controls. Native select overflow is contained at the filter wrapper so the Columns menu can extend beyond short tables. |
 | Submission choice labels | Form-choice labels accept up to 120 characters, matching event track and session-format labels. Manual application creation validates its immutable snapshot against the read schema before inserting the application. |
 | Participant/public density | Comfortable light surfaces with mobile-responsive workflows |
 | Speaker workspace navigation | See the unified [participant navigation contract](#role-aware-participant-navigation-and-bounded-review-scoring); the former separate speaker shell is retired. |
@@ -951,8 +951,9 @@ in the implementation audit.
 | Organiser speaker-file access | Only current released versions are downloadable. The event/speaker resource route independently checks authority, ownership, signature, clean scan and R2 ETag/size; history and quarantine remain unavailable. See [the file-library boundary](#content-management-workstream-decisions). |
 | Event speaker workflow | `event_speaker_workflows` is durable roster authority; reads reject missing state rather than deriving it. Manual entry creates a neutral identity, scoped contact/profile and prospect association atomically and sends nothing. Invitation is a separate confirmed action. Migration `0019` moves only untouched records with exact old-command provenance into organisation scope and aborts on incoherent candidates; participant-owned or unprovable history is not rewritten. |
 | Operational data grids | Loaders own cross-page filtering, ordering and pagination; TanStack owns loaded-page presentation/selection, not domain state. Submissions pages are capped at 50; virtualization requires measured need. URL validation and list-state semantics are defined [below](#navigation-list-state-and-application-form-versioning). |
-| Form runtime | The native schema owns authoring, rendering and validation; RHF/Zod enforce the draft/server contract. dnd-kit supports pointer creation/reordering with explicit keyboard alternatives. No second schema or adapter. Version migration is defined [below](#navigation-list-state-and-application-form-versioning). |
+| Form runtime | The native schema owns authoring, rendering and validation; RHF/Zod enforce the draft/server contract. dnd-kit supports pointer creation/reordering with explicit keyboard alternatives. No second schema or adapter. The applicant preview renders inside the builder's form, so its controls belong to a separate, never-submitted form: a test answer can never take part in the builder's native validation or block Save draft. Version migration is defined [below](#navigation-list-state-and-application-form-versioning). |
 | Stepped applicant forms | Optional `layout=steps` presents existing v2 sections plus the non-colliding Speakers sentinel. Step identity is stable, navigation is not persisted, continue validates the visible section and submit remains server-authoritative. Save retains the visible step; removed sections choose the next visible section, then previous, then Speakers. Reopen starts first; failed submit reveals the first error. Inactive steps unmount; read-only/admin/reviewer summaries remain one page. No per-step routes or drafts. |
+| Typed application answers | Form fields are short or long text, dropdown, multiple choice, single checkbox, number, date, email, phone, URL or one native pitch video (30 October 2026). Answers stay strings so snapshots, review, export, Airtable and AI evidence need no per-type projection: a ticked checkbox stores `Yes` and an unticked one stores an empty answer, a date stores ISO `YYYY-MM-DD`, and numbers, email and phone keep the applicant's text. Drafts accept any text; final submission validates by type on the shared client/server path (finite decimal number, ISO calendar date, email, 6–15 phone digits with an optional leading `+`, exact `Yes` checkbox), and a required checkbox must be ticked. Numbers use a text input with a decimal keypad so an invalid entry reaches validation rather than becoming an empty browser value. A condition may depend on a choice field or on a checkbox; a checkbox condition stores `Yes` and shows its field when the box is ticked (for example, travel support → travel details). Checkbox and date answers must be exact: a padded value passes a trimmed check but cannot be displayed by the native control, so it is rejected rather than normalised in every write path. New fields default to administrator-only, identity-classified review visibility. A general applicant file field is not implemented: native applicant uploads remain the single pitch-video asset. |
 | 9 Aug 2026 scope clarification | The Discord Q&A fixes the MVP boundary: basic conditional form logic is sufficient; a proposal chooses one or more event tracks and reviewers cover one or more tracks; review moves from unreviewed to accept/maybe/deny, with in-app decision email, rationale and applicant-facing reviewer feedback available to ask a speaker for changes; acceptance creates the session/speakers/tasks automatically; hotel-stay requirements and flight-reimbursement forms are the minimum onboarding tasks, while description, profile/photo, announcement and colleague-invite tasks are optional; email and calendar delivery must work at MVP depth rather than be stubbed; Accelevents may be skipped; day/room drag-and-drop with conflict detection is enough for scheduling; and one small useful agent is enough because the administration UI is the priority. The repository can exceed these boundaries, but extra integrations or agent depth must not displace the clarified core. |
 | Track identity integrity | Form routing persists both track-name-to-ID and ID-to-name snapshots. Applications accept one or more tracks; direct-session forms and administrator-created direct sessions require exactly one programme track. An accepted application requires the decision-maker to confirm one of its submitted track IDs; the interface retains the submitted label for history but previews and snapshots the current programme-track name used by the created session. Event cloning remaps saved form track identities to the cloned event's new track IDs. Missing maps, selections, snapshots or decision sources fail explicitly; no position-based primary-track inference, scalar compatibility route, raw-ID or empty-object fallback is used. |
 | Submission routing boundary | Track selections and team joins are authoritative; intake stores their immutable labels and may complete without staffed evaluation rounds. Assignment remains an explicit review action. Detail derives routing explanations from those snapshots, labels manual overrides and fails on automatic-routing drift. No scalar primary-team or automatic intake assignment. |
@@ -3036,11 +3037,12 @@ evidence.
   Communications drops it. Bulk task actions and Speaker deliverables use one
   name across button, breadcrumb and title. Interface copy uses Australian
   spelling (organisation).
-- Filters keep an explicit "Apply filters" bordered button and a ghost
-  "Clear". Selects do not submit on change: a closed select fires a change on
-  every arrow key, and the remounting filter forms would discard text typed
-  while a navigation was in flight. Changing that needs controlled filter
-  forms first.
+- Filters apply as they change and keep a ghost "Clear" (revised 30
+  October; see *Live list filters and planner chrome*). The explicit "Apply
+  filters" button recorded here was kept until the filter forms were
+  controlled and no longer remounted, because a closed select fires a change
+  on every arrow key and a remounting form discarded text typed while a
+  navigation was in flight.
 - Form Builder, the reviewer workbench and the Schedule planner keep their
   compact titles for canvas height. Command centre now uses the standard
   title, and its section headings match the other admin sections.
@@ -3070,3 +3072,65 @@ evidence.
   "Form builder", matching the breadcrumb and demo guide. The form picker directly below names the form being edited; the old
   "Call for Speakers Form Builder" title was wrong for any other form and
   wrapped to two lines on phones.
+
+## Live list filters and planner chrome — 30 October 2026
+
+- The administrator list filters apply as they change: Applications, Event
+  speakers, Speaker deliverables, Speaker directory, Sponsor readiness, Tasks,
+  Operation centre operations and activity, and review results. There is no
+  Apply button; Clear keeps its ghost treatment where a page had one.
+- Text waits 300ms after the last keystroke and a select 250ms, so arrow-key
+  traversal of a closed select makes one request. Enter in any field applies
+  at once, which also gives select-only forms (Tasks, Operation centre, review
+  results) an immediate keyboard apply. Requests replace the history entry and
+  keep the scroll position; a filter change still returns to page 1, and the
+  URL still holds the complete filter state for reload, Back and Forward.
+- One hook, `useLiveFilters`, owns the behaviour. Its controls are controlled
+  and its form is never remounted, so focus and anything typed while a request
+  loads survive the request. The keyed remounts that used to reset these
+  forms are gone; the Applications grid resets its selection explicitly
+  instead. A choice made before hydration is treated as an edit and applied
+  once the page hydrates, rather than being reset by the first controlled
+  render.
+- Back and Forward restore their destination exactly: an edit that has not
+  loaded is discarded, not re-applied over the restored entry (review
+  finding, 30 October). Any other navigation the form did not make (a
+  quick-filter chip, a link, a view control, a POST revalidation) shows the
+  values it loaded, except for a control whose edit has not yet loaded. That
+  control keeps its value and is applied on top once the other navigation
+  commits; the edit waits rather than cancelling it. This is what keeps a
+  filter edit across a density or column change. A plain click on a link
+  inside the filter form, such as Clear, first discards edits that have not
+  loaded. The document load also reports a history traversal, so the first
+  commit keeps choices made before hydration.
+- The form recognises its own requests by a fresh id in their history state,
+  never by their URL. Matching the URL let Back to an entry with the same
+  query as a loading request pass as the form's own navigation, and let a
+  pending debounce cancel Back (second review, 30 October).
+- Text filters carry the server's length limit, so typing cannot reach a 400
+  page. An existing result count or summary is a polite, atomic live region
+  (Applications pulse line, Speaker directory count, Speaker deliverables
+  count and review results count); no visible copy was added.
+- Event speakers and Speaker directory previously searched as the user typed
+  but submitted selects on every change and re-synchronised the query from the
+  loader, which could overwrite text typed during a request. They now use the
+  shared behaviour.
+- The Schedule planner's full-width read-only bar is removed. It repeated the
+  version shown beside Edit next version and cost a 38px row plus gap (two
+  lines at mid widths, three on phones). The header keeps "Version N ·
+  Status" beside the action that changes it, or names "No schedule version
+  yet" beside Create schedule. The board carries the same Read-only marker
+  as the notes and session editors, under its heading in every view, so a
+  failed drag is explained where it happens. The board's marker names the
+  state visibly ("Read-only · published") rather than in a hover or focus
+  tooltip, which touch screens cannot reach. The short state keeps the marker
+  within the heading's width; the full "Version 1 is published" would widen
+  the title column and push the day tabs onto a second toolbar row at laptop
+  width, costing about 25px of board. Its accessible text adds the version,
+  the frozen surfaces and the remedy that the bar stated. The notes
+  and session editor markers stay "Read-only" beside the board's reason.
+- The planner's format key and room scroll hint are canvas-toolbar items.
+  They sit beside the day tabs when the row has room (for example at 1440px
+  with notes open) and wrap onto their own toolbar row otherwise. The page
+  title keeps the shared operational role, and the breadcrumbs (§11.5) are
+  unchanged.
