@@ -264,7 +264,7 @@
 }
 /* A wrapping row places items at their basis before anything shrinks, so the
    bases, not the minimums, decide whether the actions fit on the first row. */
-.submissions-filter:first-of-type {
+.submissions-filter-search {
   flex: 1 1 11rem;
   width: auto;
   min-width: min(9rem, 100%);
@@ -297,6 +297,13 @@
   gap: var(--space-1);
   padding-bottom: 0;
   flex: 0 0 auto;
+}
+/* Wider screens lay the folded choices out in the toolbar row. */
+.submissions-filter-more {
+  display: contents;
+}
+.submissions-toolbar .submissions-filter-toggle {
+  display: none;
 }
 .submissions-toolbar :is(.field, .select, .btn),
 .submissions-board .pc-data-grid-toolbar :is(.select, .btn) {
@@ -375,7 +382,7 @@
 
 @media (max-width: 1000px) {
   .submissions-filter,
-  .submissions-filter:first-of-type {
+  .submissions-filter-search {
     flex: 1 1 calc(50% - var(--space-2));
     width: auto;
     max-width: none;
@@ -396,12 +403,35 @@
     row-gap: var(--space-3);
   }
   .submissions-filter,
-  .submissions-filter:first-of-type {
+  .submissions-filter-search {
     flex: 1 1 100%;
     max-width: none;
   }
   .submissions-filter {
     gap: var(--space-1);
+  }
+  /* Search shares its row with the Filters button; the other choices open
+     below it. */
+  .submissions-toolbar .submissions-filter-search {
+    flex: 1 1 0;
+  }
+  .submissions-toolbar .submissions-filter-toggle {
+    display: inline-flex;
+    flex: 0 0 auto;
+  }
+  .submissions-filter-more {
+    display: none;
+  }
+  .submissions-filter-more[data-shown] {
+    display: flex;
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    gap: var(--space-3) var(--space-2);
+  }
+  .submissions-board .pc-data-grid-density {
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-2);
   }
   .submissions-board .pc-data-grid-density > span {
     font-size: var(--text-2xs);

@@ -9,6 +9,11 @@ export async function expectLongTrackFilterContained(page: Page) {
     await page.goto("/admin/submissions");
     await page.locator("body[data-hydrated='true']").waitFor();
     await page.evaluate(() => document.fonts.ready);
+    // Phones fold the choices behind a Filters button.
+    const more = page
+      .getByRole("search")
+      .getByRole("button", { name: /^Filters/u });
+    if (await more.isVisible()) await more.click();
     const track = page
       .getByRole("search")
       .getByRole("combobox", { name: "Track", exact: true });

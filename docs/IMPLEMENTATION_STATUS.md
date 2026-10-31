@@ -1,11 +1,61 @@
 # Verified implementation status
 
-Evidence recorded through **30 October 2026**, including review fixes for typed fields and live filters, typed application answer fields, live list filters and the planner chrome pass, the shared workbench title follow-up, the navigation and page header pass, the local interface consistency pass and its visual review follow-up, the interface refinement and visual evaluation pass, assistant request presentation and partial task coverage, readiness source links, the sponsor/deliverables release, application/scanner releases, a controlled live invited-speaker journey and autonomous backup acceptance.
+Evidence recorded through **31 October 2026**, including phone Applications filters and the form builder palette, review fixes for typed fields and live filters, typed application answer fields, live list filters and the planner chrome pass, the shared workbench title follow-up, the navigation and page header pass, the local interface consistency pass and its visual review follow-up, the interface refinement and visual evaluation pass, assistant request presentation and partial task coverage, readiness source links, the sponsor/deliverables release, application/scanner releases, a controlled live invited-speaker journey and autonomous backup acceptance.
 This is the current capability,
 requirements and acceptance index; consolidation does not constitute a new
 verification or deployment. The [product specification](../sessionboard-replacement-full-scope-implementation-specification-with-competition-ux.md)
 owns intended scope, [DECISIONS.md](DECISIONS.md) owns engineering decisions, and
 Git history retains earlier committed work logs.
+
+## Phone Applications filters and form builder palette — 31 October 2026
+
+**Local presentation change; no API, schema or migration change; not
+deployed.** See *Phone filters and the form builder palette* in
+[DECISIONS.md](DECISIONS.md). This closes the two follow-ups the review left
+open.
+
+- Applications on phones: Search sits beside a Filters button with the active
+  filter count; Routing, Status, Track, Sort and Clear open below it, and the
+  Density label sits beside its control. Measured on a Pixel 7, the first
+  application title moved from 830px to 498px (the first screen previously
+  showed no application). Desktop and tablet layouts and the desktop baseline
+  are unchanged. Of the other filter pages, Event speakers, Speaker
+  directory and Operation centre already use compact controls and Tasks and
+  review results fold theirs. Speaker deliverables still shows no record on
+  a phone's first screen because its Remind speakers card comes first; that
+  is unchanged.
+- Form builder: the palette shows Short text, Long text and Dropdown, plus a
+  More types button that opens the other eight types below them, still
+  draggable. It is one 82px row instead of three (162px) at 1280 and 1366px.
+- The canvas no longer keeps a 560px floor beside the outline and dock. At
+  1280×720 it was 99px taller than its pane, which hid the palette under the
+  history strip behind a second scroll. With the stage pinned, the palette is
+  fully visible and the pane does not scroll at 1280×720, 1366×768, 1440×900
+  and 900×1000. Visible canvas: 352px at 1280×720, 400px at 1366×768.
+- On phones the palette still sits below the first screen inside the canvas
+  pane's scroll. That predates this change: the committed baseline showed
+  only the "Add a field" label, and with a one-row palette that label no
+  longer shows either.
+
+Browser coverage adds a phone-width Applications test (filters folded, first
+application in view, count after choosing a status). The desktop one-row
+test now measures visible controls and checks that the Filters button is
+hidden. The authoring tests open More types before using the other types,
+and one checks that the button reports its state and that a revealed type
+is draggable. The long-track overflow check opens Filters on narrow screens.
+Four baselines changed and were inspected: Applications mobile and the form
+builder at desktop, laptop and mobile; the desktop and laptop form builder
+pins in the launch film were updated.
+
+Validation (31 October): `npm run typecheck`, `npm run check:focused` and
+`npm run design-system:check` pass, as does the story-state validator. On a
+fresh build, `operational-data-grid`, `submissions` and
+`evaluation-public-application` ran in Chromium: 30 passed and the desktop
+one-row test failed because it counted the hidden Filters button. After that
+test was corrected, it and the phone-width test passed. The Firefox
+and WebKit smoke projects (6), mobile WebKit `ux-fixes` (3) and the full
+visual spec without updates (32) pass. `npm run check:core` and the full
+`npm run check` were not run.
 
 ## Review fixes for typed fields and live filters — 30 October 2026
 
@@ -61,7 +111,7 @@ visual inventory was not rerun; the change does not alter rendering), and
 the Firefox and WebKit smoke projects passed twice (12 tests).
 `npm run typecheck` and `npm run check:focused` (1,072 tests) pass again.
 The palette crowding and mobile Applications filter density noted by the
-review remain open; the full `npm run check` release gate and `npm run check:core` were not run.
+review were addressed on 31 October (see above); the full `npm run check` release gate and `npm run check:core` were not run.
 
 ## Live list filters and planner chrome — 30 October 2026
 

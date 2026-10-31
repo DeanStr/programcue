@@ -48,11 +48,11 @@
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/form-builder-desktop-chromium-linux.png",
-      "sha256": "f565c1691af5c1db9b9c7c9a95cd535a3c151df124e7c4edc0d5f8194aa55774"
+      "sha256": "bdafcce402b7aa342533e43d5803a3c1056f0b2e7d41b65805f7d7bfdb583261"
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/form-builder-laptop-chromium-linux.png",
-      "sha256": "448eb2fc093149c1f7c6b5df9dd7394521992908ef1231ff174534c14843a21c"
+      "sha256": "77c53a59c08d9601317bb1458f3c602d473a97f6512447f387a0460612e00cc3"
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/programme-admin-desktop-chromium-linux.png",

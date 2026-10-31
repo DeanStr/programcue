@@ -3134,3 +3134,27 @@ evidence.
   with notes open) and wrap onto their own toolbar row otherwise. The page
   title keeps the shared operational role, and the breadcrumbs (§11.5) are
   unchanged.
+
+## Phone filters and the form builder palette — 31 October 2026
+
+- On phones (600px and narrower), Applications keeps Search visible beside a
+  Filters button that shows the number of active filters ("Filters · 1").
+  Routing, Status, Track, Sort and Clear open below it. The Density label
+  sits beside its control. Wider screens are unchanged. On a Pixel 7 the
+  first application moved from 830px to 498px down the screen; before, the
+  first screen held no application. The other filter pages were measured and
+  left alone: Event speakers, Speaker directory and Operation centre already
+  use compact controls, and Tasks and review results already fold theirs.
+  Speaker deliverables puts its Remind speakers card before the records, so
+  a phone's first screen shows none; that is a separate layout question.
+- The form builder palette shows Short text, Long text and Dropdown, plus a
+  More types button. The other eight types open below in place and stay
+  draggable. It is a disclosure, not a menu, so every type can still be
+  dragged and there is no popover to position or dismiss. The palette is one
+  82px row instead of three rows (162px) at 1280 and 1366px.
+- The canvas keeps its 560px minimum height only in the stacked layouts below
+  1001px. Beside the outline and dock, the pane already has the stage's
+  height. At 1280×720 the floor made the canvas 99px taller than its pane, so
+  the palette sat under the history strip behind a second scroll. With the
+  stage pinned, the palette is now fully visible at 1280×720, 1366×768,
+  1440×900 and 900×1000.

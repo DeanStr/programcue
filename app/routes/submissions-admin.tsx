@@ -1,9 +1,11 @@
+import { ListFilter } from "lucide-react";
+import { useState } from "react";
 import { data, Form, useActionData } from "react-router";
 import {
   SUBMISSION_FILTER_FORM_ID,
   SubmissionDataGrid,
 } from "~/components/submission-data-grid";
-import { ButtonLink } from "~/components/ui/button";
+import { Button, ButtonLink } from "~/components/ui/button";
 import { statusPresentation } from "~/components/ui/domain-status-badge";
 import { useLiveFilters } from "~/components/use-live-filters";
 import { adminRecordBreadcrumbLabelAtPath } from "~/modules/administration/admin-route-breadcrumb";
@@ -224,6 +226,8 @@ const APPLICATION_STATUSES = [
   "withdrawn",
 ] as const;
 
+const MORE_APPLICATION_FILTERS_ID = "submission-filters-more";
+
 function ApplicationFilters({
   filters,
   categories,
@@ -238,6 +242,12 @@ function ApplicationFilters({
     category: filters.category ?? "",
     sort: filters.sort ?? "submittedAt-desc",
   });
+  // On a phone the choices fold behind one button so the first screen shows
+  // applications. Wider screens lay them out inline and hide the button.
+  const [moreShown, setMoreShown] = useState(false);
+  const activeFilters = ["routing", "status", "category"].filter(
+    (name) => live.field(name).value !== "",
+  ).length;
   return (
     <Form
       {...live.form}
@@ -245,7 +255,7 @@ function ApplicationFilters({
       className="submissions-toolbar"
       role="search"
     >
-      <label className="submissions-filter">
+      <label className="submissions-filter submissions-filter-search">
         <span>Search</span>
         <input
           className="field"
@@ -254,49 +264,65 @@ function ApplicationFilters({
           placeholder="Title, submitter or email"
         />
       </label>
-      <label className="submissions-filter submissions-filter-routing">
-        <span>Routing</span>
-        <select className="select" {...live.field("routing")}>
-          <option value="">All routing states</option>
-          <option value="missing_automatic">
-            No automatic review-team route
-          </option>
-          <option value="manual_override">Manual routing override</option>
-        </select>
-      </label>
-      <label className="submissions-filter">
-        <span>Status</span>
-        <select className="select" {...live.field("status")}>
-          <option value="">All statuses</option>
-          {APPLICATION_STATUSES.map((status) => (
-            <option key={status} value={status}>
-              {statusPresentation("submission", status).label}
+      <Button
+        size="small"
+        className="submissions-filter-toggle"
+        aria-expanded={moreShown}
+        aria-controls={MORE_APPLICATION_FILTERS_ID}
+        onClick={() => setMoreShown((shown) => !shown)}
+      >
+        <ListFilter aria-hidden size={14} />
+        Filters{activeFilters ? ` · ${activeFilters}` : ""}
+      </Button>
+      <div
+        id={MORE_APPLICATION_FILTERS_ID}
+        className="submissions-filter-more"
+        data-shown={moreShown || undefined}
+      >
+        <label className="submissions-filter submissions-filter-routing">
+          <span>Routing</span>
+          <select className="select" {...live.field("routing")}>
+            <option value="">All routing states</option>
+            <option value="missing_automatic">
+              No automatic review-team route
             </option>
-          ))}
-        </select>
-      </label>
-      <label className="submissions-filter">
-        <span>Track</span>
-        <select className="select" {...live.field("category")}>
-          <option value="">All tracks</option>
-          {categories.map((category) => (
-            <option key={category}>{category}</option>
-          ))}
-        </select>
-      </label>
-      <label className="submissions-filter submissions-filter-sort">
-        <span>Sort</span>
-        <select className="select" {...live.field("sort")}>
-          <option value="submittedAt-desc">Newest activity</option>
-          <option value="submittedAt-asc">Oldest activity</option>
-          <option value="title-asc">Application title A–Z</option>
-          <option value="title-desc">Application title Z–A</option>
-        </select>
-      </label>
-      <div className="submissions-filter-actions">
-        <ButtonLink variant="ghost" size="small" to="/admin/submissions">
-          Clear
-        </ButtonLink>
+            <option value="manual_override">Manual routing override</option>
+          </select>
+        </label>
+        <label className="submissions-filter">
+          <span>Status</span>
+          <select className="select" {...live.field("status")}>
+            <option value="">All statuses</option>
+            {APPLICATION_STATUSES.map((status) => (
+              <option key={status} value={status}>
+                {statusPresentation("submission", status).label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="submissions-filter">
+          <span>Track</span>
+          <select className="select" {...live.field("category")}>
+            <option value="">All tracks</option>
+            {categories.map((category) => (
+              <option key={category}>{category}</option>
+            ))}
+          </select>
+        </label>
+        <label className="submissions-filter submissions-filter-sort">
+          <span>Sort</span>
+          <select className="select" {...live.field("sort")}>
+            <option value="submittedAt-desc">Newest activity</option>
+            <option value="submittedAt-asc">Oldest activity</option>
+            <option value="title-asc">Application title A–Z</option>
+            <option value="title-desc">Application title Z–A</option>
+          </select>
+        </label>
+        <div className="submissions-filter-actions">
+          <ButtonLink variant="ghost" size="small" to="/admin/submissions">
+            Clear
+          </ButtonLink>
+        </div>
       </div>
     </Form>
   );

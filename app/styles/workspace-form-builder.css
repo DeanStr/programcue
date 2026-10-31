@@ -490,6 +490,15 @@
   border-radius: 0;
   background: transparent;
 }
+/* Beside the outline and dock, the pane already has the stage's height. The
+   stacked layouts below 1001px have no fixed height and keep the floor; here
+   it made the canvas taller than its pane at 1280×720, so the palette sat
+   under the history strip behind a second scroll. */
+@media (min-width: 1001px) {
+  .program-cue-form-canvas {
+    min-height: 0;
+  }
+}
 .fb-canvas-palette.pc-plain-fieldset {
   display: grid;
   flex: 0 0 auto;
@@ -498,7 +507,7 @@
   align-content: start;
   align-items: start;
   gap: var(--space-2);
-  padding: var(--space-3) var(--space-5) var(--space-5);
+  padding: var(--space-3) var(--space-5);
   border: 0;
   border-top: 1px solid var(--border);
   background: var(--surface);
@@ -516,6 +525,38 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-1);
+}
+.fb-canvas-palette-more {
+  display: flex;
+  flex: 1 0 100%;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+.fb-canvas-palette-more[hidden] {
+  display: none;
+}
+.fb-canvas-palette-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 30px;
+  padding: var(--space-1) var(--space-2) var(--space-1) var(--space-3);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-snug);
+  cursor: pointer;
+}
+.fb-canvas-palette-toggle:hover,
+.fb-canvas-palette-toggle:focus-visible {
+  border-color: var(--brand-400);
+  color: var(--text-primary);
+}
+.fb-canvas-palette-toggle[aria-expanded="true"] > svg {
+  transform: rotate(180deg);
 }
 .fb-canvas-operation-message {
   grid-column: 1 / -1;

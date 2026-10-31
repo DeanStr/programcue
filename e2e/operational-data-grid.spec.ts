@@ -16,6 +16,32 @@ async function slowApplicationRequests(page: Page) {
   return requests;
 }
 
+test("phone-width application filters fold so the first screen shows applications", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/admin/submissions");
+  await page.locator("body[data-hydrated='true']").waitFor();
+  const filters = page.getByRole("search");
+  const status = filters.getByRole("combobox", { name: "Status", exact: true });
+  await expect(filters.getByLabel("Search", { exact: true })).toBeVisible();
+  await expect(status).toBeHidden();
+  await expect(
+    page.getByRole("link", { name: "Designing inclusive attendee journeys" }),
+  ).toBeInViewport();
+
+  const toggle = filters.getByRole("button", { name: "Filters", exact: true });
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await status.selectOption("assigned");
+  await expect(page).toHaveURL(/status=assigned/u);
+  await expect(
+    filters.getByRole("button", { name: "Filters · 1", exact: true }),
+  ).toBeVisible();
+  await expect(status).toBeVisible();
+});
+
 test("application filters apply as the user types and keep focus and text", async ({
   page,
 }) => {
@@ -461,10 +487,14 @@ test("desktop applications keep filters and their actions on one row", async ({
   await page.goto("/admin/submissions");
   await page.locator("body[data-hydrated='true']").waitFor();
   await page.evaluate(() => document.fonts.ready);
-  const controls = page.getByRole("search").locator(".field, .select, .btn");
+  const filters = page.getByRole("search");
+  // The phone Filters button is not displayed at this width.
+  await expect(filters.getByRole("button", { name: /^Filters/u })).toBeHidden();
+  const controls = filters.locator(":is(.field, .select, .btn):visible");
   const bottoms = await controls.evaluateAll((elements) =>
     elements.map((element) => element.getBoundingClientRect().bottom),
   );
+  expect(bottoms.length).toBeGreaterThan(5);
   expect(Math.max(...bottoms) - Math.min(...bottoms)).toBeLessThanOrEqual(2);
   await expect(page.getByRole("search").getByLabel("Density")).toHaveCount(0);
 });

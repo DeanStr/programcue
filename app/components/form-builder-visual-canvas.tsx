@@ -18,6 +18,7 @@ import {
   AlignLeft,
   AtSign,
   CalendarDays,
+  ChevronDown,
   ChevronsUpDown,
   GripVertical,
   Hash,
@@ -50,6 +51,15 @@ import {
   formFieldTextInputAttributes,
   formSectionsForAuthoring,
 } from "~/modules/submissions/submission-schema";
+
+/* One row of common types keeps the palette from taking the canvas's height
+   on a laptop. The rest open below them and are just as draggable. */
+const COMMON_PALETTE_TYPES = new Set<FormField["type"]>([
+  "short_text",
+  "long_text",
+  "select",
+]);
+const PALETTE_MORE_TYPES_ID = "form-builder-palette-more-types";
 
 type DraggedItem =
   | { kind: "new-field"; fieldType: FormField["type"]; label: string }
@@ -439,6 +449,7 @@ export function FormBuilderVisualCanvas({
     }),
   );
   const [draggedItem, setDraggedItem] = useState<DraggedItem | null>(null);
+  const [moreTypesShown, setMoreTypesShown] = useState(false);
 
   function insertField(
     type: FormField["type"],
@@ -534,7 +545,9 @@ export function FormBuilderVisualCanvas({
           <strong>Add a field</strong>
           <span>Drag onto the page, or select to append.</span>
           <div className="fb-canvas-palette-fields">
-            {FORM_FIELD_TYPES.map(({ value, label }) => (
+            {FORM_FIELD_TYPES.filter(({ value }) =>
+              COMMON_PALETTE_TYPES.has(value),
+            ).map(({ value, label }) => (
               <PaletteField
                 key={value}
                 type={value}
@@ -542,6 +555,34 @@ export function FormBuilderVisualCanvas({
                 add={() => addField(value)}
               />
             ))}
+            <button
+              type="button"
+              className="fb-canvas-palette-toggle"
+              aria-expanded={moreTypesShown}
+              aria-controls={PALETTE_MORE_TYPES_ID}
+              onClick={() => setMoreTypesShown((shown) => !shown)}
+            >
+              {moreTypesShown ? "Fewer types" : "More types"}
+              <ChevronDown aria-hidden size={14} />
+            </button>
+            <div
+              id={PALETTE_MORE_TYPES_ID}
+              className="fb-canvas-palette-more"
+              hidden={!moreTypesShown}
+            >
+              {moreTypesShown
+                ? FORM_FIELD_TYPES.filter(
+                    ({ value }) => !COMMON_PALETTE_TYPES.has(value),
+                  ).map(({ value, label }) => (
+                    <PaletteField
+                      key={value}
+                      type={value}
+                      label={label}
+                      add={() => addField(value)}
+                    />
+                  ))
+                : null}
+            </div>
           </div>
           {operationMessage ? (
             <div
