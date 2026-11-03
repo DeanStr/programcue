@@ -29,6 +29,16 @@ type EncryptedRelayValue = {
   ciphertext: string;
 };
 
+/**
+ * The verification identifier under which Better Auth stores OAuth state.
+ * Better Auth 1.7.7 namespaced it so OAuth state cannot be redeemed as a
+ * magic-link token. It is internal to Better Auth and not exported; the
+ * auth-flow tests start a real link flow and fail if it changes.
+ */
+export function oauthStateVerificationIdentifier(state: string) {
+  return `auth-state:${state}`;
+}
+
 export class MicrosoftCallbackRelayConfigurationError extends Error {
   constructor() {
     super("Microsoft callback relay encryption is unavailable.");
@@ -239,7 +249,7 @@ async function assertUnexpiredOAuthState(
        LIMIT 1
     `,
   )
-    .bind(state)
+    .bind(oauthStateVerificationIdentifier(state))
     .first<{ value: string }>();
   if (!stored) throw new MicrosoftCallbackRelayError();
   try {

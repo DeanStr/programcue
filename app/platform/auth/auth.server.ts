@@ -10,6 +10,7 @@ import {
 import {
   MICROSOFT_AUTH_CALLBACK_PATH,
   microsoftFormPostPlugin,
+  oauthStateVerificationIdentifier,
 } from "~/platform/auth/microsoft-auth-callback.server";
 import { createDatabase } from "~/platform/database/db.server";
 import { authSchema } from "~/platform/database/schema";
@@ -172,7 +173,7 @@ export async function trustedParticipantOAuthProviders(
        LIMIT 1
     `,
   )
-    .bind(state)
+    .bind(oauthStateVerificationIdentifier(state))
     .first<{ value: string }>();
   if (!stored) return [];
 

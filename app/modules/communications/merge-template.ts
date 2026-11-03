@@ -185,6 +185,23 @@ export function unresolvedTemplateTokenMessage(
   return `${labels[finding.field]} contains unresolved template token ${JSON.stringify(finding.token)}. Replace it with a supported merge field or remove the unavailable detail.`;
 }
 
+/** Fills the fields a preview knows and leaves any other field as written,
+ *  so a value only known at send time stays visible instead of blank. */
+export function fillKnownMergeFields(text: string, values: MergeValues) {
+  return text.replace(
+    new RegExp(VARIABLE_PATTERN.source, "g"),
+    (token, field: string) =>
+      Object.hasOwn(values, field) ? String(values[field] ?? "") : token,
+  );
+}
+
+export function recipientMergeValues(name: string) {
+  return {
+    "recipient.name": name,
+    "recipient.firstName": name.trim().split(/\s+/)[0] || name,
+  };
+}
+
 export function renderMergeTemplate(template: string, values: MergeValues) {
   const unknown = new Set<string>();
   const rendered = template.replace(VARIABLE_PATTERN, (_match, key: string) => {

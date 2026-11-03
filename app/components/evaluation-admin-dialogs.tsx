@@ -1,9 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
-import { Form } from "react-router";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Form, useRevalidator } from "react-router";
 
 import { Dialog } from "~/components/dialog";
 import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
 import { Button } from "~/components/ui/button";
+import {
+  fillKnownMergeFields,
+  recipientMergeValues,
+} from "~/modules/communications/merge-template";
 
 export function BulkAssignmentDialog() {
   const [trackFilter, setTrackFilter] = useState("");
@@ -516,8 +520,73 @@ export function ReviewReopenDialog() {
   ) : null;
 }
 
+/** The email release sends, with the subject merged from what is known
+ *  before release. Fields only known at release stay as written. */
+function DecisionEmailSummary({
+  decision,
+}: {
+  decision: "accepted" | "waitlisted" | "rejected";
+}) {
+  const { loaderData, selected } = useEvaluationAdminModel();
+  const email = loaderData.decisionEmail;
+  if (!selected) return null;
+  if (!email) {
+    return (
+      <div className="validation-item warn" role="status">
+        <strong>No decision email is published</strong>
+        <span>
+          Release stops until one is published in Communications. Saving a draft
+          does not need one.
+        </span>
+      </div>
+    );
+  }
+  const recipientName =
+    selected.decisionRecipientName ?? selected.decisionRecipientAddress;
+  const subject = fillKnownMergeFields(email.subjectTemplate, {
+    ...email.eventMergeValues,
+    ...(recipientName ? recipientMergeValues(recipientName) : {}),
+    "submission.title": selected.title,
+    "decision.outcome": decision,
+  });
+  return (
+    <section
+      className="card pad decision-email-summary"
+      aria-labelledby="decision-email-heading"
+    >
+      <strong id="decision-email-heading">Email sent on release</strong>
+      <dl>
+        <div>
+          <dt>To</dt>
+          <dd>
+            {selected.decisionRecipientAddress ??
+              "No applicant email address, so release stops."}
+          </dd>
+        </div>
+        <div>
+          <dt>Subject</dt>
+          <dd>{subject}</dd>
+        </div>
+        <div>
+          <dt>Template</dt>
+          <dd>
+            {email.name} · version {email.versionNumber}
+          </dd>
+        </div>
+      </dl>
+      {email.starterWording ? (
+        <p className="help">
+          It still uses starter wording; check it in Communications before
+          releasing.
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
 export function DecisionDialog() {
   const {
+    actionData,
     loaderData,
     navigation,
     setDecisionId,
@@ -549,7 +618,51 @@ export function DecisionDialog() {
   const selectedSessionFormat = loaderData.sessionFormats.find(
     (format) => format.key === sessionFormatKey,
   );
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Selection identity and saved-draft revision deliberately reset the dialog even when the next values happen to match.
+  const revalidator = useRevalidator();
+  const [decisionError, setDecisionError] = useState<string | null>(null);
+  const decisionErrorRef = useRef<HTMLDivElement>(null);
+  const decisionSubmitted = useRef(false);
+  const submittingDecision =
+    navigation.state !== "idle" &&
+    navigation.formData?.get("intent") === "decide";
+  const closeDecision = () => {
+    setDecisionId(null);
+    setNoReviewOverrideConfirmed(false);
+    setDecisionError(null);
+  };
+  // The dialog closes only once the server accepts the decision, so a refusal
+  // keeps what the organiser entered. React Router does not reload loader
+  // data after a 4xx action, so reload it here: the email summary and the
+  // version the next release expects then show what changed.
+  useEffect(() => {
+    if (submittingDecision) {
+      decisionSubmitted.current = true;
+      setDecisionError(null);
+      return;
+    }
+    if (!decisionSubmitted.current || navigation.state !== "idle") return;
+    decisionSubmitted.current = false;
+    if (actionData?.ok === true || actionData?.committed === true) {
+      setDecisionId(null);
+      setNoReviewOverrideConfirmed(false);
+      return;
+    }
+    const message = actionData?.error ?? actionData?.message;
+    if (!message) return;
+    setDecisionError(message);
+    revalidator.revalidate();
+  }, [
+    actionData,
+    navigation.state,
+    revalidator,
+    setDecisionId,
+    setNoReviewOverrideConfirmed,
+    submittingDecision,
+  ]);
+  useEffect(() => {
+    if (decisionError) decisionErrorRef.current?.focus();
+  }, [decisionError]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Selection identity and saved-draft revision deliberately reset the dialog even when the next values happen to match. A reloaded format list does not, so reloading after a refused release keeps the chosen outcome.
   useEffect(() => {
     const draft = selected?.decisionDraft;
     setDecision(draft?.decision ?? "accepted");
@@ -570,7 +683,6 @@ export function DecisionDialog() {
     );
   }, [
     defaultSessionTrackId,
-    loaderData.sessionFormats,
     matchingSubmittedFormat?.key,
     selected?.decisionDraft?.decision,
     selected?.decisionDraft?.revisionNumber,
@@ -582,10 +694,8 @@ export function DecisionDialog() {
   return selected ? (
     <Dialog
       title={`Decision · ${selected.title}`}
-      onClose={() => {
-        setDecisionId(null);
-        setNoReviewOverrideConfirmed(false);
-      }}
+      onClose={closeDecision}
+      dismissible={!submittingDecision}
       size="lg"
       footer={
         <>
@@ -594,7 +704,9 @@ export function DecisionDialog() {
             form="evaluation-decision-form"
             name="release"
             value="false"
-            disabled={navigation.state !== "idle"}
+            disabled={
+              navigation.state !== "idle" || revalidator.state !== "idle"
+            }
           >
             Save draft
           </Button>
@@ -607,6 +719,7 @@ export function DecisionDialog() {
               value="true"
               disabled={
                 navigation.state !== "idle" ||
+                revalidator.state !== "idle" ||
                 (!selectedHasCompletedReview && !noReviewOverrideConfirmed)
               }
             >
@@ -620,11 +733,25 @@ export function DecisionDialog() {
         id="evaluation-decision-form"
         key={`${selected.id}:${selected.decisionDraft?.revisionNumber ?? "new"}`}
         method="post"
-        onSubmit={() => setDecisionId(null)}
         className="stack"
       >
+        {decisionError ? (
+          <div
+            ref={decisionErrorRef}
+            tabIndex={-1}
+            className="validation-item error"
+            role="alert"
+          >
+            {decisionError}
+          </div>
+        ) : null}
         <input type="hidden" name="intent" value="decide" />
         <input type="hidden" name="submissionId" value={selected.id} />
+        <input
+          type="hidden"
+          name="decisionEmailVersionId"
+          value={loaderData.decisionEmail?.versionId ?? ""}
+        />
         {selected.decisionDraft ? (
           <div className="validation-item info" role="status">
             <strong>
@@ -733,7 +860,20 @@ export function DecisionDialog() {
             className="textarea"
             name="rationale"
             defaultValue={selected.decisionDraft?.rationale ?? ""}
+            aria-describedby="decision-rationale-audience"
           />
+          <span className="help" id="decision-rationale-audience">
+            {loaderData.decisionEmail?.includesRationale ? (
+              <>
+                <strong>Sent to the applicant.</strong> The decision email
+                includes the rationale.
+              </>
+            ) : loaderData.decisionEmail ? (
+              "Internal. The decision email does not include the rationale."
+            ) : (
+              "Internal unless the decision email you publish includes {{decision.rationale}}."
+            )}
+          </span>
         </label>
         <label className="speaker-confirm">
           <input
@@ -751,10 +891,13 @@ export function DecisionDialog() {
         <span className="help">
           Only applicant-facing feedback from submitted or locked reviews in the
           latest completed round is included. Private reviewer notes are never
-          sent. Decision templates can render the rationale and selected
-          feedback with {"{{decision.rationale}}"} and {"{{decision.feedback}}"}
-          .
+          sent.
+          {loaderData.decisionEmail &&
+          !loaderData.decisionEmail.includesFeedback
+            ? " The decision email does not include reviewer feedback, so nothing is added."
+            : null}
         </span>
+        <DecisionEmailSummary decision={decision} />
         <label className="label">
           Acceptance session duration (minutes)
           <input

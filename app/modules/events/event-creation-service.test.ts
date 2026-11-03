@@ -9,6 +9,14 @@ import {
   type PreparedAirtableRepositoryConnection,
 } from "~/modules/airtable/airtable-room-repository.server";
 import { AIRTABLE_SCHEMA_VERSION } from "~/modules/airtable/airtable-schema";
+import { CommunicationStateError } from "~/modules/communications/communication-service-shared";
+import { CommunicationTemplateService } from "~/modules/communications/communication-template-service.server";
+import { loadActiveDecisionTemplate } from "~/modules/communications/decision-notification-readiness.server";
+import { STARTER_TEMPLATES } from "~/modules/communications/starter-templates";
+import {
+  createMissingStarterTemplates,
+  missingStarterCategories,
+} from "~/modules/communications/starter-templates.server";
 import { parseEventFilePolicy } from "~/modules/files/file-policy";
 import type { Viewer } from "~/platform/auth/authorize.server";
 import { ensureDemoData } from "~/platform/demo/seed.server";
@@ -192,6 +200,232 @@ describe("blank event creation", () => {
         .bind(result.eventId)
         .first(),
     ).toEqual({ action: "event.created" });
+  });
+
+  it("starts an event with published starter emails using the organisation postal address", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    const address = "100 Programme Way, Toronto, ON M5V 2W6";
+    await testEnv.DB.prepare(
+      "UPDATE organisations SET communication_physical_address = ? WHERE id = ?",
+    )
+      .bind(address, viewer.organisationId)
+      .run();
+    const service = new EventCreationService(testEnv);
+    expect(await service.prepare(viewer)).toMatchObject({
+      starterEmailsAvailable: true,
+    });
+    const token = crypto.randomUUID().slice(0, 8);
+    const input = {
+      creationIntentId: crypto.randomUUID(),
+      name: `Starter event ${token}`,
+      slug: `starter-event-${token}`,
+      timezone: "UTC",
+      startDate: "2027-09-10",
+      endDate: "2027-09-12",
+      repositoryProvider: "d1" as const,
+      personalAccessToken: "",
+      baseId: "",
+      tableName: "Program Cue Rooms",
+    };
+    const result = await service.create(viewer, input);
+    expect(result.starterEmails).toBe(true);
+
+    const versions = await testEnv.DB.prepare(
+      `SELECT template.status AS templateStatus, version.category,
+              version.version_number AS versionNumber, version.status,
+              version.subject_template AS subject, version.content_json AS contentJson,
+              version.published_at IS NOT NULL AS published
+         FROM communication_template_versions version
+         JOIN communication_templates template
+           ON template.id = version.template_id AND template.event_id = version.event_id
+        WHERE version.event_id = ?
+        ORDER BY version.category DESC`,
+    )
+      .bind(result.eventId)
+      .all<{
+        templateStatus: string;
+        category: string;
+        versionNumber: number;
+        status: string;
+        subject: string;
+        contentJson: string;
+        published: number;
+      }>();
+    expect(
+      versions.results.map(({ contentJson, ...version }) => ({
+        ...version,
+        content: JSON.parse(contentJson),
+      })),
+    ).toEqual(
+      STARTER_TEMPLATES.map((starter) => ({
+        templateStatus: "active",
+        category: starter.category,
+        versionNumber: 1,
+        status: "published",
+        subject: starter.subject,
+        content: { body: starter.body, physicalAddress: address },
+        published: 1,
+      })),
+    );
+    // Decision release sends the starter without further setup.
+    const decision = await loadActiveDecisionTemplate(testEnv, {
+      organisationId: viewer.organisationId,
+      eventId: result.eventId,
+    });
+    expect(decision).toMatchObject({
+      name: "Proposal decision",
+      versionNumber: 1,
+    });
+    expect(
+      await testEnv.DB.prepare(
+        `SELECT COUNT(*) AS audits FROM audit_events
+          WHERE event_id = ? AND action = 'communication.template.starter_published'
+            AND json_extract(metadata_json, '$.operationId') = ?`,
+      )
+        .bind(result.eventId, result.operationId)
+        .first(),
+    ).toEqual({ audits: 2 });
+
+    // A replay reports the same outcome after the organiser edits a starter,
+    // and creates nothing more.
+    await testEnv.DB.prepare(
+      "UPDATE communication_templates SET last_operation_id = 'later-edit' WHERE event_id = ?",
+    )
+      .bind(result.eventId)
+      .run();
+    expect(await service.create(viewer, input)).toEqual(result);
+    expect(
+      await testEnv.DB.prepare(
+        "SELECT COUNT(*) AS templates FROM communication_templates WHERE event_id = ?",
+      )
+        .bind(result.eventId)
+        .first(),
+    ).toEqual({ templates: 2 });
+  });
+
+  it("starts an event without emails when the organisation has no postal address", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    await testEnv.DB.prepare(
+      "UPDATE organisations SET communication_physical_address = NULL WHERE id = ?",
+    )
+      .bind(viewer.organisationId)
+      .run();
+    const service = new EventCreationService(testEnv);
+    expect(await service.prepare(viewer)).toMatchObject({
+      starterEmailsAvailable: false,
+    });
+    const token = crypto.randomUUID().slice(0, 8);
+    const result = await service.create(viewer, {
+      creationIntentId: crypto.randomUUID(),
+      name: `No address event ${token}`,
+      slug: `no-address-event-${token}`,
+      timezone: "UTC",
+      startDate: "2027-09-10",
+      endDate: "2027-09-12",
+      repositoryProvider: "d1",
+      personalAccessToken: "",
+      baseId: "",
+      tableName: "Program Cue Rooms",
+    });
+    expect(result.starterEmails).toBe(false);
+    expect(
+      await testEnv.DB.prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM communication_templates WHERE event_id = ?) AS templates,
+           (SELECT COUNT(*) FROM audit_events
+             WHERE event_id = ? AND action = 'communication.template.starter_published') AS audits`,
+      )
+        .bind(result.eventId, result.eventId)
+        .first(),
+    ).toEqual({ templates: 0, audits: 0 });
+
+    // Adding the address later leaves the event unchanged; Communications
+    // then offers to publish what it is missing.
+    await testEnv.DB.prepare(
+      "UPDATE organisations SET communication_physical_address = ? WHERE id = ?",
+    )
+      .bind("1 Example Street, Sydney NSW 2000", viewer.organisationId)
+      .run();
+    const eventViewer = { ...viewer, eventId: result.eventId };
+    const bothStarters = STARTER_TEMPLATES.map((starter) => starter.category);
+    expect(await missingStarterCategories(testEnv, eventViewer)).toEqual(
+      bothStarters,
+    );
+    const operationId = crypto.randomUUID();
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await expect(
+        createMissingStarterTemplates(testEnv, eventViewer, operationId),
+      ).resolves.toEqual({ created: bothStarters });
+    }
+    await expect(
+      createMissingStarterTemplates(testEnv, eventViewer, crypto.randomUUID()),
+    ).resolves.toEqual({ created: [] });
+    expect(await missingStarterCategories(testEnv, eventViewer)).toEqual([]);
+    const decisionTemplate = await loadActiveDecisionTemplate(
+      testEnv,
+      eventViewer,
+    );
+    expect(JSON.parse(decisionTemplate!.contentJson)).toEqual({
+      body: STARTER_TEMPLATES[1].body,
+      physicalAddress: "1 Example Street, Sydney NSW 2000",
+    });
+    expect(
+      await testEnv.DB.prepare(
+        `SELECT COUNT(*) AS templates FROM communication_templates
+          WHERE event_id = ?`,
+      )
+        .bind(result.eventId)
+        .first(),
+    ).toEqual({ templates: 2 });
+
+    // Retyping the decision template in an unpublished draft leaves its
+    // published version sending decisions, so no starter replaces it.
+    const decisionTemplateRow = await testEnv.DB.prepare(
+      "SELECT template_id AS templateId FROM communication_template_versions WHERE id = ?",
+    )
+      .bind(decisionTemplate!.id)
+      .first<{ templateId: string }>();
+    await new CommunicationTemplateService(testEnv).saveTemplate(eventViewer, {
+      templateId: decisionTemplateRow!.templateId,
+      name: STARTER_TEMPLATES[1].name,
+      category: "ad_hoc",
+      subject: STARTER_TEMPLATES[1].subject,
+      content: {
+        body: STARTER_TEMPLATES[1].body,
+        physicalAddress: "1 Example Street, Sydney NSW 2000",
+      },
+    });
+    expect(await missingStarterCategories(testEnv, eventViewer)).toEqual([]);
+    await expect(
+      createMissingStarterTemplates(testEnv, eventViewer, crypto.randomUUID()),
+    ).resolves.toEqual({ created: [] });
+    expect((await loadActiveDecisionTemplate(testEnv, eventViewer))?.id).toBe(
+      decisionTemplate!.id,
+    );
+
+    // Only a missing category is created, and never without an address.
+    await testEnv.DB.prepare(
+      `DELETE FROM communication_templates
+        WHERE event_id = ? AND category = 'submission_confirmation'`,
+    )
+      .bind(result.eventId)
+      .run();
+    await testEnv.DB.prepare(
+      "UPDATE organisations SET communication_physical_address = NULL WHERE id = ?",
+    )
+      .bind(viewer.organisationId)
+      .run();
+    await expect(
+      createMissingStarterTemplates(testEnv, eventViewer, crypto.randomUUID()),
+    ).rejects.toThrow(CommunicationStateError);
+    await testEnv.DB.prepare(
+      "UPDATE organisations SET communication_physical_address = ? WHERE id = ?",
+    )
+      .bind("1 Example Street, Sydney NSW 2000", viewer.organisationId)
+      .run();
+    await expect(
+      createMissingStarterTemplates(testEnv, eventViewer, crypto.randomUUID()),
+    ).resolves.toEqual({ created: ["submission_confirmation"] });
   });
 
   it("keeps no-sender creation available when email is not configured", async () => {

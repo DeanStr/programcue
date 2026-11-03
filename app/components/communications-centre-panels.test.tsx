@@ -7,7 +7,10 @@ import {
   deliveryActionLabel,
 } from "./communication-draft-preview";
 import { CalendarAdministration } from "./communications-calendar-panels";
-import { TemplatePreview } from "./communications-template-panels";
+import {
+  TemplatePreview,
+  TemplateVersionList,
+} from "./communications-template-panels";
 
 describe("communications presentation", () => {
   it("uses grammatically correct delivery labels", () => {
@@ -86,6 +89,42 @@ describe("communications presentation", () => {
 
     expect(markup).toContain('sandbox=""');
     expect(markup).toContain('referrerPolicy="no-referrer"');
+  });
+
+  it("offers missing starter emails only once the postal address exists", () => {
+    const render = (organisationPhysicalAddress: string) => {
+      const loaderData = {
+        templates: [],
+        missingStarterEmails: ["submission_confirmation", "decision"],
+        starterEmailsKey: "starter-operation",
+        organisationPhysicalAddress,
+      } as unknown as CommunicationsCentreLoaderData;
+      const router = createMemoryRouter(
+        [
+          {
+            path: "/",
+            element: (
+              <TemplateVersionList loaderData={loaderData} selected={null} />
+            ),
+          },
+        ],
+        { initialEntries: ["/"] },
+      );
+      return renderToStaticMarkup(<RouterProvider router={router} />);
+    };
+
+    const withAddress = render("100 Programme Way");
+    expect(withAddress).toContain(
+      "No published submission confirmation or decision email",
+    );
+    expect(withAddress).toContain('value="create-starter-templates"');
+    expect(withAddress).toContain('value="starter-operation"');
+    expect(withAddress).toContain("Create starter emails");
+
+    const withoutAddress = render("");
+    expect(withoutAddress).toContain("Add postal address");
+    expect(withoutAddress).toContain('href="/?view=setup"');
+    expect(withoutAddress).not.toContain("Create starter emails");
   });
 
   it("offers every connected calendar provider owned by a scheduled speaker", () => {

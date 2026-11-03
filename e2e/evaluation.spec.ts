@@ -619,6 +619,21 @@ test("evaluation administration exposes onboarding and consequential previews", 
   await expect(decision).toContainText(
     "Release updates applicant-visible state",
   );
+  // The dialog shows the email release sends, merged for this proposal.
+  // The seeded decision email has its own wording, not the starter's, and
+  // includes the rationale, so the field says the applicant reads it.
+  const email = decision.getByRole("region", { name: "Email sent on release" });
+  await expect(email).toContainText(
+    "SubjectDecision for Designing inclusive attendee journeys",
+  );
+  await expect(email).toContainText(/To\S+@\S+/u);
+  await expect(email).toContainText(/TemplateProposal decision · version \d+/u);
+  await expect(email).not.toContainText("starter wording");
+  await expect(
+    decision.getByRole("textbox", { name: "Rationale" }),
+  ).toHaveAccessibleDescription(
+    "Sent to the applicant. The decision email includes the rationale.",
+  );
   await expect(
     decision.getByRole("button", { name: "Release decision" }),
   ).toBeVisible();
@@ -737,7 +752,49 @@ test("a released decision keeps inspectable recipient delivery evidence after re
     name: /Confirm review-evidence override/u,
   });
   if (await evidenceOverride.isVisible()) await evidenceOverride.check();
+
+  // A newer decision email published while the dialog is open stops the
+  // release. The dialog keeps the entered decision and shows the new email.
+  const editor = await page.context().newPage();
+  await editor.goto("/admin/communications");
+  await editor.locator("body[data-hydrated='true']").waitFor();
+  await editor
+    .getByRole("link", { name: /^Proposal decision Decision · v\d+ Live$/u })
+    .click();
+  await expect(
+    editor.getByRole("heading", { name: "Edit Proposal decision" }),
+  ).toBeVisible();
+  await editor
+    .getByRole("textbox", { name: "Subject", exact: true })
+    .fill("Decision update: {{submission.title}}");
+  await editor
+    .getByRole("button", { name: "Save as new draft version", exact: true })
+    .click();
+  await editor
+    .getByRole("button", { name: "Publish this saved version", exact: true })
+    .click();
+  await expect(
+    editor.getByText(/is now the published sending version/u),
+  ).toBeVisible();
+  await editor.close();
+
   await decision.getByRole("button", { name: "Release decision" }).click();
+  await expect(decision.getByRole("alert")).toContainText(
+    "The decision email changed after this decision was opened",
+  );
+  await expect(decision.locator('select[name="decision"]')).toHaveValue(
+    "rejected",
+  );
+  await expect(decision.getByLabel("Rationale")).toHaveValue(
+    "The programme already covers this material in greater depth.",
+  );
+  await expect(
+    decision.getByRole("region", { name: "Email sent on release" }),
+  ).toContainText(
+    "SubjectDecision update: Designing inclusive attendee journeys",
+  );
+  await decision.getByRole("button", { name: "Release decision" }).click();
+  await expect(decision).toBeHidden();
   await expect(
     page.getByRole("status").filter({ hasText: /notification queued/i }),
   ).toBeVisible();

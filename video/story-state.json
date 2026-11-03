@@ -28,7 +28,7 @@
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/communications-desktop-chromium-linux.png",
-      "sha256": "b71e3c20eb9011b7f4e2a17e25413a211375c0f52add5d860902267882607ad7"
+      "sha256": "8f5bfd4f5de4c5eda956ff46865c84b6f90f6dc77da089042a2e6bcf469dbd2c"
     },
     {
       "path": "e2e/visual.spec.ts-snapshots/communications-preview-laptop-chromium-linux.png",

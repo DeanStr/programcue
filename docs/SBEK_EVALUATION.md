@@ -192,7 +192,12 @@ welcome`, `Submission confirmation` and `Proposal decision`), and dated
 showcase tasks. The participant-action version is compatible with draft
 applicants and pending participants; task reminders snapshot
 `{{task.dueDate}}` in the event timezone and fail if a selected task has no due
-date. The canonical event also carries a venue address and HTTPS map link. The
+date. The fixture organisation carries the same postal address as those
+templates' footers, so an event the evaluator creates starts with published
+`Submission confirmation` and `Proposal decision` templates in starter
+wording; it still needs a verified sender before either can send. The seed
+fills that address on reset only when it is missing. The canonical event also
+carries a venue address and HTTPS map link. The
 `Active speakers` audience is driven by event workflow state and
 includes prospects, invited speakers and confirmed speakers while excluding
 declined or withdrawn people.

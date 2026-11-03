@@ -1,11 +1,199 @@
 # Verified implementation status
 
-Evidence recorded through **31 October 2026**, including phone Applications filters and the form builder palette, review fixes for typed fields and live filters, typed application answer fields, live list filters and the planner chrome pass, the shared workbench title follow-up, the navigation and page header pass, the local interface consistency pass and its visual review follow-up, the interface refinement and visual evaluation pass, assistant request presentation and partial task coverage, readiness source links, the sponsor/deliverables release, application/scanner releases, a controlled live invited-speaker journey and autonomous backup acceptance.
+Evidence recorded through **3 November 2026**, including the starter email review fixes, the dependency advisory overrides, the Better Auth and zod security upgrade, starter emails for new events, phone Applications filters and the form builder palette, review fixes for typed fields and live filters, typed application answer fields, live list filters and the planner chrome pass, the shared workbench title follow-up, the navigation and page header pass, the local interface consistency pass and its visual review follow-up, the interface refinement and visual evaluation pass, assistant request presentation and partial task coverage, readiness source links, the sponsor/deliverables release, application/scanner releases, a controlled live invited-speaker journey and autonomous backup acceptance.
 This is the current capability,
 requirements and acceptance index; consolidation does not constitute a new
 verification or deployment. The [product specification](../sessionboard-replacement-full-scope-implementation-specification-with-competition-ux.md)
 owns intended scope, [DECISIONS.md](DECISIONS.md) owns engineering decisions, and
 Git history retains earlier committed work logs.
+
+## Starter email review fixes — 3 November 2026
+
+**Local production slice; additive optional API field; no schema or
+migration change; not deployed.** See *Starter emails for new events* and
+*Visual baselines and the delivery health window* in
+[DECISIONS.md](DECISIONS.md).
+
+- The starter decision email no longer includes `{{decision.rationale}}`,
+  which organisers use for internal reasoning. The Rationale field says
+  whether the published decision email includes it.
+- The decision dialog shows the email release sends, beside the fields that
+  feed it: recipient, merged subject and template version. Release refuses,
+  and records nothing, if the published decision email changed after the
+  dialog opened. The decision API accepts the same optional
+  `decisionEmailVersionId`.
+- Communications offers **Create starter emails** for an event missing a
+  published confirmation or decision email, or a link to Delivery settings
+  while the organisation has no postal address. Event creation and this
+  action share the insert statements. Both the offer and the insert match
+  on the published version's category, as release does, so retyping a
+  published decision template in a draft no longer hides it and lets a
+  starter replace it. The offer stacks its action under the explanation,
+  which no longer wraps in the narrow template column at 1440px.
+- The decision dialog stays open until the server accepts the decision. A
+  refused save or release shows its reason in the dialog, keeps the outcome
+  and rationale, and reloads the page data so the email summary shows what
+  changed.
+- The Communications subject and body fields grow with their content.
+- `submissionLimit` is optional again in the OpenAPI form save request; the
+  schema now defaults it to null instead of relying on preprocessing.
+- The Communications visual baseline uses the lifetime delivery period: the
+  90-day default made it fail from 3 November as the fixed-date demo
+  delivery aged out.
+- Not done: a full merged body preview in the decision dialog. Browsers
+  without CSS `field-sizing` keep fixed-height fields that scroll.
+
+Tests: Worker tests cover the stale, missing and matching decision email
+versions at release (nothing recorded on refusal; the matching version is
+the one stored), and the Communications action creating both starters after
+the address is added, replaying, creating nothing when both exist or when
+the decision template is retyped in an unpublished draft, refusing without
+an address and creating only a missing category. Unit tests pin the
+starter decision email without the rationale; a component test covers both
+offer states. Browser tests check the dialog's recipient, subject, version
+and rationale warning, and that the starter subject and body fit their
+fields on a phone. The release browser test publishes a newer decision
+email while the dialog is open, then checks the refusal appears in the
+dialog with the outcome and rationale kept and the new subject shown, and
+that the next release succeeds.
+
+Validation (3 November): `npm run check` passed end to end: core lanes and
+OpenAPI validation, 2,758 unit and Worker tests, the dependency policy, the
+five-shard browser gate (285 passed, 2 skipped), the evaluation gate (12)
+and the marketing-site gate (16). A manual walkthrough on a separate local
+server covered the reviewer's scenarios: an organisation without an address
+creating an event, adding the address, then creating starters; publishing
+version 2 while a decision dialog was open, with release refused and
+nothing recorded; and the dialog and fields at desktop, laptop and phone
+widths.
+
+A second review then found the retyped-draft and discarded-input faults
+and the cramped offer, fixed above. Validation for those fixes (3
+November), after the full check above: the affected Worker and component
+tests (74), `npm run typecheck:generated`, and the evaluation and
+communication template browser specs (12 passed). The retyped-draft test
+fails without its fix, and the release browser test fails with the old
+close-on-submit. A manual walkthrough on a separate local server covered
+the offer at 1440px and on a phone in both address states, the retyped
+draft leaving one published decision email and no offer, and a refused
+release on a phone keeping the outcome and rationale, focusing the reason
+and showing version 2, then releasing it. `npm run check` then passed end
+to end again with these fixes: 2,758 unit and Worker tests, the five-shard
+browser gate (285 passed, 2 skipped), the evaluation gate (12) and the
+marketing-site gate (16).
+
+## Dependency advisory overrides — 2 November 2026
+
+**Local dependency change with one API reference style fix; no schema or
+migration change; not deployed.** See *Dependency advisory overrides* in
+[DECISIONS.md](DECISIONS.md).
+
+- `npm run security:dependencies` now passes: no high or critical advisory
+  across all dependencies. Three moderate advisories remain (glob and
+  minimatch, used only by the react-email CLI).
+- Remotion and the Workers test pool keep their versions; npm overrides give
+  them the root zod 4.6.7, and Miniflare gets undici 7.30.1. Their latest
+  releases still pin the vulnerable versions.
+- In-range fixes also moved the Scalar API reference to 0.9.87 and
+  react-email to 6.11.6 (html-to-text 10 for email plain text). A sample
+  email's plain text is unchanged. The new Scalar failed axe contrast on JSON
+  literals in `/api/docs`; its green now uses Program Cue's success text
+  colour.
+
+Validation (2 November): `npm run check` passed end to end over this change,
+the Better Auth and zod upgrade and starter emails together. That covers the
+core lanes and OpenAPI validation, 2,755 unit and Worker tests, the
+dependency policy, the five-shard browser gate (285 passed, 2 skipped), the
+production-shaped evaluation gate (12) and the marketing-site gate (16). The
+two earlier full runs failed on the stale OpenAPI documents and then on the
+Scalar contrast; both are fixed above. Remotion compositions bundle and
+Studio serves; no film render was run.
+
+## Better Auth and zod security upgrade — 1 November 2026
+
+**Local dependency and authentication change; no schema or migration change;
+not deployed.** See *Better Auth 1.7 and zod security upgrade* in
+[DECISIONS.md](DECISIONS.md).
+
+- Better Auth 1.6.26 → 1.7.14 closes a critical advisory (OAuth state
+  redeemable as a magic-link token, GHSA-965c-763c-88jm) that applied to
+  Program Cue's magic-link plus OAuth configuration. zod 4.4.3 → 4.6.7 closes
+  a high memory-exhaustion advisory in request validation.
+- Better Auth 1.7.7 namespaced stored OAuth state. The Microsoft form-post
+  relay and the trusted-provider rule read it directly and silently stopped
+  matching; both now use `oauthStateVerificationIdentifier`. Three auth-flow
+  tests caught this; the type checker did not.
+- Microsoft accounts are now keyed on `oid`. Accounts linked before the
+  upgrade (stored under `sub`) go through the existing email-proof re-link
+  once. The auth-flow fixtures now carry an `oid` claim, as real tokens do.
+- zod 4.6 changed the generated JSON Schema, so `docs/openapi.yaml` and
+  `public/openapi.json` were regenerated. Session edit `trackId` is now
+  documented as required, as the API already enforced; form save
+  `submissionLimit` is documented as required, but the API still accepts
+  omission.
+- The upgrade left no critical advisory but 8 high: Remotion and the Workers
+  test pool, plus body-parser and undici, neither of which is in the deployed
+  Worker bundle. The dependency advisory overrides entry above clears them.
+
+Validation (1 November): `npm run typecheck`; `npm run check:focused`, which
+ran every test file because the lockfile changed (2,755 tests in 311 files);
+`npm run test:config` (98). On a fresh build the full browser gate passed
+all five shards (285 tests) after one fix: a palette test clicked More types
+before hydration under shard load and now waits for it. The production-shaped
+evaluation gate then found the form canvas at 83px at 1024×601 (see the
+palette entry below); with the 380px floor it passed (12), as did the
+submissions and full visual specs without baseline updates (47) and the
+marketing-site gate (16). The complete `npm run check` pass on 2 November
+(see the dependency advisory overrides entry) includes the 380px floor.
+
+## Starter emails for new events — 31 October 2026
+
+**Local production slice; no API, schema or migration change; not
+deployed.** See *Starter emails for new events* in
+[DECISIONS.md](DECISIONS.md).
+
+- Creating an event publishes a Submission confirmation and a Proposal
+  decision template (version 1, starter wording) in the same D1 batch, with a
+  `communication.template.starter_published` audit row each. The footer is
+  the organisation postal address, read inside the insert; an organisation
+  without one gets no starters and the new-event page says so. The creation
+  result reports `starterEmails`, including on replay, where it is read from
+  the append-only audit rows.
+- A new event with a verified sender can therefore confirm applications and
+  release decisions without authoring templates first. Sending still needs a
+  configured provider and verified sender; nothing is simulated.
+- Communications marks versions whose subject and body still equal the
+  starter text as "Starter wording". The decision dialog's effect preview
+  now names the template and version a release sends, warns while it is
+  starter wording, and says release stops when none is published. Before,
+  the dialog did not name the email at all. The decision readiness check and
+  the dialog share one template query.
+- The Command Centre's Verify communications step needs a verified sender
+  and a published confirmation and decision email.
+- The demo seed fills the demo organisation's postal address only when it is
+  missing, so events created during evaluation get starters after a reset.
+  The SBEK runbook and the set-up and communications guides describe the
+  behaviour.
+- Not done: starter tasks or an opt-in onboarding plan; a rendered preview
+  of the decision email inside the dialog.
+
+Tests: starter wording passes the template save schema, the unresolved-token
+check, the audience compatibility check and merge rendering for every
+outcome. Worker tests cover creation with and without an organisation
+address (template rows, published content and footer, audit rows, the
+decision readiness query finding the starter, and an idempotent replay
+after an edit) and the readiness step. Browser tests create an event and
+find both templates marked Starter wording, and check that the decision
+dialog names the seeded decision email without the starter warning.
+
+Validation (31 October): `npm run typecheck`, `npm run check:focused` (575
+tests in 53 files), `npm run openapi:check` and `npm run design-system:check`
+pass. On a fresh build, eleven Chromium specs covering event creation,
+communications, evaluation, accessibility and adjacent flows passed (77
+tests), as did the full visual spec without updates (32, no baseline
+changes), mobile WebKit `ux-fixes` (3) and the marketing-site suite (16).
+`npm run check:core` and the full `npm run check` were not run; a deployed
+SBEK run has not been repeated.
 
 ## Phone Applications filters and form builder palette — 31 October 2026
 
@@ -31,7 +219,12 @@ open.
   1280×720 it was 99px taller than its pane, which hid the palette under the
   history strip behind a second scroll. With the stage pinned, the palette is
   fully visible and the pane does not scroll at 1280×720, 1366×768, 1440×900
-  and 900×1000. Visible canvas: 352px at 1280×720, 400px at 1366×768.
+  and 900×1000. Visible canvas: 352px at 1280×720, 400px at 1366×768. On
+  1 November a 380px floor was restored there: with none, the evaluation
+  gate found the canvas at 83px at 1024×601 with the evaluation bar shown.
+  With it, that size keeps 237px of form and the pane scrolls 76px; the
+  sizes above are unchanged, and 1024×768 and 1100×720 also show the whole
+  palette without a pane scroll.
 - On phones the palette still sits below the first screen inside the canvas
   pane's scroll. That predates this change: the committed baseline showed
   only the "Add a field" label, and with a one-row palette that label no

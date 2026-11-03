@@ -3154,7 +3154,176 @@ evidence.
   82px row instead of three rows (162px) at 1280 and 1366px.
 - The canvas keeps its 560px minimum height only in the stacked layouts below
   1001px. Beside the outline and dock, the pane already has the stage's
-  height. At 1280×720 the floor made the canvas 99px taller than its pane, so
-  the palette sat under the history strip behind a second scroll. With the
-  stage pinned, the palette is now fully visible at 1280×720, 1366×768,
-  1440×900 and 900×1000.
+  height. At 1280×720 the 560px floor made the canvas 99px taller than its
+  pane, so the palette sat under the history strip behind a second scroll.
+  With the stage pinned, the palette is now fully visible at 1280×720,
+  1366×768, 1440×900 and 900×1000. A 380px floor remains beside the
+  outline and dock: with no floor, the form canvas shrank to 83px at
+  1024×601 with the evaluation bar showing (1 November). 380px keeps about
+  200px of form above the palette and keyboard note, which wrap to 162px at
+  1024px wide; at 1024×601 the pane then scrolls 76px. A content-sized
+  floor (`min-height: min-content`) was tried and rejected: a scroll
+  container's intrinsic height is its whole content, so it sized the canvas
+  to the full form.
+
+## Starter emails for new events — 31 October 2026
+
+- Creating an event also publishes a **Submission confirmation** and a
+  **Proposal decision** email template in starter wording, in the same D1
+  batch as the event and with their own audit rows
+  (`communication.template.starter_published`). Both are ordinary active
+  templates with a published version 1: the organiser edits, versions and
+  publishes them like any other. Without them a new event cannot confirm an
+  application or release a decision. This replaced an evaluation blocker:
+  fresh events had no decision template, and the evaluator once retired the
+  confirmation template while trying to make one.
+- This is setup data, not a fallback. The templates are real, visible,
+  versioned records created at a known moment. Nothing sends wording that is
+  not stored on the event, and sending still needs a configured provider and
+  a verified sender. Built-in code wording used whenever an event has no
+  template (Trackstage's approach) was rejected for that reason.
+- One decision template covers every outcome, as before: the starter says
+  "your proposal has been {{decision.outcome}}" and includes the reviewer
+  feedback field. No separate accept, decline or waitlist templates were
+  added. It leaves out `{{decision.rationale}}`: the decision dialog labelled
+  that field only "Rationale" and Results shows it as the decision's reason,
+  so organisers write internal reasoning there. Release would otherwise have
+  sent it by default. The field now says whether the published decision
+  email includes it, derived from that email's text.
+- The footer address comes from the organisation postal address, read inside
+  the insert. An organisation without one gets no starters, and the
+  new-event page says so; the address is never invented. The copy is a
+  snapshot: a later change to the organisation address does not rewrite
+  existing templates, as with the editor's prefill.
+- Communications offers **Create starter emails** for any event without a
+  published confirmation or decision email, using the same statements as
+  event creation. It covers events created before the address existed,
+  events that predate starters and retired templates, and links to Delivery
+  settings while the address is missing. Each insert skips a category that
+  already has a published email, so it never adds a second one; a retried
+  request returns its original result. An address field in event creation
+  was rejected: the address is an organisation setting that only owners may
+  change.
+- Both the offer and the insert match on the published version's category,
+  as readiness and release do. Saving a draft writes its category onto the
+  template before it is published, so matching on the template let a
+  retyped draft hide the published decision email; a starter then became
+  the newest published decision email and replaced the approved wording.
+  Saving a draft still updates the template's category early; changing that
+  was left out of scope.
+- "Starter wording" is derived from content: a version whose subject and
+  body equal the starter text for its category. The Communications list and
+  editor show it.
+- The decision dialog shows the email a release sends, next to the fields
+  that feed it: recipient address, the subject merged for that proposal and
+  outcome, and the template version, with a warning while it is still
+  starter wording. Fields only known at release, such as reviewer feedback,
+  stay as written. The dialog sends back the version it showed. Release
+  refuses with "The decision email changed…" if a different version is now
+  published, or one was published after the dialog said there was none, and
+  records nothing. API callers may send the same field; omitting it skips
+  the check. A full merged body preview was deferred.
+- The decision dialog stays open until the server accepts the decision.
+  Before, it closed on submit, so every refused save or release discarded
+  the outcome and rationale. A refusal now shows its reason inside the
+  dialog (the modal hides the page notice from assistive technology) and
+  keeps the entered values. Because React Router does not reload loader data
+  after a 4xx action, the dialog reloads it after a refusal: the summary
+  then shows the newly published version, and the next release sends it.
+  Release stays disabled while that reload runs, and reloading no longer
+  resets the chosen outcome.
+- The Communications subject and body fields grow with their content. The
+  one-row subject clipped the starter decision subject on phones.
+- The Command Centre's Verify communications step now needs a verified
+  sender and a published confirmation and decision email.
+- Starter tasks were not added. Travel or reimbursement tasks (OpenRostrum's
+  defaults) assume event policies; an opt-in recommended onboarding plan in
+  Tasks remains a possible follow-up. Event cloning is unchanged: it copies
+  the source event's templates as drafts.
+- The demo seed fills the demo organisation's postal address only when it is
+  missing, using the address its seeded templates already carry, so events
+  created during evaluation start with starters.
+
+## Better Auth 1.7 and zod security upgrade — 1 November 2026
+
+- Better Auth moved from 1.6.26 to 1.7.14 and zod from 4.4.3 to 4.6.7.
+  Better Auth below 1.7.7 let OAuth state be redeemed as a magic-link token
+  to sign in as another user (GHSA-965c-763c-88jm, critical), and had two
+  further high advisories. Program Cue enables both magic links and OAuth
+  providers, so it was exposed. zod below 4.6.6 could exhaust memory while
+  validating oversized constrained collections (GHSA-mrhx-c7xc-m3w5), and
+  request bodies are validated with zod. No 1.6 backport exists.
+- Better Auth 1.7.7 stores OAuth state under the verification identifier
+  `auth-state:<state>`. Program Cue reads that row twice: the Microsoft
+  form-post relay checks the state is unexpired, and the trusted-provider
+  rule reads the link target. Both use one helper,
+  `oauthStateVerificationIdentifier`. The identifier is internal to Better
+  Auth; the auth-flow tests start a real link flow, so a future change fails
+  them rather than silently disabling Microsoft linking. The type checker
+  did not catch this: before the fix both lookups found nothing, which
+  disabled Microsoft linking without any error.
+- Better Auth 1.7 keys Microsoft accounts on the stable `oid` claim instead
+  of `sub`, and rejects ID tokens without `oid`. Accounts linked before the
+  upgrade were stored under `sub` and no longer match. A returning Microsoft
+  user is sent to the existing "confirm with the email link, then link
+  Microsoft" path once; their old account row never matches again and is
+  harmless. The subject was not overridden back to `sub`: it is not a
+  provider option, and reversing an upstream identity decision through
+  internals is riskier than one re-link. The 1.7.0 `issuer` column was
+  removed again in 1.7.3, so no schema migration is needed, and
+  `BETTER_AUTH_URL` is explicit, so the new Host-header origin default does
+  not apply.
+- zod 4.6 emits slightly different JSON Schema, so the OpenAPI documents
+  were regenerated. Fields built with `z.preprocess` are now listed as
+  required. For the session edit `trackId` this corrects the document: the
+  API already rejected a request without it. The form save `submissionLimit`
+  still accepts omission and stores null, so the document is stricter than
+  the API there. Clients that follow the document are unaffected. The new
+  email pattern accepts exactly the same addresses (checked exhaustively up
+  to six-character local parts), and one nullable field uses a type list
+  instead of `anyOf`.
+- Copies of zod 4.4.3 remain only inside Remotion and the Workers test pool,
+  which pin it exactly. The production dependency audit still reports
+  body-parser (through the MCP SDK's Express server) and undici (through the
+  API reference UI). Neither is in the deployed Worker: the production server
+  bundle contains no code from either, only comments that mention undici.
+  The next decision clears them.
+
+## Dependency advisory overrides — 2 November 2026
+
+- The dependency gate stays at high severity across every dependency,
+  tooling included. Limiting it to deployed packages was rejected: tooling
+  runs on developer and CI machines too.
+- The latest Remotion (4.0.539) and Workers test pool (0.23.0) still pin
+  vulnerable zod exactly (4.5.4 and 4.4.3), and their Miniflare still
+  resolved undici below 7.30.1. Upgrading them would not clear the
+  advisories. Instead `overrides` give the pool, Remotion Studio and Studio
+  server the root zod (`$zod`), and Miniflare's existing Undici override
+  rises to `^7.30.1`. Remotion and the pool stay on their current versions,
+  so the pool's exact Wrangler and Miniflare pins still match the root.
+- `npm audit fix`, without `--force`, applied fixes within existing ranges:
+  body-parser 2.4.0, undici 7.30.1, Vitest 4.1.12, the Scalar API reference
+  0.9.87 (its own undici is now 8.x), and react-email 6.11.6, which renders
+  email plain text with html-to-text 10. A sample Program Cue email converts
+  to identical text under html-to-text 9.0.5 and 10.0.1. Scalar 0.9.87
+  colours JSON literals with its light green, which is 3.64:1 on its code
+  background. The API reference's existing contrast override now maps that
+  green to `--state-good-text`, as it already did for blue and orange.
+- Remotion's CLI now warns that zod 4.6.7 is not its required 4.4.3. That
+  check is for `@remotion/zod-types` schema editing in Studio; the film has
+  no composition schema. Compositions bundle and Studio serves. The warning
+  started with the root zod upgrade, not the override.
+- Three moderate advisories remain: glob and minimatch, used only by the
+  react-email CLI. No fixed react-email release exists; npm's only offer is
+  a downgrade to 1.9.5. They sit below the gate and stay visible.
+- Remove each override once its package ships a release with zod 4.6.6 or
+  later and undici 7.30.1 or later.
+
+## Visual baselines and the delivery health window — 3 November 2026
+
+Delivery health defaults to the last 90 days of the real clock, while demo
+deliveries keep fixed dates (4 August 2026) so screenshots stay stable. On
+3 November the seeded delivery left the window and the Communications
+baseline changed. The visual inventory now opens Communications with
+`deliveryPeriod=lifetime`, which does not depend on the date, and the
+baseline and its story-state pin were updated.

@@ -237,6 +237,10 @@ export class EvaluationAdminWorkspaceReader {
                  json_extract(s.submitted_snapshot_json, '$.routing')
                ) AS routingJson,
                s.submitter_email AS submitterEmail,
+               COALESCE(submitter.email, s.submitter_email)
+                 AS decisionRecipientAddress,
+               COALESCE(submitter.display_name, submitter.email, s.submitter_email)
+                 AS decisionRecipientName,
                s.submitted_snapshot_json AS submittedSnapshotJson,
                COALESCE((
                  SELECT json_group_array(json(ordered.speaker))
@@ -260,6 +264,7 @@ export class EvaluationAdminWorkspaceReader {
                AVG(r.weighted_score) AS averageScore
           FROM submissions s
           JOIN events e ON e.id = s.event_id
+          LEFT JOIN people submitter ON submitter.id = s.submitter_person_id
           LEFT JOIN form_versions form_version
             ON form_version.id = s.form_version_id
            AND form_version.event_id = s.event_id
@@ -293,6 +298,8 @@ export class EvaluationAdminWorkspaceReader {
           routedTeamIdsJson: string;
           routingJson: string | null;
           submitterEmail: string | null;
+          decisionRecipientAddress: string | null;
+          decisionRecipientName: string | null;
           submittedSnapshotJson: string | null;
           speakersJson: string;
           unclaimedSpeakerCount: number;

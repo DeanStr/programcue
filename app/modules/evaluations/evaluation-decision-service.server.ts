@@ -475,6 +475,7 @@ export class EvaluationDecisionService {
           decision: parsed.decision,
           rationale: parsed.rationale,
           feedback: notificationFeedback,
+          expectedTemplateVersionId: parsed.decisionEmailVersionId,
           recipientPersonId: submission.notificationPersonId,
           recipientAddress: submission.notificationAddress,
           recipientName: submission.notificationName,

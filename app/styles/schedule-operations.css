@@ -390,6 +390,7 @@ body.light-mode .program-cue-api-reference .scalar-api-reference {
   --scalar-color-2: var(--text-secondary);
   --scalar-color-3: var(--text-tertiary);
   --scalar-color-blue: var(--state-info-text);
+  --scalar-color-green: var(--state-good-text);
   --scalar-color-orange: var(--state-warn-text);
 }
 body.dark-mode .program-cue-api-reference .scalar-api-reference {

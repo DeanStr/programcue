@@ -19,6 +19,9 @@ export async function handleEvaluationAdminDecisionIntent(
       includeReviewerFeedback: values.get("includeReviewerFeedback") === "true",
       release: released,
       confirmedWithoutReview: values.get("confirmedWithoutReview") === "true",
+      decisionEmailVersionId: values.has("decisionEmailVersionId")
+        ? values.get("decisionEmailVersionId") || null
+        : undefined,
       sessionTrackId: values.get("sessionTrackId") || null,
       sessionFormatKey: values.get("sessionFormatKey") || null,
       sessionDurationMinutes: values.get("sessionDurationMinutes") || null,

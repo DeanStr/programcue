@@ -406,7 +406,18 @@ export class ReadinessService {
                SELECT 1 FROM sender_profiles sender
                 WHERE sender.event_id = events.id
                   AND sender.status = 'verified'
-             ) AS communicationsComplete,
+             ) AND (
+               SELECT COUNT(DISTINCT version.category)
+                 FROM communication_template_versions version
+                 JOIN communication_templates template
+                   ON template.id = version.template_id
+                  AND template.event_id = version.event_id
+                WHERE version.event_id = events.id
+                  AND template.status = 'active'
+                  AND version.status = 'published'
+                  AND version.channel = 'email'
+                  AND version.category IN ('submission_confirmation', 'decision')
+             ) = 2 AS communicationsComplete,
              EXISTS (
                SELECT 1 FROM schedule_versions version
                 WHERE version.event_id = events.id
@@ -734,7 +745,7 @@ export class ReadinessService {
         key: "communications",
         label: "Verify communications",
         description:
-          "Verify the sender identity used for participant messages.",
+          "Verify the sender and publish the submission confirmation and decision emails.",
         href: "/admin/communications",
         complete: Boolean(event.communicationsComplete),
       },

@@ -30,6 +30,32 @@ export type DecisionNotificationReadiness = {
   sender: DecisionSenderRow | null;
 };
 
+/** The decision template version a release sends: the newest published
+ *  email version of an active decision template in the event. */
+export function loadActiveDecisionTemplate(
+  env: CloudflareEnvironment,
+  input: { organisationId: string; eventId: string },
+) {
+  return env.DB.prepare(
+    `SELECT version.id, version.name, version.version_number AS versionNumber,
+            version.subject_template AS subjectTemplate,
+            version.content_json AS contentJson
+       FROM communication_template_versions version
+       JOIN communication_templates template
+         ON template.id = version.template_id
+        AND template.event_id = version.event_id
+       JOIN events event
+         ON event.id = template.event_id AND event.organisation_id = ?
+      WHERE template.event_id = ? AND template.status = 'active'
+        AND version.status = 'published' AND version.channel = 'email'
+        AND version.category = 'decision'
+      ORDER BY version.published_at DESC, version.version_number DESC
+      LIMIT 1`,
+  )
+    .bind(input.organisationId, input.eventId)
+    .first<DecisionTemplateRow>();
+}
+
 export async function inspectDecisionNotificationReadiness(
   env: CloudflareEnvironment,
   input: {
@@ -49,24 +75,7 @@ export async function inspectDecisionNotificationReadiness(
         : "Email provider configuration is invalid.";
   }
 
-  const templatePromise = env.DB.prepare(
-    `SELECT version.id, version.name, version.version_number AS versionNumber,
-            version.subject_template AS subjectTemplate,
-            version.content_json AS contentJson
-       FROM communication_template_versions version
-       JOIN communication_templates template
-         ON template.id = version.template_id
-        AND template.event_id = version.event_id
-       JOIN events event
-         ON event.id = template.event_id AND event.organisation_id = ?
-      WHERE template.event_id = ? AND template.status = 'active'
-        AND version.status = 'published' AND version.channel = 'email'
-        AND version.category = 'decision'
-      ORDER BY version.published_at DESC, version.version_number DESC
-      LIMIT 1`,
-  )
-    .bind(input.organisationId, input.eventId)
-    .first<DecisionTemplateRow>();
+  const templatePromise = loadActiveDecisionTemplate(env, input);
   const senderPromise = provider
     ? env.DB.prepare(
         `SELECT sender.id, sender.from_name AS fromName,

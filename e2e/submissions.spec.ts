@@ -67,6 +67,17 @@ async function dragWithPointer(page: Page, source: Locator, target: Locator) {
   await page.mouse.up();
 }
 
+/** The palette shows the common types; the rest open below them. A click
+ *  before hydration does nothing, so wait for it and confirm the toggle. */
+async function showAllFieldTypes(page: Page) {
+  await page.locator("body[data-hydrated='true']").waitFor();
+  const editor = page.getByLabel("Visual call-for-speakers form editor");
+  await editor.getByRole("button", { name: "More types" }).click();
+  await expect(
+    editor.getByRole("button", { name: "Fewer types" }),
+  ).toHaveAttribute("aria-expanded", "true");
+}
+
 async function setStableFieldId(page: Page, fieldId: string) {
   const advancedIdentity = page
     .locator("details")
@@ -134,7 +145,7 @@ test.describe
       const formEditor = page.getByRole("region", {
         name: "Visual call-for-speakers form editor",
       });
-      await formEditor.getByRole("button", { name: "More types" }).click();
+      await showAllFieldTypes(page);
       await formEditor.getByRole("button", { name: "Add URL" }).click();
       await setStableFieldId(page, `takeaway_url_${unique}`);
       await page
@@ -236,12 +247,10 @@ test.describe
       await expect(
         editor.getByRole("button", { name: "Add Video upload or URL" }),
       ).toHaveCount(0);
-      const moreTypes = editor.getByRole("button", { name: "More types" });
-      await expect(moreTypes).toHaveAttribute("aria-expanded", "false");
-      await moreTypes.click();
       await expect(
-        editor.getByRole("button", { name: "Fewer types" }),
-      ).toHaveAttribute("aria-expanded", "true");
+        editor.getByRole("button", { name: "More types" }),
+      ).toHaveAttribute("aria-expanded", "false");
+      await showAllFieldTypes(page);
       await editor
         .getByRole("button", { name: "Add Video upload or URL" })
         .click();
@@ -375,7 +384,7 @@ test.describe
       const settings = page.locator("#form-builder-field-settings");
       await expect(settings).toBeVisible();
 
-      await editor.getByRole("button", { name: "More types" }).click();
+      await showAllFieldTypes(page);
       await dragWithPointer(
         page,
         editor.getByRole("button", { name: "Add URL" }),
@@ -391,7 +400,7 @@ test.describe
       const editor = page.getByLabel("Visual call-for-speakers form editor");
       await expect(editor).toBeVisible();
       const labelInput = page.getByLabel("Label", { exact: true });
-      await editor.getByRole("button", { name: "More types" }).click();
+      await showAllFieldTypes(page);
       for (const [type, label] of [
         ["Checkbox", "I agree to the code of conduct"],
         ["Number", "Expected audience"],
@@ -1202,7 +1211,7 @@ test.describe
       const unique = Date.now();
       await page.goto("/admin/submissions/form");
       const editor = page.getByLabel("Visual call-for-speakers form editor");
-      await editor.getByRole("button", { name: "More types" }).click();
+      await showAllFieldTypes(page);
       await editor.getByRole("button", { name: "Add Checkbox" }).click();
       await setStableFieldId(page, `speaker_dinner_${unique}`);
       await page

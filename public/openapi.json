@@ -7429,6 +7429,19 @@
             "default": false,
             "type": "boolean"
           },
+          "decisionEmailVersionId": {
+            "description": "The published decision email version the caller reviewed, or null when none was published. When present, release fails if the published version is now different.",
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "sessionTrackId": {
             "default": null,
             "description": "Required for an accepted decision and must identify one of the proposal's submitted tracks.",
@@ -7928,13 +7941,9 @@
               },
               "passwordHash": {
                 "default": null,
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "string",
+                  "null"
                 ]
               }
             },
@@ -8114,7 +8123,7 @@
           "email": {
             "type": "string",
             "format": "email",
-            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+            "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
           },
           "scope": {
             "type": "string",
@@ -8301,6 +8310,7 @@
           "description",
           "format",
           "durationMinutes",
+          "trackId",
           "visibility",
           "requiredResources"
         ],

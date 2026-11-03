@@ -443,3 +443,27 @@
     border-top: 1px solid var(--border);
   }
 }
+.decision-email-summary {
+  display: grid;
+  gap: var(--space-2);
+}
+.decision-email-summary dl {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+}
+.decision-email-summary dl > div {
+  display: grid;
+  grid-template-columns: 5.5rem minmax(0, 1fr);
+  gap: var(--space-2);
+}
+.decision-email-summary dt {
+  color: var(--text-secondary);
+}
+.decision-email-summary dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.decision-email-summary .help {
+  margin: 0;
+}

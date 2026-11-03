@@ -5,6 +5,7 @@ import { ensureDemoSubmissionForm } from "~/modules/submissions/demo-submissions
 import {
   DEMO_EVENT_ID,
   DEMO_IDENTITIES,
+  DEMO_ORGANISATION_ID,
 } from "~/platform/demo/demo-identities";
 import {
   DEMO_COMMUNICATION_TEMPLATE_TIMESTAMP,
@@ -28,6 +29,10 @@ import {
   ensureDemoProgramme,
 } from "~/platform/demo/seed.server";
 
+/** The demo organisation's mailing address, used in every seeded email
+ *  footer and in the starter emails of events created in the demo. */
+const DEMO_POSTAL_ADDRESS = "255 Front Street West, Toronto, ON";
+
 export async function seedJudgedDemoWorkflow(env: CloudflareEnvironment) {
   const emailProvider = requireEmailProviderConfiguration(env);
   await ensureDemoData(env);
@@ -35,6 +40,11 @@ export async function seedJudgedDemoWorkflow(env: CloudflareEnvironment) {
   await ensureDemoEvaluationData(env);
   await ensureDemoSpeakerData(env);
   await env.DB.batch([
+    // Only fills a missing address; an owner's own address is kept.
+    env.DB.prepare(
+      `UPDATE organisations SET communication_physical_address = ?
+        WHERE id = ? AND communication_physical_address IS NULL`,
+    ).bind(DEMO_POSTAL_ADDRESS, DEMO_ORGANISATION_ID),
     env.DB.prepare(
       `INSERT OR IGNORE INTO sender_profiles (
          id, event_id, name, from_name, from_email, reply_to_email,
@@ -72,7 +82,7 @@ export async function seedJudgedDemoWorkflow(env: CloudflareEnvironment) {
       DEMO_REMINDER_TEMPLATE_ID,
       JSON.stringify({
         body: "Hi {{recipient.firstName}},\n\nPlease complete {{task.title}} for {{event.name}} by {{task.dueDate}}.",
-        physicalAddress: "255 Front Street West, Toronto, ON",
+        physicalAddress: DEMO_POSTAL_ADDRESS,
       }),
       DEMO_IDENTITIES.administrator.personId,
     ),
@@ -105,7 +115,7 @@ export async function seedJudgedDemoWorkflow(env: CloudflareEnvironment) {
       DEMO_PARTICIPANT_REMINDER_TEMPLATE_ID,
       JSON.stringify({
         body: "Hi {{recipient.firstName}},\n\nYou have an action waiting for you in {{event.name}}. Please return to your participant workspace to complete it.",
-        physicalAddress: "255 Front Street West, Toronto, ON",
+        physicalAddress: DEMO_POSTAL_ADDRESS,
       }),
       DEMO_IDENTITIES.administrator.personId,
     ),
@@ -138,7 +148,7 @@ export async function seedJudgedDemoWorkflow(env: CloudflareEnvironment) {
       DEMO_REVIEWER_REMINDER_TEMPLATE_ID,
       JSON.stringify({
         body: "Hi {{recipient.firstName}},\n\nYou have outstanding review assignments for {{event.name}}. Please return to your reviewer workspace to complete them.",
-        physicalAddress: "255 Front Street West, Toronto, ON",
+        physicalAddress: DEMO_POSTAL_ADDRESS,
       }),
       DEMO_IDENTITIES.administrator.personId,
     ),
@@ -170,7 +180,7 @@ export async function seedJudgedDemoWorkflow(env: CloudflareEnvironment) {
       DEMO_SPEAKER_WELCOME_TEMPLATE_ID,
       JSON.stringify({
         body: "Hi {{recipient.firstName}},\n\nWelcome to {{event.name}}. Your speaker workspace is ready.",
-        physicalAddress: "255 Front Street West, Toronto, ON",
+        physicalAddress: DEMO_POSTAL_ADDRESS,
       }),
       DEMO_IDENTITIES.administrator.personId,
     ),
@@ -203,7 +213,7 @@ export async function seedJudgedDemoWorkflow(env: CloudflareEnvironment) {
       DEMO_SUBMISSION_CONFIRMATION_TEMPLATE_ID,
       JSON.stringify({
         body: "Hi {{recipient.firstName}},\n\nWe received {{submission.title}} for {{event.name}}. You can return to your application workspace at any time to review its status.",
-        physicalAddress: "255 Front Street West, Toronto, ON",
+        physicalAddress: DEMO_POSTAL_ADDRESS,
       }),
       DEMO_IDENTITIES.administrator.personId,
     ),
@@ -235,7 +245,7 @@ export async function seedJudgedDemoWorkflow(env: CloudflareEnvironment) {
       DEMO_DECISION_TEMPLATE_ID,
       JSON.stringify({
         body: "Hi {{recipient.firstName}},\n\nThe decision for {{submission.title}} is {{decision.outcome}}.\n\n{{decision.rationale}}\n\n{{decision.feedback}}",
-        physicalAddress: "255 Front Street West, Toronto, ON",
+        physicalAddress: DEMO_POSTAL_ADDRESS,
       }),
       DEMO_IDENTITIES.administrator.personId,
     ),

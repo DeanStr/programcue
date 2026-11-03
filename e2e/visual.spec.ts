@@ -26,7 +26,12 @@ const SURFACES: readonly Surface[] = [
     path: "/review/workbench",
     role: "evaluator",
   },
-  { name: "communications", path: "/admin/communications" },
+  {
+    name: "communications",
+    // Delivery health defaults to the last 90 days of the real clock, while
+    // the seeded deliveries keep fixed dates; the lifetime view stays stable.
+    path: "/admin/communications?deliveryPeriod=lifetime",
+  },
   {
     name: "public-programme",
     path: "/public/programme/future-of-events-2027",

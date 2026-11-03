@@ -388,6 +388,16 @@ export const decisionBaseSchema = z.object({
   includeReviewerFeedback: z.boolean().default(false),
   release: z.boolean().default(false),
   confirmedWithoutReview: z.boolean().default(false),
+  decisionEmailVersionId: z
+    .string()
+    .trim()
+    .min(1)
+    .max(200)
+    .nullable()
+    .optional()
+    .describe(
+      "The published decision email version the caller reviewed, or null when none was published. When present, release fails if the published version is now different.",
+    ),
   sessionTrackId: z
     .string()
     .trim()

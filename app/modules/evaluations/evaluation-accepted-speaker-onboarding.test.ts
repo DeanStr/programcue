@@ -1763,6 +1763,52 @@ describe("evaluation vertical slice", () => {
       ).resolves.toEqual({ status: "submitted", decisionCount: 0 });
     });
 
+    it("refuses release before mutation when the decision email changed after it was reviewed", async () => {
+      await resetEvaluationFixture();
+      const published = await env.DB.prepare(
+        `SELECT id, name, version_number AS versionNumber
+           FROM communication_template_versions
+          WHERE event_id = ? AND category = 'decision' AND status = 'published'`,
+      )
+        .bind(admin.eventId)
+        .first<{ id: string; name: string; versionNumber: number }>();
+      const service = new EvaluationService(evaluationEnvironment());
+      const release = (decisionEmailVersionId: string | null) =>
+        service.decide(admin, {
+          submissionId: "eval-test-submission",
+          decision: "rejected",
+          rationale: "Internal reasoning.",
+          release: true,
+          confirmedWithoutReview: true,
+          decisionEmailVersionId,
+        });
+
+      for (const reviewed of ["an-earlier-version", null]) {
+        await expect(release(reviewed)).rejects.toThrow(
+          `The decision email changed after this decision was opened: “${published!.name}” version ${published!.versionNumber} is now published.`,
+        );
+      }
+      await expect(
+        env.DB.prepare(
+          `SELECT status,
+                  (SELECT COUNT(*) FROM submission_decisions decision
+                    WHERE decision.submission_id = submissions.id) AS decisionCount
+             FROM submissions WHERE id = 'eval-test-submission'`,
+        ).first(),
+      ).resolves.toEqual({ status: "submitted", decisionCount: 0 });
+
+      await release(published!.id);
+      await expect(
+        env.DB.prepare(
+          `SELECT template_version_id AS templateVersionId
+             FROM communications WHERE event_id = ?
+              AND json_extract(audience_json, '$.type') = 'decision'`,
+        )
+          .bind(admin.eventId)
+          .first(),
+      ).resolves.toEqual({ templateVersionId: published!.id });
+    });
+
     it("refuses release before mutation when the decision sender is unavailable", async () => {
       await resetEvaluationFixture();
       await env.DB.prepare(

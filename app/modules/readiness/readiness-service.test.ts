@@ -24,6 +24,59 @@ beforeEach(async () => {
 });
 
 describe("D1-backed command centre", () => {
+  it("completes communications only with a verified sender and both published emails", async () => {
+    const testEnv = env as unknown as CloudflareEnvironment;
+    const communicationsStep = async () =>
+      (
+        await new ReadinessService(testEnv).getCommandCentre(viewer)
+      ).setupGuide.find((step) => step.key === "communications");
+    const publish = (category: "submission_confirmation" | "decision") => [
+      testEnv.DB.prepare(
+        `INSERT INTO communication_templates (id, event_id, name, category, status)
+         VALUES (?, ?, ?, ?, 'active')`,
+      ).bind(
+        `template-readiness-${category}`,
+        viewer.eventId,
+        category,
+        category,
+      ),
+      testEnv.DB.prepare(
+        `INSERT INTO communication_template_versions (
+           id, event_id, template_id, version_number, name, category, channel,
+           subject_template, content_json, status, published_at
+         ) VALUES (?, ?, ?, 1, ?, ?, 'email', 'Subject', ?, 'published', unixepoch())`,
+      ).bind(
+        `version-readiness-${category}`,
+        viewer.eventId,
+        `template-readiness-${category}`,
+        category,
+        category,
+        JSON.stringify({ body: "Body", physicalAddress: "1 Example Street" }),
+      ),
+    ];
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        "UPDATE sender_profiles SET status = 'disabled' WHERE event_id = ?",
+      ).bind(viewer.eventId),
+      testEnv.DB.prepare(
+        "UPDATE communication_templates SET status = 'archived' WHERE event_id = ?",
+      ).bind(viewer.eventId),
+      testEnv.DB.prepare(
+        `INSERT INTO sender_profiles (
+           id, event_id, name, from_name, from_email, provider, status
+         ) VALUES ('sender-readiness', ?, 'Readiness', 'Program Cue',
+                   'programme@example.com', 'mailpit', 'verified')`,
+      ).bind(viewer.eventId),
+    ]);
+    expect(await communicationsStep()).toMatchObject({ complete: false });
+
+    await testEnv.DB.batch(publish("submission_confirmation"));
+    expect(await communicationsStep()).toMatchObject({ complete: false });
+
+    await testEnv.DB.batch(publish("decision"));
+    expect(await communicationsStep()).toMatchObject({ complete: true });
+  });
+
   it("derives getting-started completion from authoritative event records", async () => {
     const testEnv = env as unknown as CloudflareEnvironment;
     await testEnv.DB.prepare(

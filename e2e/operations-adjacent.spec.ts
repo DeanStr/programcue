@@ -76,7 +76,7 @@ test("event cloning shows its copy boundary and records a clean event", async ({
   ).toBeVisible();
 });
 
-test("blank event creation keeps templates empty and makes repository authority explicit", async ({
+test("blank event creation publishes starter emails and makes repository authority explicit", async ({
   page,
 }) => {
   const unique = Date.now();
@@ -93,6 +93,13 @@ test("blank event creation keeps templates empty and makes repository authority 
   await waitForInterface(page, "/admin/events/new");
   await expect(page.getByRole("heading", { name: "New event" })).toBeVisible();
   await expect(page.getByText("Empty by design")).toBeVisible();
+  // The demo organisation has a postal address, so emails can be published.
+  await expect(
+    page.getByText(
+      "Published submission confirmation and decision emails in starter wording",
+      { exact: false },
+    ),
+  ).toBeVisible();
   await expect(page.getByLabel("Reuse verified sender")).toHaveValue("");
   await expect(
     page.getByLabel("Reuse verified sender").getByRole("option", {
@@ -122,6 +129,12 @@ test("blank event creation keeps templates empty and makes repository authority 
   await acceptConfirm(page);
   await expect(page.getByText("Event created", { exact: true })).toBeVisible();
   await expect(
+    page.getByText(
+      "Its submission confirmation and decision emails use starter wording",
+      { exact: false },
+    ),
+  ).toBeVisible();
+  await expect(
     page.getByRole("button", { name: "View creation operation" }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Open new event" }).click();
@@ -144,6 +157,39 @@ test("blank event creation keeps templates empty and makes repository authority 
   await expect(
     page.getByRole("link", { name: /Publish an application form/ }),
   ).toHaveAttribute("href", "/admin/submissions/form");
+
+  await waitForInterface(page, "/admin/communications");
+  for (const template of ["Submission confirmation", "Proposal decision"]) {
+    await expect(
+      page.getByRole("link", {
+        name: new RegExp(`^${template}.*v1 · Starter wording.*Live$`, "u"),
+      }),
+    ).toBeVisible();
+  }
+  await expect(page.getByText(/^No published .* email$/u)).toHaveCount(0);
+  await page.getByRole("link", { name: /^Proposal decision/u }).click();
+  // On a phone the starter decision subject and body wrap; both fields grow
+  // to show all of it instead of clipping.
+  await page.setViewportSize({ width: 390, height: 844 });
+  const subject = page.getByRole("textbox", { name: "Subject", exact: true });
+  await expect(subject).toHaveValue(
+    "Decision on {{submission.title}} for {{event.name}}",
+  );
+  for (const field of [
+    subject,
+    page.getByRole("textbox", { name: "Message", exact: true }),
+  ]) {
+    const [scrollHeight, clientHeight, lineHeight] = await field.evaluate(
+      (element) => [
+        element.scrollHeight,
+        element.clientHeight,
+        Number.parseFloat(getComputedStyle(element).lineHeight),
+      ],
+    );
+    expect(scrollHeight).toBeLessThanOrEqual(clientHeight + 1);
+    if (field === subject)
+      expect(clientHeight).toBeGreaterThan(lineHeight * 1.5);
+  }
 });
 
 test("failed Airtable creation stays inaccessible until D1 is explicitly selected", async ({

@@ -5,6 +5,11 @@ import {
 } from "~/modules/ai/ai-provider-settings.server";
 import { AiReviewAssessmentService } from "~/modules/ai/ai-review-assessment.server";
 import { ReviewerAiSuggestionService } from "~/modules/ai/reviewer-ai-suggestion.server";
+import { templateContentSchema } from "~/modules/communications/communication-schema";
+import { decisionEventMergeValues } from "~/modules/communications/decision-notification-intent.server";
+import { loadActiveDecisionTemplate } from "~/modules/communications/decision-notification-readiness.server";
+import { mergeTemplateVariables } from "~/modules/communications/merge-template";
+import { isStarterWording } from "~/modules/communications/starter-templates";
 import { ensureDemoEvaluationData } from "~/modules/evaluations/demo.server";
 import { buildEvaluationAdminResultsModel } from "~/modules/evaluations/evaluation-admin-results-model.server";
 import { EvaluationService } from "~/modules/evaluations/evaluation-service.server";
@@ -26,13 +31,19 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
   const canPrepareReviewerReminders =
     viewer.role === "owner" || viewer.role === "administrator";
   const evaluationService = new EvaluationService(env);
-  const [workspace, event, reviewerReminderTemplateRows, reviewerAiSetting] =
-    await Promise.all([
-      evaluationService.getAdminWorkspace(viewer),
-      new EventService(env).getSetup(viewer),
-      canPrepareReviewerReminders
-        ? env.DB.prepare(
-            `SELECT version.id, version.name, version.version_number AS versionNumber,
+  const [
+    workspace,
+    event,
+    reviewerReminderTemplateRows,
+    reviewerAiSetting,
+    decisionTemplate,
+    decisionEvent,
+  ] = await Promise.all([
+    evaluationService.getAdminWorkspace(viewer),
+    new EventService(env).getSetup(viewer),
+    canPrepareReviewerReminders
+      ? env.DB.prepare(
+          `SELECT version.id, version.name, version.version_number AS versionNumber,
                   version.subject_template AS subject
              FROM communication_template_versions version
              JOIN communication_templates template
@@ -44,17 +55,24 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
               AND version.channel = 'email' AND version.status = 'published'
               AND template.status = 'active'
             ORDER BY template.updated_at DESC, version.version_number DESC`,
-          )
-            .bind(viewer.organisationId, viewer.eventId)
-            .all<{
-              id: string;
-              name: string;
-              versionNumber: number;
-              subject: string;
-            }>()
-        : Promise.resolve({ results: [] }),
-      new ReviewerAiSuggestionService(env).setting(viewer),
-    ]);
+        )
+          .bind(viewer.organisationId, viewer.eventId)
+          .all<{
+            id: string;
+            name: string;
+            versionNumber: number;
+            subject: string;
+          }>()
+      : Promise.resolve({ results: [] }),
+    new ReviewerAiSuggestionService(env).setting(viewer),
+    loadActiveDecisionTemplate(env, viewer),
+    env.DB.prepare(
+      `SELECT name, starts_at AS startsAt, ends_at AS endsAt
+         FROM events WHERE id = ? AND organisation_id = ?`,
+    )
+      .bind(viewer.eventId, viewer.organisationId)
+      .first<{ name: string; startsAt: number; endsAt: number }>(),
+  ]);
   const aiReviewAssessmentsSupported = event.repositoryProvider === "d1";
   const canManageAiAssessments =
     canPrepareReviewerReminders && aiReviewAssessmentsSupported;
@@ -108,7 +126,42 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
     ...resultsModel,
     eventTimezone: event.timezone,
     sessionFormats: event.sessionFormats,
+    decisionEmail: decisionEmailSummary(decisionTemplate, decisionEvent),
     acceptedSpeakerInvitationResendEnabled: String(env.DEMO_MODE) !== "true",
+  };
+}
+
+/** What the release dialog shows about the decision email it will send.
+ *  The version id goes back with release, which refuses a newer version. */
+function decisionEmailSummary(
+  template: Awaited<ReturnType<typeof loadActiveDecisionTemplate>>,
+  event: { name: string; startsAt: number; endsAt: number } | null,
+) {
+  if (!template || !event) return null;
+  const subjectTemplate = template.subjectTemplate ?? "";
+  let body = "";
+  try {
+    const parsed = templateContentSchema.safeParse(
+      JSON.parse(template.contentJson),
+    );
+    if (parsed.success) body = parsed.data.body;
+  } catch {
+    // Release reports the invalid stored template; the summary stays partial.
+  }
+  const variables = mergeTemplateVariables(`${subjectTemplate}\n${body}`);
+  return {
+    versionId: template.id,
+    name: template.name,
+    versionNumber: template.versionNumber,
+    subjectTemplate,
+    eventMergeValues: decisionEventMergeValues(event),
+    includesRationale: variables.includes("decision.rationale"),
+    includesFeedback: variables.includes("decision.feedback"),
+    starterWording: isStarterWording({
+      category: "decision",
+      subject: subjectTemplate,
+      body,
+    }),
   };
 }
 

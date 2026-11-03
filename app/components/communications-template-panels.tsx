@@ -6,10 +6,12 @@ import { Button, ButtonLink } from "~/components/ui/button";
 import { EmptyState } from "~/components/ui/states";
 import { statusPresentation } from "~/components/ui/status-presentation";
 import {
+  fillKnownMergeFields,
   type MergeValues,
   mergeTemplateVariables,
   representativeMergeValues,
 } from "~/modules/communications/merge-template";
+import { isStarterWording } from "~/modules/communications/starter-templates";
 import type { DraftRecoveryState } from "~/platform/drafts/draft-recovery";
 import type { CommunicationsCentreLoaderData } from "~/routes/communications-centre";
 import {
@@ -46,6 +48,7 @@ export function TemplateVersionList({
       <ButtonLink to="?new=1" size="small">
         New template
       </ButtonLink>
+      <MissingStarterEmails loaderData={loaderData} />
       <div className="template-list">
         {loaderData.templates.length ? (
           loaderData.templates.map((template) => (
@@ -59,6 +62,13 @@ export function TemplateVersionList({
               <small>
                 {categoryLabel(template.category)} ·{" "}
                 <span className="pc-num">v{template.versionNumber}</span>
+                {isStarterWording({
+                  category: template.category,
+                  subject: template.subject,
+                  body: template.content.body,
+                })
+                  ? " · Starter wording"
+                  : null}
               </small>
               <span
                 className="template-item-state"
@@ -82,6 +92,49 @@ export function TemplateVersionList({
   );
 }
 
+/** Events created before starters, or before the organisation had a postal
+ *  address, can publish the missing emails here instead of writing them. */
+function MissingStarterEmails({
+  loaderData,
+}: {
+  loaderData: CommunicationsCentreLoaderData;
+}) {
+  const missing = loaderData.missingStarterEmails;
+  if (!missing.length) return null;
+  const emails = missing
+    .map((category) => categoryLabel(category).toLowerCase())
+    .join(" or ");
+  return (
+    <div className="validation-item warn comms-starter-offer" role="status">
+      <span className="pc-validation-item-copy">
+        <strong>No published {emails} email</strong>
+        <span>
+          {loaderData.organisationPhysicalAddress
+            ? "Publish Program Cue’s starter wording, then edit it like any other template."
+            : "Starter emails need the organisation postal address for their footer."}
+        </span>
+      </span>
+      {loaderData.organisationPhysicalAddress ? (
+        <Form method="post">
+          <input type="hidden" name="intent" value="create-starter-templates" />
+          <input
+            type="hidden"
+            name="operationId"
+            value={loaderData.starterEmailsKey}
+          />
+          <Button type="submit" size="small">
+            Create starter emails
+          </Button>
+        </Form>
+      ) : (
+        <ButtonLink to="?view=setup" size="small">
+          Add postal address
+        </ButtonLink>
+      )}
+    </div>
+  );
+}
+
 /**
  * A merge field the reader typed that Program Cue cannot fill is only found at
  * send time today, where it stops a real delivery. The editor knows the same
@@ -94,14 +147,6 @@ function unresolvableMergeFields(draft: TemplateDraftFields) {
       ...mergeTemplateVariables(draft.body),
     ]),
   ].filter((field) => !(field in representativeMergeValues));
-}
-
-function fillMergeFields(text: string, mergeValues: MergeValues) {
-  return text.replace(
-    /\{\{\s*([a-z][a-zA-Z0-9.]*)\s*\}\}/gu,
-    (token, field: string) =>
-      field in mergeValues ? String(mergeValues[field] ?? "") : token,
-  );
 }
 
 export function TemplateEditor({
@@ -160,6 +205,17 @@ export function TemplateEditor({
           </span>
         ) : null}
       </div>
+      {selected &&
+      isStarterWording({
+        category: selected.category,
+        subject: selected.subject,
+        body: selected.content.body,
+      }) ? (
+        <p className="help">
+          Starter wording. It is sent as written until you publish your own
+          version.
+        </p>
+      ) : null}
       <Form
         key={selected?.id ?? "new-template"}
         method="post"
@@ -367,8 +423,10 @@ export function TemplatePreview({
 }) {
   const preview = useMemo(
     () => ({
-      subject: fillMergeFields(draft.subject, mergeValues),
-      paragraphs: fillMergeFields(draft.body, mergeValues).split(/\n{2,}/u),
+      subject: fillKnownMergeFields(draft.subject, mergeValues),
+      paragraphs: fillKnownMergeFields(draft.body, mergeValues).split(
+        /\n{2,}/u,
+      ),
       unresolvable: unresolvableMergeFields(draft),
     }),
     [draft, mergeValues],

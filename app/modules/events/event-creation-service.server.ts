@@ -9,6 +9,12 @@ import {
   emailProviderConfigurationIssue,
   requireEmailProviderConfiguration,
 } from "~/modules/communications/email-provider.server";
+import { STARTER_TEMPLATES } from "~/modules/communications/starter-templates";
+import {
+  starterCategoriesPublishedBy,
+  starterTemplateStatements,
+  withStarterIdentifiers,
+} from "~/modules/communications/starter-templates.server";
 import { INITIAL_EVENT_SESSION_FORMATS_JSON } from "~/modules/events/event-configuration";
 import {
   EVENT_CREATION_STALLED_CODE,
@@ -117,6 +123,10 @@ export type EventCreationResult = {
   eventId: string;
   operationId: string;
   repositoryProvider: "d1" | "airtable";
+  /** The event started with published starter confirmation and decision
+   *  emails. Their footer needs the organisation postal address, so an
+   *  organisation without one starts with none. */
+  starterEmails: boolean;
 };
 
 export class EventCreationInProgressError extends Error {
@@ -273,6 +283,12 @@ export class EventCreationService {
       .first<{ timezone: string; startsAt: number; endsAt: number }>();
     if (!source)
       throw new Response("Current event not found.", { status: 404 });
+    const organisation = await this.env.DB.prepare(
+      `SELECT communication_physical_address IS NOT NULL AS hasPostalAddress
+         FROM organisations WHERE id = ?`,
+    )
+      .bind(viewer.organisationId)
+      .first<{ hasPostalAddress: number }>();
     let emailProvider: "resend" | "mailpit" | null = null;
     const emailProviderIssue = emailProviderConfigurationIssue(this.env);
     if (!emailProviderIssue) {
@@ -305,6 +321,7 @@ export class EventCreationService {
       emailProvider,
       emailProviderIssue,
       reusableSenderProfiles: reusableSenderProfiles.results,
+      starterEmailsAvailable: Boolean(organisation?.hasPostalAddress),
     };
   }
 
@@ -384,6 +401,13 @@ export class EventCreationService {
       eventId: operation.eventId,
       operationId: operation.id,
       repositoryProvider: payload.requestedRepositoryProvider,
+      starterEmails:
+        (
+          await starterCategoriesPublishedBy(this.env, {
+            eventId: operation.eventId,
+            operationId: operation.id,
+          })
+        ).length === STARTER_TEMPLATES.length,
     };
     if (operation.status === "completed") {
       if (!operation.resultJson) {
@@ -692,6 +716,14 @@ export class EventCreationService {
     const correlationId = input.creationIntentId;
     const pendingAirtable = airtableConnection !== null;
     const reusedSenderProfileId = reusableSender ? crypto.randomUUID() : null;
+    const starterStatements = withStarterIdentifiers().map((starter) =>
+      starterTemplateStatements(
+        this.env,
+        viewer,
+        { eventId, operationId, correlationId },
+        starter,
+      ),
+    );
     const statements: D1PreparedStatement[] = [
       reusableSender
         ? this.env.DB.prepare(
@@ -785,6 +817,7 @@ export class EventCreationService {
             ),
           ]
         : []),
+      ...starterStatements.flat(),
       this.env.DB.prepare(
         `INSERT INTO operation_jobs (
            id, organisation_id, event_id, requested_by_person_id, type,
@@ -878,8 +911,9 @@ export class EventCreationService {
           ]
         : []),
     ];
+    let batchResults: D1Result[];
     try {
-      await this.env.DB.batch(statements);
+      batchResults = await this.env.DB.batch(statements);
     } catch (error) {
       const concurrentReplay = await this.replay(
         viewer,
@@ -923,10 +957,17 @@ export class EventCreationService {
         [],
       );
     }
+    // Each starter's first statement inserts its template, or nothing.
+    const starterEmails = starterStatements.every(
+      ([templateInsert]) =>
+        (batchResults[statements.indexOf(templateInsert)]?.meta.changes ??
+          0) === 1,
+    );
     return {
       eventId,
       operationId,
       repositoryProvider: input.repositoryProvider,
+      starterEmails,
     };
   }
 }

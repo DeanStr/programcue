@@ -109,7 +109,7 @@
     "@uppy/core": "^5.2.0",
     "agents": "0.28.1",
     "ai": "7.0.58",
-    "better-auth": "^1.6.26",
+    "better-auth": "^1.7.14",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
@@ -125,7 +125,7 @@
     "react-router": "^8.3.0",
     "sonner": "2.0.8",
     "temporal-polyfill": "^1.0.3",
-    "zod": "^4.4.3"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",
@@ -153,9 +153,18 @@
     "node": ">=24.11.0"
   },
   "overrides": {
+    "@cloudflare/vitest-pool-workers": {
+      "zod": "$zod"
+    },
+    "@remotion/studio": {
+      "zod": "$zod"
+    },
+    "@remotion/studio-server": {
+      "zod": "$zod"
+    },
     "miniflare": {
       "sharp": "0.35.5",
-      "undici": "^7.29.1"
+      "undici": "^7.30.1"
     }
   }
 }

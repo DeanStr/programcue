@@ -490,15 +490,6 @@
   border-radius: 0;
   background: transparent;
 }
-/* Beside the outline and dock, the pane already has the stage's height. The
-   stacked layouts below 1001px have no fixed height and keep the floor; here
-   it made the canvas taller than its pane at 1280×720, so the palette sat
-   under the history strip behind a second scroll. */
-@media (min-width: 1001px) {
-  .program-cue-form-canvas {
-    min-height: 0;
-  }
-}
 .fb-canvas-palette.pc-plain-fieldset {
   display: grid;
   flex: 0 0 auto;
@@ -604,6 +595,18 @@
   padding: var(--space-4);
   scrollbar-gutter: stable;
   transition: box-shadow var(--dur-fast) var(--ease-out);
+}
+/* Beside the outline and dock, the pane already has the stage's height. The
+   560px floor made the canvas taller than its pane at 1280×720, so the
+   palette sat under the history strip behind a second scroll. This floor
+   keeps about 200px of form above the palette and keyboard note, which wrap
+   to 162px at 1024px wide. Only very short screens reach it; the pane then
+   scrolls. The stacked layouts below 1001px have no fixed height and keep
+   560px. */
+@media (min-width: 1001px) {
+  .program-cue-form-canvas {
+    min-height: 380px;
+  }
 }
 .fb-canvas-sheet {
   width: min(100%, 560px);

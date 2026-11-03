@@ -95,10 +95,13 @@ export async function action({ request, context }: Route.ActionArgs) {
     const senderOutcome = reuseSenderProfileId
       ? " The selected verified sender is ready for this event."
       : " Configure a sender in Communications before sending email.";
+    const starterOutcome = result.starterEmails
+      ? " Its submission confirmation and decision emails use starter wording; review them in Communications."
+      : "";
     return data<ActionResponse>({
       ok: true,
       committed: true,
-      message: `Blank event created. ${result.repositoryProvider === "airtable" ? "Airtable" : "Program Cue"} holds its event data.${senderOutcome}`,
+      message: `Blank event created. ${result.repositoryProvider === "airtable" ? "Airtable" : "Program Cue"} holds its event data.${senderOutcome}${starterOutcome}`,
       result,
     });
   } catch (error) {
@@ -452,7 +455,7 @@ export default function AdminEventNew({ loaderData }: Route.ComponentProps) {
                 confirm(
                   {
                     title: "Create this blank event?",
-                    description: `${repositoryProvider === "airtable" ? "Airtable" : "Program Cue"} will hold this event's data.${selectedSender ? ` The verified sender ${selectedSender.fromName} <${selectedSender.fromEmail}> is copied from ${selectedSender.sourceEventName}.` : " No sender is copied, so email sending stays blocked until you configure one."} Changing this later means reviewing and confirming a full list of changes.`,
+                    description: `${repositoryProvider === "airtable" ? "Airtable" : "Program Cue"} will hold this event's data.${selectedSender ? ` The verified sender ${selectedSender.fromName} <${selectedSender.fromEmail}> is copied from ${selectedSender.sourceEventName}.` : " No sender is copied, so email sending stays blocked until you configure one."}${loaderData.starterEmailsAvailable ? " Submission confirmation and decision emails are published in starter wording." : ""} Changing this later means reviewing and confirming a full list of changes.`,
                     confirmLabel: "Create blank event",
                     tone: "primary",
                   },
@@ -471,9 +474,24 @@ export default function AdminEventNew({ loaderData }: Route.ComponentProps) {
             Canonical session formats, private-file limits, schedule conflict
             policy, secure submission defaults and complete creation audit.
           </p>
+          {loaderData.starterEmailsAvailable ? (
+            <p>
+              Published submission confirmation and decision emails in starter
+              wording, with the organisation postal address in their footer.
+              Review and edit them in Communications.
+            </p>
+          ) : (
+            <p>
+              No emails yet: their footer needs the organisation postal address.
+              Once an organisation owner adds it in Communications, this event
+              can publish starter submission confirmation and decision emails
+              there in one step.
+            </p>
+          )}
           <h3>Empty by design</h3>
           <p>
             Rooms, tracks, forms, evaluation plans, task templates,
+            {loaderData.starterEmailsAvailable ? " other " : " "}
             communication templates, people, submissions, sessions, files and
             publication state. Sender profiles also begin empty unless you
             explicitly reuse the verified identity selected above.

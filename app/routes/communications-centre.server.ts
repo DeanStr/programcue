@@ -4,6 +4,7 @@ import type {
   SenderDnsRecord,
   SenderDnsRecordSet,
 } from "~/components/communications-centre-panels";
+import { communicationCategoryLabel } from "~/components/communications-panel-shared";
 import { statusPresentation } from "~/components/ui/domain-status-badge";
 import {
   CalendarQueueUnavailableError,
@@ -40,6 +41,10 @@ import {
   ResendDomainConfigurationError,
   ResendDomainRequestError,
 } from "~/modules/communications/resend-domain.server";
+import {
+  createMissingStarterTemplates,
+  missingStarterCategories,
+} from "~/modules/communications/starter-templates.server";
 import { EventService } from "~/modules/events/event-service.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
@@ -150,6 +155,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     deliveryHealth,
     organisationCommunicationSettings,
     scheduleChangeNotificationSetting,
+    missingStarterEmails,
   ] = await Promise.all([
     communicationService.listCentre(viewer, {
       filter: activeFilter ?? undefined,
@@ -167,6 +173,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     }),
     new OrganisationCommunicationSettingsService(env).get(viewer),
     communicationService.getScheduleChangeNotificationSetting(viewer),
+    missingStarterCategories(env, viewer),
   ]);
   const requestedTemplate = search.get("template");
   const createTemplate = search.get("new") === "1";
@@ -240,6 +247,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     connections,
     calendarTargets,
     testSendKey: crypto.randomUUID(),
+    missingStarterEmails,
+    starterEmailsKey: crypto.randomUUID(),
     selected,
     recoveryScope: { eventId: viewer.eventId, personId: viewer.personId },
     clearedRecoveryRecord,
@@ -378,6 +387,7 @@ async function handleSenderIntent({
 }
 
 async function handleTemplateAutomationIntent({
+  env,
   viewer,
   service,
   form,
@@ -401,6 +411,20 @@ async function handleTemplateAutomationIntent({
     return redirect(
       `/admin/communications?template=${encodeURIComponent(result.versionId)}&saved=${result.versionNumber}&recovery=${encodeURIComponent(String(form.get("templateId") ?? "") || "new")}`,
     );
+  }
+  if (intent === "create-starter-templates") {
+    const { created } = await createMissingStarterTemplates(
+      env,
+      viewer,
+      form.get("operationId"),
+    );
+    return data<ActionResult>({
+      ok: true,
+      intent,
+      message: created.length
+        ? `Starter ${created.map((category) => communicationCategoryLabel(category).toLowerCase()).join(" and ")} email${created.length === 1 ? " is" : "s are"} published. Review the wording before applicants receive it.`
+        : "Both emails are already published, so no starter was needed.",
+    });
   }
   if (intent === "publish-template") {
     const published = await service.publishTemplate(

@@ -4,7 +4,11 @@ import {
   type DecisionNotificationReadiness,
   inspectDecisionNotificationReadiness,
 } from "./decision-notification-readiness.server";
-import { formatEventDateMarkers, renderMergeTemplate } from "./merge-template";
+import {
+  formatEventDateMarkers,
+  recipientMergeValues,
+  renderMergeTemplate,
+} from "./merge-template";
 
 export const DECISION_NOTIFICATION_RENDER_CONTRACT_VERSION = 1;
 export const MAX_OUTBOUND_REVIEWER_FEEDBACK_CHARS = 64_000;
@@ -97,6 +101,8 @@ export async function prepareDecisionNotificationIntent(
     decision: "accepted" | "rejected" | "waitlisted";
     rationale: string;
     feedback: string[];
+    /** The version the organiser was shown; undefined when no one was. */
+    expectedTemplateVersionId?: string | null;
     recipientPersonId: string | null;
     recipientAddress: string | null;
     recipientName: string | null;
@@ -121,6 +127,12 @@ export async function prepareDecisionNotificationIntent(
     recipientAddress: input.recipientAddress,
   });
   if (readiness.error) return { error: readiness.error, intent: null };
+  const changedTemplateError = decisionEmailChangedError(
+    input.expectedTemplateVersionId,
+    readiness.template,
+  );
+  if (changedTemplateError)
+    return { error: changedTemplateError, intent: null };
   const intent = await intentFromReadiness(input, readiness);
   const storageError = decisionNotificationIntentStorageError({
     feedback: input.feedback,
@@ -130,6 +142,28 @@ export async function prepareDecisionNotificationIntent(
   });
   if (storageError) return { error: storageError, intent: null };
   return { error: null, intent };
+}
+
+/** The event fields of a decision email, which the release dialog also
+ *  previews. */
+export function decisionEventMergeValues(event: {
+  name: string;
+  startsAt: number;
+  endsAt: number;
+}) {
+  return {
+    "event.name": event.name,
+    "event.dates": formatEventDateMarkers(event.startsAt, event.endsAt),
+  };
+}
+
+function decisionEmailChangedError(
+  expectedVersionId: string | null | undefined,
+  template: DecisionNotificationReadiness["template"],
+) {
+  if (expectedVersionId === undefined || !template) return null;
+  if (template.id === expectedVersionId) return null;
+  return `The decision email changed after this decision was opened: “${template.name}” version ${template.versionNumber} is now published. Review it, then release again.`;
 }
 
 async function intentFromReadiness(
@@ -160,14 +194,8 @@ async function intentFromReadiness(
     "decision.feedback": input.feedback.join("\n\n"),
   };
   const mergeValues = {
-    "recipient.name": recipientName,
-    "recipient.firstName":
-      recipientName.trim().split(/\s+/)[0] || recipientName,
-    "event.name": input.event.name,
-    "event.dates": formatEventDateMarkers(
-      input.event.startsAt,
-      input.event.endsAt,
-    ),
+    ...recipientMergeValues(recipientName),
+    ...decisionEventMergeValues(input.event),
     ...sourceValues,
   };
   const renderedSubject = renderMergeTemplate(

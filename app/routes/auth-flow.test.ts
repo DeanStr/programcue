@@ -12,6 +12,7 @@ import {
   trustedParticipantOAuthProviders,
 } from "~/platform/auth/auth.server";
 import { currentEventCookie } from "~/platform/auth/current-event.server";
+import { oauthStateVerificationIdentifier } from "~/platform/auth/microsoft-auth-callback.server";
 import { cloudflareContext } from "~/platform/cloudflare-context";
 import { ensureDemoData } from "~/platform/demo/seed.server";
 import { evaluationSessionCookie } from "~/platform/evaluation/evaluation-session.server";
@@ -235,7 +236,7 @@ describe("production authentication routes", () => {
     const stored = await env.DB.prepare(
       "SELECT value FROM verification_tokens WHERE identifier = ?",
     )
-      .bind(state)
+      .bind(oauthStateVerificationIdentifier(state!))
       .first<{ value: string }>();
     const payload = JSON.parse(stored?.value ?? "null") as {
       link?: { email?: string; userId?: string };
@@ -538,8 +539,11 @@ describe("production authentication routes", () => {
             token_type: "Bearer",
             expires_in: 3600,
             scope: "openid email profile",
+            // Better Auth 1.7 keys Microsoft accounts on the stable object ID
+            // (`oid`); `sub` is pairwise per application.
             id_token: unsignedIdToken({
-              sub: "microsoft-person-123",
+              sub: "microsoft-pairwise-subject",
+              oid: "microsoft-person-123",
               name: "Olivia Chen",
               email: "sbek-organizer@example.com",
             }),

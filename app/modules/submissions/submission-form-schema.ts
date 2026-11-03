@@ -392,7 +392,7 @@ export const saveFormSchema = z
       ),
     openDate: z.iso.date().nullable().optional(),
     closeDate: z.iso.date().nullable(),
-    submissionLimit: nullablePositiveInteger,
+    submissionLimit: nullablePositiveInteger.default(null),
     perPersonSubmissionLimit: nullablePositiveInteger.optional(),
     minSpeakers: z.coerce.number().int().min(1).max(MAX_SUBMISSION_SPEAKERS),
     maxSpeakers: nullablePositiveInteger.pipe(

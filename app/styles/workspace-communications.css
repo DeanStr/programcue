@@ -224,6 +224,10 @@
 }
 .comms-workbench .comms-subject {
   min-height: 0;
+  /* A fixed-height textarea clips wrapped text, such as the starter decision
+     subject and body on a phone. Both grow with their content; browsers
+     without field-sizing keep the fixed height and scroll. */
+  field-sizing: content;
   padding: var(--space-2) 0;
   border-bottom: 1px solid var(--border);
   font-size: var(--text-base);
@@ -232,6 +236,7 @@
 }
 .comms-workbench .comms-body {
   min-height: 220px;
+  field-sizing: content;
   padding: var(--space-3) 0 0;
 }
 .comms-workbench .comms-subject:hover,
@@ -381,6 +386,11 @@
 }
 .validation-item.ok {
   color: var(--state-good-text);
+}
+/* The template list is the narrowest of three columns on wide screens, so the
+   starter offer stacks its explanation above the action. */
+.validation-item.comms-starter-offer {
+  flex-direction: column;
 }
 
 /* --- Delivery health ------------------------------------------------------
