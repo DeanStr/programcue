@@ -143,7 +143,7 @@ describe("likely duplicate person checks", () => {
     const result = await new PersonDuplicateService(
       env as unknown as CloudflareEnvironment,
     ).findLikelyDuplicates(viewer, [
-      { name: "Jordan Alvarez", email: "sbek-organizer@example.com" },
+      { name: "J. Alvarez", email: "sbek-organizer@example.com" },
       { name: "Priya   Shah", email: "different-priya@example.com" },
     ]);
 
@@ -152,7 +152,7 @@ describe("likely duplicate person checks", () => {
       expect.arrayContaining([
         expect.objectContaining({
           personId: "person-demo-admin",
-          reasons: expect.arrayContaining(["same_email", "same_name"]),
+          reasons: ["same_email"],
           currentEvent: true,
         }),
         expect.objectContaining({
@@ -162,6 +162,28 @@ describe("likely duplicate person checks", () => {
         }),
       ]),
     );
+  });
+
+  it("needs no review for a candidate that is exactly one existing person", async () => {
+    const service = new PersonDuplicateService(
+      env as unknown as CloudflareEnvironment,
+    );
+    expect(
+      await service.findLikelyDuplicates(viewer, [
+        { name: "Priya  Shah", email: "PRIYA.speaker@example.com" },
+      ]),
+    ).toEqual({ enabled: true, matches: [], truncated: false });
+    // Another candidate in the same request is still checked.
+    const mixed = await service.findLikelyDuplicates(viewer, [
+      { name: "Priya Shah", email: "priya.speaker@example.com" },
+      { name: "Jordan Alvarez", email: "another-jordan@example.com" },
+    ]);
+    expect(mixed.matches).toEqual([
+      expect.objectContaining({
+        personId: "person-demo-admin",
+        reasons: ["same_name"],
+      }),
+    ]);
   });
 
   it("does not disclose a matching identity from another organisation", async () => {

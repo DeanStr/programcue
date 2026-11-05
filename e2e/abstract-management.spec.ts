@@ -474,7 +474,7 @@ test.describe
         .locator('select[name="decision"]')
         .selectOption("accepted");
       await decisionDialog
-        .getByLabel("Confirm review-evidence override")
+        .getByLabel("Release without a completed review")
         .check();
       await decisionDialog
         .getByRole("button", { name: "Release decision" })

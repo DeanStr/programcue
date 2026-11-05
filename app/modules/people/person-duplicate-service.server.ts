@@ -225,33 +225,54 @@ export class PersonDuplicateService {
       )
       .all<PersonRow>();
 
-    const matches = rows.results.slice(0, 20).map((row) => {
+    // A candidate whose name and email both equal one existing person is that
+    // person: the identity is reused and nothing new is created, so it needs
+    // no review. Other candidates still warn on a shared email or name.
+    const exactCandidates = new Set(
+      candidates.filter((candidate) =>
+        rows.results.some(
+          (row) =>
+            row.email.toLocaleLowerCase() === candidate.email &&
+            normalisedName(row.name) === normalisedName(candidate.name),
+        ),
+      ),
+    );
+    const matches = rows.results.flatMap((row) => {
       const reasons = new Set<DuplicatePersonMatch["reasons"][number]>();
+      let matchedExactCandidate = false;
       const rowEmail = row.email.toLocaleLowerCase();
       const rowName = normalisedName(row.name);
       for (const candidate of candidates) {
-        if (candidate.email === rowEmail) reasons.add("same_email");
-        if (normalisedName(candidate.name) === rowName)
-          reasons.add("same_name");
+        const sameEmail = candidate.email === rowEmail;
+        const sameName = normalisedName(candidate.name) === rowName;
+        if (exactCandidates.has(candidate)) {
+          matchedExactCandidate ||= sameEmail || sameName;
+          continue;
+        }
+        if (sameEmail) reasons.add("same_email");
+        if (sameName) reasons.add("same_name");
       }
       if (!reasons.size) {
+        if (matchedExactCandidate) return [];
         throw new Error(
           "A duplicate-person query returned a record without a matching reason.",
         );
       }
-      return {
-        personId: row.personId,
-        name: row.name,
-        email: row.email,
-        reasons: [...reasons],
-        currentEvent: Boolean(row.currentEvent),
-        scopes: row.scopeNames?.split(",").filter(Boolean) ?? [],
-      };
+      return [
+        {
+          personId: row.personId,
+          name: row.name,
+          email: row.email,
+          reasons: [...reasons],
+          currentEvent: Boolean(row.currentEvent),
+          scopes: row.scopeNames?.split(",").filter(Boolean) ?? [],
+        },
+      ];
     });
 
     return {
       enabled: true,
-      matches,
+      matches: matches.slice(0, 20),
       truncated: rows.results.length > 20,
     };
   }

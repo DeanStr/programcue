@@ -42,7 +42,7 @@ test("an accepted session opens before its first draft and enters content review
     .fill("Accept this proposal for the event programme.");
   await decision.getByLabel("Acceptance session duration (minutes)").fill("45");
   await decision
-    .getByRole("checkbox", { name: /Confirm review-evidence override/ })
+    .getByRole("checkbox", { name: /Release without a completed review/ })
     .check();
   await decision.getByRole("button", { name: "Release decision" }).click();
   await expect(
@@ -66,6 +66,40 @@ test("an accepted session opens before its first draft and enters content review
   await expect(
     page.getByText(/Experience Design · Presentation · 45 minutes/),
   ).toBeVisible();
+
+  // The accepted session's speakers can change before publication: add an
+  // existing person found by lookup, then remove them again.
+  const speakersPanel = page.getByRole("region", { name: "Speakers" });
+  const speakerRows = speakersPanel.getByRole("listitem");
+  await expect(speakerRows).toHaveCount(1);
+  await expect(speakerRows.first()).toContainText("Priya Shah");
+  await expect(speakerRows.first()).toContainText("Confirmed");
+  await expect(
+    speakersPanel.getByRole("button", { name: "Remove" }),
+  ).toHaveCount(0);
+  await speakersPanel.getByLabel(/Find an existing speaker/).fill("Alex");
+  await speakersPanel.getByRole("button", { name: /Alex Morgan/ }).click();
+  await expect(speakersPanel.getByLabel("Speaker email")).toHaveValue(
+    "alex.submitter@example.com",
+  );
+  await speakersPanel.getByRole("button", { name: "Add speaker" }).click();
+  await expect(speakersPanel.getByRole("status")).toContainText(
+    "Alex Morgan was added as a speaker.",
+  );
+  await expect(speakerRows).toHaveCount(2);
+  await expect(speakerRows.nth(1)).toContainText("Awaiting confirmation");
+  await expect(speakersPanel.getByLabel("Speaker email")).toHaveValue("");
+  expect((await page.reload())?.status()).toBe(200);
+  await expect(speakerRows).toHaveCount(2);
+  await speakerRows
+    .filter({ hasText: "Alex Morgan" })
+    .getByRole("button", { name: "Remove" })
+    .click();
+  await acceptConfirm(page);
+  await expect(speakersPanel.getByRole("status")).toContainText(
+    "Alex Morgan was removed from this session.",
+  );
+  await expect(speakerRows).toHaveCount(1);
   expect((await page.reload())?.status()).toBe(200);
   await page.getByRole("link", { name: "Open schedule", exact: true }).click();
   await expect(page).toHaveURL(/\/admin\/schedule\?session=/);

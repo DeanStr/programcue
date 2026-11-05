@@ -37,7 +37,7 @@ export const acceptanceTaskPlanGuardSql = `
     LIMIT 1
   )`;
 
-export const acceptanceTaskPlanCteSql = `
+const acceptanceTaskPlanCte = (targetsSql: string) => `
   WITH RECURSIVE
   acceptance_scope(event_id, submission_id, session_id, decision_id) AS (
     VALUES (?, ?, ?, ?)
@@ -55,6 +55,10 @@ export const acceptanceTaskPlanCteSql = `
         ON dependency.template_id = plan.template_id
   ),
   acceptance_targets(target_type, target_id, owner_person_id) AS (
+    ${targetsSql}
+  )`;
+
+export const acceptanceTaskPlanCteSql = acceptanceTaskPlanCte(`
     SELECT 'speaker', speaker.person_id, speaker.person_id
       FROM submission_speakers speaker, acceptance_scope scope
      WHERE speaker.event_id = scope.event_id
@@ -63,8 +67,23 @@ export const acceptanceTaskPlanCteSql = `
     UNION ALL
     SELECT 'session', scope.session_id, NULL FROM acceptance_scope scope
     UNION ALL
-    SELECT 'event', scope.event_id, NULL FROM acceptance_scope scope
-  )`;
+    SELECT 'event', scope.event_id, NULL FROM acceptance_scope scope`);
+
+/** The plan for one speaker added to an accepted session after acceptance:
+ *  only their speaker tasks, since the session and event tasks exist. The
+ *  person is resolved by email, and only once the same batch has added them
+ *  to the session under its event lock. */
+const addedSpeakerTaskPlanCteSql = acceptanceTaskPlanCte(`
+    SELECT 'speaker', person.id, person.id
+      FROM people person
+      JOIN acceptance_scope scope
+      JOIN session_speakers relationship
+        ON relationship.session_id = scope.session_id
+       AND relationship.event_id = scope.event_id
+       AND relationship.person_id = person.id
+      JOIN events event
+        ON event.id = scope.event_id AND event.last_operation_id = ?
+     WHERE person.email = ? COLLATE NOCASE`);
 
 export function acceptanceTaskPlanBindings(input: {
   eventId: string;
@@ -82,6 +101,9 @@ export function buildAcceptanceTaskPlanStatements(input: {
   sessionId: string;
   decisionId: string;
   materializationOperationId?: string;
+  /** Plan only this speaker's tasks, for a speaker added after acceptance
+   *  by the batch whose event lock is `materializationOperationId`. */
+  addedSpeakerEmail?: string;
 }) {
   const {
     env,
@@ -90,17 +112,26 @@ export function buildAcceptanceTaskPlanStatements(input: {
     sessionId,
     decisionId,
     materializationOperationId = decisionId,
+    addedSpeakerEmail,
   } = input;
-  const bindings = acceptanceTaskPlanBindings({
-    eventId: viewer.eventId,
-    submissionId,
-    sessionId,
-    decisionId,
-  });
+  const planCteSql = addedSpeakerEmail
+    ? addedSpeakerTaskPlanCteSql
+    : acceptanceTaskPlanCteSql;
+  const bindings = [
+    ...acceptanceTaskPlanBindings({
+      eventId: viewer.eventId,
+      submissionId,
+      sessionId,
+      decisionId,
+    }),
+    ...(addedSpeakerEmail
+      ? [materializationOperationId, addedSpeakerEmail]
+      : []),
+  ];
   return [
     env.DB.prepare(
       `
-      ${acceptanceTaskPlanCteSql}
+      ${planCteSql}
       INSERT INTO task_instances (
         id, event_id, template_id, target_type, target_id, owner_person_id,
         title, description, task_type, impact, evidence_mode,
@@ -155,7 +186,7 @@ export function buildAcceptanceTaskPlanStatements(input: {
     ).bind(...bindings, materializationOperationId),
     env.DB.prepare(
       `
-      ${acceptanceTaskPlanCteSql}
+      ${planCteSql}
       INSERT INTO task_instance_dependencies (
         task_id, depends_on_task_id, created_at
       )
@@ -187,7 +218,7 @@ export function buildAcceptanceTaskPlanStatements(input: {
     ).bind(...bindings),
     env.DB.prepare(
       `
-      ${acceptanceTaskPlanCteSql}
+      ${planCteSql}
       UPDATE task_instances AS task
          SET status = CASE
                WHEN EXISTS (
@@ -222,7 +253,7 @@ export function buildAcceptanceTaskPlanStatements(input: {
     ).bind(...bindings, materializationOperationId),
     env.DB.prepare(
       `
-      ${acceptanceTaskPlanCteSql}
+      ${planCteSql}
       INSERT INTO audit_events (
         id, actor_kind, origin, metadata_version, organisation_id, event_id, actor_person_id, action,
         entity_type, entity_id, metadata_json, created_at

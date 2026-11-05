@@ -3327,3 +3327,91 @@ deliveries keep fixed dates (4 August 2026) so screenshots stay stable. On
 baseline changed. The visual inventory now opens Communications with
 `deliveryPeriod=lifetime`, which does not depend on the date, and the
 baseline and its story-state pin were updated.
+
+## Changing released decisions — 5 November 2026
+
+- A released rejection or waitlisting offers **Change decision** wherever its
+  status shows, in the proposal queue and in Results. It opens the existing
+  reopen workflow (reason, notification-specific warning, confirmation) in a
+  dialog. Before, the queue showed a dead-end "Final" and the reopen form sat
+  inside the Results detail, so the September evaluation could not turn a
+  rejection into an acceptance. No new workflow was added: reopening still
+  supersedes the released decision and returns the proposal to Decide.
+- The dialog reads what it needs from the Results loader's decision history,
+  already loaded before paging, so the queue needs no extra query. That
+  history now covers every round, and Results filters it to the selected
+  round: the reopen workflow finds a submission's released decision in any
+  round, so a decision released in an earlier round still offers Change
+  decision after a later round becomes the one Results shows.
+- Whether a proposal's decision is released comes from its status, as the
+  server checks before deciding or reopening, in both the queue and
+  Results. Results used the round's decision history for that, so a later
+  round showed Decide and Moderate for an earlier round's release, and the
+  server refused the decision. The history in the Results detail stays
+  specific to the selected round.
+- Released acceptances stay Final. They own the session, speaker and task
+  records, and the reopen workflow refuses them.
+- The no-review confirmation is worded as the organiser's decision, **Release
+  without a completed review**, instead of "Confirm review-evidence
+  override". The evaluator's safety check refused the old wording as an
+  unauthorised bypass. The audit record is unchanged.
+- The decision and reopen dialogs share one submission hook: stay open until
+  the server accepts, show the refusal inside the dialog, reload page data
+  after a refusal, and on success move focus to the proposal's decision
+  action, which replaces the button that opened the dialog.
+- Adding a speaker to an existing session was left for its own decision,
+  which followed the same day: see *Editing session speakers*.
+
+## Editing session speakers — 5 November 2026
+
+- Owners and administrators can add and remove a session's speakers from
+  its Session content page. Before, speakers joined only through
+  acceptance, a co-speaker claim or direct session creation, so an
+  organiser could not add a second speaker to an accepted session.
+- Edits follow the co-speaker claim's rules rather than new ones: allowed
+  while the session is unscheduled or in a draft schedule; stored draft
+  conflicts rebuilt in the same batch; the event operation lock guarding
+  every write. Publishing marks a schedule's sessions published, so their
+  speakers then stay locked. Changing a published session's speakers needs
+  a decision about what the public programme shows before republishing, and
+  was not attempted.
+- An added speaker starts pending, as on a direct session: they confirm in
+  the speaker portal, or the organiser records an outside confirmation on
+  the speaker page. Pending speakers block publication as before. Program
+  Cue prepares a portal invitation as direct sessions do, with the
+  invitation source `session_speaker`.
+- Both changes run through the Airtable provider boundary, keyed by the
+  form's operation id, like the other organiser writes. An Airtable event
+  without a synchronised connection refuses them before D1 changes.
+- Identity follows direct sessions: a new email creates a person; an
+  existing identity must already relate to the organisation. The batch
+  repeats that check, and only an identity the batch itself creates is
+  exempt, so access revoked after the first check refuses the add instead
+  of the membership upsert restoring it. A person whose speaker access was
+  revoked but who keeps another link to the organisation, such as an
+  earlier proposal, can still be added and is re-invited, as when creating
+  a session.
+- On a session from an accepted proposal, the added speaker gets the
+  acceptance plan's speaker tasks, due from the original acceptance, through
+  the same builder with a single-speaker target guarded by the batch's
+  lock. The add first requires the plan that acceptance and co-speaker
+  claims require, before the batch and again inside its lock, so a
+  prerequisite due from session start refuses the add rather than creating
+  a task with no deadline.
+- Removal never takes the last speaker. Tasks, portal access and resource
+  acknowledgements stay, because tasks belong to the speaker across the
+  event and may relate to other sessions; the confirmation tells the
+  organiser to waive any that no longer apply.
+
+## Exact identity matches need no duplicate review — 5 November 2026
+
+- A person entered with the same email and normalised name as one existing
+  person is that person: the identity is reused and nothing new is created,
+  so the "Likely existing person" review no longer appears for them. It
+  applied to direct sessions, manual applications, the speaker roster and
+  session speakers, and fired whenever an organiser picked someone from the
+  directory or started from their speaker page.
+- A same-name match with another email, or the same email with another
+  name, still needs review. The speaker roster's own check still refuses to
+  overwrite someone already on the event roster.
+

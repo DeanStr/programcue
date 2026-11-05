@@ -239,6 +239,75 @@ describe("evaluation administration results", () => {
     }
   });
 
+  it("offers to change a released decision from an earlier round", async () => {
+    const roundId = `evaluation-admin-later-round-${crypto.randomUUID()}`;
+    const decisionId = `evaluation-admin-earlier-${crypto.randomUUID()}`;
+    await workerEnv.DB.batch([
+      workerEnv.DB.prepare(
+        `INSERT INTO evaluation_rounds (
+           id, event_id, plan_id, scorecard_id, round_number, name, status
+         )
+         SELECT ?, round.event_id, round.plan_id, round.scorecard_id,
+                (SELECT MAX(sibling.round_number) + 1
+                   FROM evaluation_rounds sibling
+                  WHERE sibling.plan_id = round.plan_id),
+                'Later round', 'draft'
+           FROM evaluation_rounds round
+          WHERE round.id = 'demo-evaluation-round'`,
+      ).bind(roundId),
+      workerEnv.DB.prepare(
+        `UPDATE submissions SET status = 'waitlisted', revision = revision + 1
+          WHERE id = 'demo-evaluation-submission-calm'
+            AND event_id = 'evt-foe-2025'`,
+      ),
+      workerEnv.DB.prepare(
+        `INSERT INTO submission_decisions (
+           id, event_id, submission_id, round_id, revision_number, status,
+           decision, decided_by_person_id, rationale,
+           notification_feedback_json, effect_preview_json,
+           decided_at, published_at
+         ) VALUES (?, 'evt-foe-2025', 'demo-evaluation-submission-calm',
+                   'demo-evaluation-round', 1, 'published', 'waitlisted',
+                   'person-demo-admin', 'Waitlisted in the first round.',
+                   '[]', '{}', unixepoch(), unixepoch())`,
+      ).bind(decisionId),
+    ]);
+    await markDecisionAsMigrationLegacy(decisionId);
+
+    try {
+      // Results shows the later round, but the queue still offers the
+      // reopen the server allows for the earlier round's decision.
+      const result = await loader({
+        request: loaderRequest(`?resultsRound=${roundId}`),
+        params: {},
+        context: context(),
+      } as never);
+      expect(
+        result.submissions.find(
+          (submission) => submission.id === "demo-evaluation-submission-calm",
+        )?.reopenableDecision,
+      ).toMatchObject({
+        decision: "waitlisted",
+        notificationEvidenceState: "legacy",
+      });
+    } finally {
+      await workerEnv.DB.batch([
+        workerEnv.DB.prepare(
+          "DELETE FROM submission_decisions WHERE id = ? AND event_id = 'evt-foe-2025'",
+        ).bind(decisionId),
+        workerEnv.DB.prepare(
+          "DELETE FROM evaluation_rounds WHERE id = ? AND event_id = 'evt-foe-2025'",
+        ).bind(roundId),
+        workerEnv.DB.prepare(
+          `UPDATE submissions
+              SET status = 'assigned', revision = 1, last_operation_id = NULL
+            WHERE id = 'demo-evaluation-submission-calm'
+              AND event_id = 'evt-foe-2025'`,
+        ),
+      ]);
+    }
+  });
+
   it("rejects a released decision with neither pinned evidence nor the migration marker", async () => {
     const decisionId = `evaluation-admin-malformed-release-${crypto.randomUUID()}`;
     await workerEnv.DB.prepare(

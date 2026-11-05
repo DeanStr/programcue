@@ -248,8 +248,8 @@ describe("manual person creation warnings", () => {
       speakers: JSON.stringify([
         {
           name: "Priya Shah",
-          email: "priya.speaker@example.com",
-          biography: "Existing speaker",
+          email: `priya.${crypto.randomUUID()}@example.com`,
+          biography: "Another Priya Shah",
         },
       ]),
     };
@@ -269,7 +269,7 @@ describe("manual person creation warnings", () => {
         matches: [
           expect.objectContaining({
             personId: "person-demo-speaker",
-            reasons: expect.arrayContaining(["same_email", "same_name"]),
+            reasons: ["same_name"],
           }),
         ],
       },
@@ -302,5 +302,44 @@ describe("manual person creation warnings", () => {
       .bind("evt-foe-2025", title)
       .first<{ count: number }>();
     expect(Number(afterConfirmation?.count ?? 0)).toBe(1);
+  });
+
+  it("creates a direct session for an exact existing identity without review", async () => {
+    const title = `Exact identity ${crypto.randomUUID()}`;
+    const created = await action({
+      request: adminRequest(
+        new URLSearchParams({
+          _intent: "create_direct_session",
+          idempotencyKey: crypto.randomUUID(),
+          title,
+          description: "A second session for an existing speaker.",
+          format: "presentation",
+          trackId: "demo-track-ai",
+          durationMinutes: "45",
+          speakers: JSON.stringify([
+            {
+              name: "Priya Shah",
+              email: "priya.speaker@example.com",
+              biography: "Existing speaker",
+            },
+          ]),
+        }),
+      ),
+      params: {},
+      context: context(),
+    } as never);
+    expect(created).toBeInstanceOf(Response);
+    expect((created as Response).status).toBe(303);
+    expect(
+      await env.DB.prepare(
+        `SELECT relationship.person_id AS personId
+           FROM sessions session
+           JOIN session_speakers relationship
+             ON relationship.session_id = session.id
+          WHERE session.event_id = ? AND session.title = ?`,
+      )
+        .bind("evt-foe-2025", title)
+        .first(),
+    ).toEqual({ personId: "person-demo-speaker" });
   });
 });

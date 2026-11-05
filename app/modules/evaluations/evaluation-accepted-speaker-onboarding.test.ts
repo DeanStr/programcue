@@ -581,7 +581,7 @@ describe("evaluation vertical slice", () => {
           rationale: "Strong programme fit.",
           release: true,
         }),
-      ).rejects.toThrow(/confirm the review-evidence override/i);
+      ).rejects.toThrow(/releasing this decision without a completed review/i);
       const result = await service.decide(admin, {
         submissionId: "eval-test-submission",
         decision: "accepted",

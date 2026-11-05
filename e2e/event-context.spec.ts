@@ -165,10 +165,7 @@ test("an invited speaker can explicitly choose the created event and see its tas
     .locator('input[name="email"]')
     .filter({ visible: true })
     .fill("priya.speaker@example.com");
-  await page
-    .getByRole("button", { name: "Add speaker record", exact: true })
-    .click();
-  await page.getByLabel(/I reviewed these identities/).check();
+  // Her exact name and email are her identity, so there is no review step.
   await page
     .getByRole("button", { name: "Add speaker record", exact: true })
     .click();

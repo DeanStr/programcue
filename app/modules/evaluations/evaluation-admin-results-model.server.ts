@@ -311,12 +311,36 @@ export async function buildEvaluationAdminResultsModel(input: {
       criterion.name,
     ]),
   );
-  const decisionHistoryRows = await loadEvaluationDecisionHistory({
+  const eventDecisionHistory = await loadEvaluationDecisionHistory({
     env,
     organisationId: viewer.organisationId,
     eventId: viewer.eventId,
-    resultsRoundId,
   });
+  const decisionHistoryRows = resultsRoundId
+    ? eventDecisionHistory.results.filter(
+        (decision) =>
+          decision.roundId === resultsRoundId || decision.roundId === null,
+      )
+    : [];
+  // What the change-decision dialog needs about each released decision, from
+  // any round, as the reopen workflow allows. Released acceptances are left
+  // out: they own programme records, so the reopen workflow refuses them.
+  const reopenableDecisionBySubmission = new Map(
+    eventDecisionHistory.results
+      .filter(
+        (decision) =>
+          decision.status === "published" && decision.decision !== "accepted",
+      )
+      .map((decision) => [
+        decision.submissionId,
+        {
+          decision: decision.decision,
+          notificationEvidenceState: decision.notificationEvidenceState,
+          notificationOperationStatus: decision.notificationOperationStatus,
+          deliveryStatus: decision.deliveryStatus,
+        },
+      ]),
+  );
   const decisionDraftBySubmission = await loadEvaluationDecisionDrafts({
     env,
     organisationId: viewer.organisationId,
@@ -349,7 +373,7 @@ export async function buildEvaluationAdminResultsModel(input: {
             assessment.roundId === resultsRoundId &&
             assessment.submissionId === submission.id,
         ) ?? null,
-      decisionHistory: decisionHistoryRows.results.filter(
+      decisionHistory: decisionHistoryRows.filter(
         (decision) => decision.submissionId === submission.id,
       ),
     })),
@@ -517,6 +541,8 @@ export async function buildEvaluationAdminResultsModel(input: {
     submissions: sortedSubmissions.map((submission) => ({
       ...submission,
       decisionDraft: decisionDraftBySubmission.get(submission.id) ?? null,
+      reopenableDecision:
+        reopenableDecisionBySubmission.get(submission.id) ?? null,
       aiAssessmentGenerationIntent: crypto.randomUUID(),
     })),
     sessions: visibleSessions,

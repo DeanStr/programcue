@@ -4,6 +4,7 @@ import {
   BulkAssignmentDialog,
   DecisionDialog,
   ModerationDialog,
+  ReopenDecisionDialog,
   ReviewReopenDialog,
   RoundAdvancementDialog,
 } from "~/components/evaluation-admin-dialogs";
@@ -96,6 +97,7 @@ export function EvaluationAdminPage() {
       <ModerationDialog />
       <ReviewReopenDialog />
       <DecisionDialog />
+      <ReopenDecisionDialog />
     </div>
   );
 }

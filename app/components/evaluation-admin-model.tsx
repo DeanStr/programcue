@@ -38,6 +38,8 @@ export type EvaluationAdminModel = {
   } | null;
   decisionId: string | null;
   setDecisionId: Dispatch<SetStateAction<string | null>>;
+  reopenDecisionId: string | null;
+  setReopenDecisionId: Dispatch<SetStateAction<string | null>>;
   noReviewOverrideConfirmed: boolean;
   setNoReviewOverrideConfirmed: Dispatch<SetStateAction<boolean>>;
   moderationSubmissionId: string | null;
@@ -111,6 +113,7 @@ export function useEvaluationAdminState(
         }
       : null;
   const [decisionId, setDecisionId] = useState<string | null>(null);
+  const [reopenDecisionId, setReopenDecisionId] = useState<string | null>(null);
   const [noReviewOverrideConfirmed, setNoReviewOverrideConfirmed] =
     useState(false);
   const [moderationSubmissionId, setModerationSubmissionId] = useState<
@@ -235,6 +238,8 @@ export function useEvaluationAdminState(
     assignmentUndo,
     decisionId,
     setDecisionId,
+    reopenDecisionId,
+    setReopenDecisionId,
     noReviewOverrideConfirmed,
     setNoReviewOverrideConfirmed,
     moderationSubmissionId,

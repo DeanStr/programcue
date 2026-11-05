@@ -2,6 +2,7 @@ import { CheckCircle2, History, RotateCcw } from "lucide-react";
 import { data, Form, useActionData } from "react-router";
 import { ZodError } from "zod";
 import { EventFieldInputs } from "~/components/event-field-inputs";
+import { SessionSpeakersPanel } from "~/components/session-speakers-panel";
 import { Button, ButtonLink } from "~/components/ui/button";
 import { DomainStatusBadge } from "~/components/ui/domain-status-badge";
 import { EventDateTime } from "~/components/ui/event-date-time";
@@ -14,6 +15,12 @@ import {
   EventFieldService,
   EventFieldStateError,
 } from "~/modules/fields/event-field-service.server";
+import { PersonDuplicateService } from "~/modules/people/person-duplicate-service.server";
+import {
+  addSessionSpeakerSchema,
+  SessionSpeakerService,
+  SessionSpeakerStateError,
+} from "~/modules/speakers/session-speaker-service.server";
 import { requireCurrentEventRole } from "~/platform/auth/current-event.server";
 import { getCloudflareContext } from "~/platform/cloudflare-context";
 import { recordRouteChange } from "~/platform/realtime/route-realtime.server";
@@ -37,17 +44,21 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
   const { env, viewer } = await administrator(request, context);
   const historyCursor = new URL(request.url).searchParams.get("history");
   try {
-    const [content, customFields] = await Promise.all([
+    const [content, customFields, speakers] = await Promise.all([
       new ContentManagementService(env).getSession(
         viewer,
         params.sessionId,
         historyCursor,
       ),
       new EventFieldService(env).values(viewer, "session", params.sessionId),
+      new SessionSpeakerService(env).list(viewer, params.sessionId),
     ]);
-    return { ...content, customFields };
+    return { ...content, customFields, speakers };
   } catch (error) {
-    if (error instanceof ContentManagementStateError) {
+    if (
+      error instanceof ContentManagementStateError ||
+      error instanceof SessionSpeakerStateError
+    ) {
       throw new Response(error.message, { status: error.status });
     }
     throw error;
@@ -66,6 +77,9 @@ export async function action({ request, context, params }: Route.ActionArgs) {
   const intent = String(form.get("intent") ?? "");
   const service = new ContentManagementService(env);
   try {
+    if (intent === "add-speaker" || intent === "remove-speaker") {
+      return await sessionSpeakerAction(env, viewer, params.sessionId, form);
+    }
     if (intent === "save-event-fields") {
       await new EventFieldService(env).saveValues(
         viewer,
@@ -139,7 +153,10 @@ export async function action({ request, context, params }: Route.ActionArgs) {
         { status: 422 },
       );
     }
-    if (error instanceof ContentManagementStateError) {
+    if (
+      error instanceof ContentManagementStateError ||
+      error instanceof SessionSpeakerStateError
+    ) {
       return data(
         { ok: false as const, message: error.message },
         { status: error.status },
@@ -153,6 +170,72 @@ export async function action({ request, context, params }: Route.ActionArgs) {
     }
     throw error;
   }
+}
+
+async function sessionSpeakerAction(
+  env: CloudflareEnvironment,
+  viewer: Awaited<ReturnType<typeof administrator>>["viewer"],
+  sessionId: string,
+  form: FormData,
+) {
+  const service = new SessionSpeakerService(env);
+  let message: string;
+  let warning: string | null = null;
+  if (form.get("intent") === "add-speaker") {
+    const input = addSessionSpeakerSchema.parse({
+      sessionId,
+      name: form.get("name"),
+      email: form.get("email"),
+      operationId: form.get("operationId"),
+    });
+    // As when creating a session: a likely second identity for someone
+    // already known needs review first.
+    if (form.get("confirmDuplicatePeople") !== "yes") {
+      const duplicateCheck = await new PersonDuplicateService(
+        env,
+      ).findLikelyDuplicates(viewer, [
+        { name: input.name, email: input.email },
+      ]);
+      if (duplicateCheck.matches.length) {
+        return data(
+          {
+            ok: false as const,
+            message: "Review the likely existing person before adding them.",
+            duplicateCheck: {
+              matches: duplicateCheck.matches,
+              truncated: duplicateCheck.truncated,
+            },
+          },
+          { status: 409 },
+        );
+      }
+    }
+    const added = await service.add(viewer, input);
+    message = `${added.name} was added as a speaker. They confirm participation in the speaker portal, or you can record their confirmation on their speaker page.`;
+    warning = added.invitationWarning;
+  } else {
+    const removed = await service.remove(viewer, {
+      sessionId,
+      personId: form.get("personId"),
+      operationId: form.get("operationId"),
+      confirmed: form.get("confirmed"),
+    });
+    message = `${removed.name} was removed from this session.`;
+  }
+  const realtimeFailure = await recordRouteChange(env, viewer, {
+    entityType: "session",
+    entityId: sessionId,
+    changeType: "updated",
+  });
+  const warnings = [warning, realtimeFailure?.message].filter(Boolean);
+  return data(
+    {
+      ok: true as const,
+      message,
+      warning: warnings.length ? warnings.join(" ") : null,
+    },
+    { status: warnings.length ? 207 : 200 },
+  );
 }
 
 export const meta: Route.MetaFunction = ({ loaderData }) => [
@@ -176,7 +259,7 @@ export default function AdminContentSession({
             <h1>{current.title}</h1>
           </div>
         </div>
-        <section className="card pad" aria-labelledby="start-content-title">
+        <section className="card pad mb" aria-labelledby="start-content-title">
           <h2 id="start-content-title">Start a content draft</h2>
           <p>{current.description || "No description has been written."}</p>
           <p>
@@ -194,6 +277,7 @@ export default function AdminContentSession({
             Open schedule
           </ButtonLink>
         </section>
+        <SessionSpeakersPanel {...loaderData.speakers} />
       </div>
     );
   }
@@ -227,6 +311,8 @@ export default function AdminContentSession({
           ) : null}
         </div>
       ) : null}
+
+      <SessionSpeakersPanel {...loaderData.speakers} />
 
       <section className="card pad mb" aria-labelledby="approval-title">
         <div className="card-title">

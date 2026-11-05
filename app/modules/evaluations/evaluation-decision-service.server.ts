@@ -231,7 +231,7 @@ export class EvaluationDecisionService {
     if (parsed.release && !completedRound) {
       if (!parsed.confirmedWithoutReview) {
         throw new EvaluationValidationError(
-          "Confirm the review-evidence override before releasing a decision without completed review evidence.",
+          "Confirm that you are releasing this decision without a completed review.",
         );
       }
     }

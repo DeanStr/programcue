@@ -1,4 +1,9 @@
 import { Form, Link } from "react-router";
+import {
+  decisionActionId,
+  hasReleasedDecision,
+  ReleasedDecisionAction,
+} from "~/components/evaluation-admin-dialogs";
 import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
 import { Button, ButtonLink } from "~/components/ui/button";
 import { useConfirm } from "~/components/ui/confirm-dialog";
@@ -139,11 +144,7 @@ export function EvaluationSubmissionQueue() {
                     "reconcile-ai-review-assessment" &&
                   navigation.formData?.get("operationId") ===
                     aiAssessmentGenerationAttempt?.operationId;
-                const terminal = [
-                  "accepted",
-                  "waitlisted",
-                  "rejected",
-                ].includes(submission.status);
+                const terminal = hasReleasedDecision(submission.status);
                 const decidable =
                   !terminal && submission.status !== "withdrawn";
                 const assignable = submission.reviewableInCurrentCycle;
@@ -705,12 +706,16 @@ export function EvaluationSubmissionQueue() {
                       )}
                     </td>
                     <td data-label="Decision" className="pc-record-action-cell">
-                      {!decidable ? (
-                        <span className="status neutral">
-                          {terminal ? "Final" : "Unavailable"}
-                        </span>
+                      {terminal ? (
+                        <ReleasedDecisionAction
+                          submissionId={submission.id}
+                          finalClassName="status neutral"
+                        />
+                      ) : !decidable ? (
+                        <span className="status neutral">Unavailable</span>
                       ) : (
                         <Button
+                          id={decisionActionId(submission.id)}
                           type="button"
                           size="small"
                           onClick={() => {

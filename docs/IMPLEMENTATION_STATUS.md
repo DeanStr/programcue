@@ -1,11 +1,144 @@
 # Verified implementation status
 
-Evidence recorded through **3 November 2026**, including the starter email review fixes, the dependency advisory overrides, the Better Auth and zod security upgrade, starter emails for new events, phone Applications filters and the form builder palette, review fixes for typed fields and live filters, typed application answer fields, live list filters and the planner chrome pass, the shared workbench title follow-up, the navigation and page header pass, the local interface consistency pass and its visual review follow-up, the interface refinement and visual evaluation pass, assistant request presentation and partial task coverage, readiness source links, the sponsor/deliverables release, application/scanner releases, a controlled live invited-speaker journey and autonomous backup acceptance.
+Evidence recorded through **5 November 2026**, including editing session speakers, changing released decisions from the queue, the starter email review fixes, the dependency advisory overrides, the Better Auth and zod security upgrade, starter emails for new events, phone Applications filters and the form builder palette, review fixes for typed fields and live filters, typed application answer fields, live list filters and the planner chrome pass, the shared workbench title follow-up, the navigation and page header pass, the local interface consistency pass and its visual review follow-up, the interface refinement and visual evaluation pass, assistant request presentation and partial task coverage, readiness source links, the sponsor/deliverables release, application/scanner releases, a controlled live invited-speaker journey and autonomous backup acceptance.
 This is the current capability,
 requirements and acceptance index; consolidation does not constitute a new
 verification or deployment. The [product specification](../sessionboard-replacement-full-scope-implementation-specification-with-competition-ux.md)
 owns intended scope, [DECISIONS.md](DECISIONS.md) owns engineering decisions, and
 Git history retains earlier committed work logs.
+
+## Editing session speakers — 5 November 2026
+
+**Local production slice; no schema, migration or API change; not
+deployed.** See *Editing session speakers* and *Exact identity matches need
+no duplicate review* in [DECISIONS.md](DECISIONS.md). The September
+evaluation's agenda scenario asks the organiser to add a second speaker to
+an accepted session.
+
+- Session content (`/admin/content/sessions/:id`) has a **Speakers** panel
+  for owners and administrators, before and after the session has a draft:
+  each speaker with role and participation, **Add speaker** (directory
+  lookup or a name and email) and **Remove** with confirmation.
+- An added speaker joins pending. New emails create a person; existing
+  identities must already relate to the organisation, as for direct
+  sessions. A speaker membership and, outside demo and test, a durable
+  portal invitation are prepared in the same batch and dispatched after it.
+  On a session from an accepted proposal, the speaker gets their acceptance
+  onboarding tasks; published resource acknowledgements follow as for other
+  session speakers.
+- Removal refuses the last speaker. It keeps the person's tasks, portal
+  access and resource acknowledgements, and the confirmation says so.
+- Speakers can change while the session is unscheduled or in a draft
+  schedule, as for co-speaker claims. When it is in the draft, stored
+  speaker and unavailability conflicts are rebuilt in the same batch.
+  Published, cancelled and archived sessions show why their speakers are
+  locked.
+- Each change runs under the event operation lock with an atomic batch
+  guard, is audited (`session.speaker.added`, `session.speaker.removed`)
+  and replays its original result when retried with the same operation.
+  Both run through the Airtable provider boundary, so an Airtable event
+  without a synchronised connection refuses them before any D1 change.
+- The batch repeats the organisation relationship check, exempting only an
+  identity it creates, so speaker access revoked after the first check
+  refuses the add instead of being restored. On an accepted session, the
+  add requires the onboarding plan acceptance requires, before and inside
+  the batch.
+- A speaker whose name and email exactly match one existing person no longer
+  asks for identity review, in direct sessions, manual applications, the
+  speaker roster and this panel. A same-name match with another email still
+  does.
+- The review reopen dialog stays open after a refusal and keeps the reason,
+  through the same submission hook as the decision dialogs.
+
+Tests: Worker tests add an existing speaker to an accepted session (pending
+row, acceptance task due an hour after acceptance, replay, refusing a second
+add), create a new identity and its pending speaker membership, refuse an
+identity unrelated to the organisation, refuse removing the last speaker or
+without confirmation, replay a removal, lock a published session, and
+rebuild draft speaker conflicts on add and remove (that test fails when the
+rebuild ignores the change). Review-fix tests refuse add and remove on an
+Airtable event without a connection, leaving speakers and audit unchanged;
+refuse an identity whose only link, accepted speaker access, is revoked
+just before the batch, leaving it revoked; and refuse a speaker on an
+accepted session once the automatic task gains a prerequisite due from
+session start, both before the batch and when the prerequisite appears just
+before it. Each fails with its fix reverted. Duplicate-service and route tests cover exact
+identities passing without review and same-name matches still warning. The
+accepted session browser test adds a speaker through the directory lookup,
+reloads and removes them; the duplicate browser tests follow the new rule.
+
+Validation (5 November): `npm run test:changed` (1,045 tests),
+`npm run typecheck:generated`, the design-system checks, and the accepted
+session content, cross-surface standards, speaker CRM, evaluation and visual
+browser specs (55 passed). A manual walkthrough on a separate local server
+accepted a proposal, then added a same-name speaker after identity review
+and removed them at 1440px and on a phone; created a session from a
+speaker's page with no identity prompt; and reopened a submitted review
+after a refused attempt kept the reason. `npm run check` then passed end to
+end with this and the queue change: 2,764 unit and Worker tests, the
+five-shard browser gate (285 passed, 2 skipped), the evaluation gate (12)
+and the marketing-site gate (16). Its first run failed four browser tests
+that still confirmed the identity review for exact matches; they were
+updated. After a further review (Airtable boundary, revoked access, the
+onboarding plan and earlier-round decisions): `npm run test:changed`
+(1,049 tests), `npm run typecheck`, and the accepted session content and
+evaluation browser specs (13 passed). After the Results row follow-up: the
+unit suite (676 tests), `npm run typecheck:generated`, and the evaluation,
+abstract management and visual browser specs (45 passed, baselines
+unchanged). `npm run check` then passed end to end with all of these
+fixes: 2,770 unit and Worker tests, the five-shard browser gate (285
+passed, 2 skipped), the evaluation gate (12) and the marketing-site gate
+(16).
+
+## Changing released decisions from the queue — 5 November 2026
+
+**Local production slice; no schema, migration or API change; not
+deployed.** See *Changing released decisions* in [DECISIONS.md](DECISIONS.md).
+These address the agenda-chain blockers in the September evaluation run,
+where the evaluator could not accept a rejected proposal or release one
+without a completed review.
+
+- A released rejection or waitlisting shows **Change decision** in the
+  proposal queue and in Results, for owners and administrators. It opens the
+  existing reopen workflow in a dialog: reason, the notification-specific
+  warning and confirmation. After reopening, the proposal shows Decide.
+  Released acceptances, and viewers who cannot reopen, still show Final. The
+  inline reopen form in the Results detail moved into this dialog. A
+  decision released in an earlier round still offers it after Results moves
+  to a later round, as the server allows: the queue and the Results row now
+  both take the released state from the proposal's status, so Results no
+  longer shows Decide and Moderate for it there.
+- The no-review confirmation reads **Release without a completed review**,
+  with matching effect preview and refusal wording, instead of "Confirm
+  review-evidence override".
+- The reopen dialog stays open until the server accepts it, keeping the
+  reason after a refusal, and moves focus to the proposal's Decide action
+  afterwards. The decision dialog shares that behaviour and now also moves
+  focus to the proposal's decision action after a release.
+- Editing an existing session's speakers followed the same day; see
+  *Editing session speakers*.
+
+Tests: the release browser test now changes a released rejection from the
+queue, checks focus returns to Decide, accepts and releases it, and checks
+the acceptance stays Final; Results shows Change decision for the released
+rejection. Worker tests match the reworded refusal, and a loader test
+checks a waitlisting released in the first round still carries its reopen
+details when Results shows a later round (it fails with the round-filtered
+map). A component test renders the Results row with that round's history
+empty: a released waitlisting shows Change decision, a released acceptance
+Final, neither Decide nor Moderate (it fails with the history-based check).
+The mobile evaluation
+baseline was updated for the button that replaced the waitlisted proposal's
+Final badge.
+
+Validation (5 November): `npm run test:changed` (456 tests),
+`npm run typecheck:generated`, and the evaluation, abstract management,
+accepted session content and visual browser specs (47 passed). A manual
+walkthrough on a separate local server released a rejection without a
+completed review, changed it from the queue at 1440px (with a refused
+attempt keeping the reason) and on a phone, and created a second session
+for an existing speaker. The full `npm run check` ran with the session
+speaker work below; see that entry.
 
 ## Starter email review fixes — 3 November 2026
 

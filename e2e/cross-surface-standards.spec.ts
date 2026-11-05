@@ -114,10 +114,10 @@ test.describe
       });
       await directSessionForm.getByLabel("Session title").fill(title);
       await directSessionForm.getByLabel("Track").selectOption({ index: 1 });
+      // Same name, different email: possibly a second identity for her.
+      const otherPriyaEmail = `priya.${Date.now()}@example.com`;
       await directSessionForm.getByLabel("Speaker 1 name").fill("Priya Shah");
-      await directSessionForm
-        .getByLabel("Email")
-        .fill("priya.speaker@example.com");
+      await directSessionForm.getByLabel("Email").fill(otherPriyaEmail);
       await directSessionForm
         .getByRole("button", {
           name: "Add session",
@@ -145,7 +145,7 @@ test.describe
       ).toContainText("Speaker participation must still be confirmed");
     });
 
-    test("manual speaker creation warns before linking an existing identity", async ({
+    test("manual speaker creation reports an identity already on the roster", async ({
       page,
     }) => {
       await page.goto("/admin/speakers");
@@ -161,14 +161,8 @@ test.describe
         .locator('input[name="email"]')
         .filter({ visible: true })
         .fill("priya.speaker@example.com");
-      await page
-        .getByRole("button", { name: "Add speaker record", exact: true })
-        .click();
-
-      await expect(
-        page.getByRole("heading", { name: "Likely existing person" }),
-      ).toBeVisible();
-      await page.getByLabel(/I reviewed these identities/).check();
+      // An exact name and email is that person, so there is no identity
+      // review; the roster check still refuses to overwrite her record.
       await page
         .getByRole("button", { name: "Add speaker record", exact: true })
         .click();

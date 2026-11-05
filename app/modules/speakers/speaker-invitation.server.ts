@@ -17,7 +17,10 @@ export type SpeakerInvitationDelivery =
   | "cancelled"
   | "demo_not_sent";
 
-type SpeakerInvitationSource = "direct_session" | "speaker_network";
+type SpeakerInvitationSource =
+  | "direct_session"
+  | "session_speaker"
+  | "speaker_network";
 
 type SpeakerInvitationActor = {
   organisationId: string;

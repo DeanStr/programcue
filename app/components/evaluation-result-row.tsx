@@ -1,7 +1,12 @@
 import { Form, Link } from "react-router";
 
+import {
+  decisionActionId,
+  hasReleasedDecision,
+  ReleasedDecisionAction,
+} from "~/components/evaluation-admin-dialogs";
 import { useEvaluationAdminModel } from "~/components/evaluation-admin-model";
-import { Button, ButtonLink, ButtonSummary } from "~/components/ui/button";
+import { Button, ButtonLink } from "~/components/ui/button";
 import { EventDateTime } from "~/components/ui/event-date-time";
 import { statusPresentation } from "~/components/ui/status-presentation";
 
@@ -42,6 +47,10 @@ export function EvaluationResultRow({ result }: { result: EvaluationResult }) {
     )
     .filter(([, count]) => count > 0);
   const focusName = result.targetType === "proposal" ? "submission" : "session";
+  // Actions follow the current released state; the decision history below
+  // stays specific to the Results round.
+  const released =
+    result.targetType === "proposal" && hasReleasedDecision(result.state);
   return (
     <tr>
       <td className="pc-record-primary-cell" data-label="Target">
@@ -111,12 +120,14 @@ export function EvaluationResultRow({ result }: { result: EvaluationResult }) {
       </td>
       <td data-label="Actions" className="pc-eval-overflow-cell">
         {result.targetType === "proposal" ? (
-          result.decisionHistory.some(
-            (decision) => decision.status === "published",
-          ) ? (
-            <span className="status success">Final</span>
+          released ? (
+            <ReleasedDecisionAction
+              submissionId={result.id}
+              finalClassName="status success"
+            />
           ) : (
             <Button
+              id={decisionActionId(result.id)}
               type="button"
               size="small"
               onClick={() => {
@@ -142,9 +153,7 @@ export function EvaluationResultRow({ result }: { result: EvaluationResult }) {
               >
                 Assign
               </Link>
-              {result.decisionHistory.some(
-                (decision) => decision.status === "published",
-              ) ? null : (
+              {released ? null : (
                 <button
                   className="pc-eval-text-action"
                   type="button"
@@ -598,123 +607,6 @@ export function EvaluationResultRow({ result }: { result: EvaluationResult }) {
               ) : (
                 <p className="help">No decision history for this round.</p>
               )}
-              {(() => {
-                const releasedDecision = result.decisionHistory.find(
-                  (decision) => decision.status === "published",
-                );
-                if (
-                  !releasedDecision ||
-                  releasedDecision.decision === "accepted" ||
-                  !loaderData.canManageEvaluationAccess
-                ) {
-                  return null;
-                }
-                const hasLinkedNotification =
-                  releasedDecision.notificationEvidenceState === "available" ||
-                  releasedDecision.notificationEvidenceState === "retained";
-                const originalOutcomeAlreadyAccepted =
-                  hasLinkedNotification &&
-                  releasedDecision.notificationOperationStatus === "completed";
-                const laterProviderFailure =
-                  originalOutcomeAlreadyAccepted &&
-                  ["failed", "bounced", "suppressed"].includes(
-                    releasedDecision.deliveryStatus ?? "",
-                  );
-                const pendingNotificationCancellable =
-                  hasLinkedNotification &&
-                  [
-                    "queued",
-                    "queue_failed",
-                    "received",
-                    "retrying",
-                    "failed",
-                    "partially_failed",
-                  ].includes(releasedDecision.notificationOperationStatus);
-                const notificationInProgress =
-                  hasLinkedNotification &&
-                  releasedDecision.notificationOperationStatus === "running";
-                return (
-                  <details className="mt">
-                    <ButtonSummary size="small">
-                      Reopen released decision
-                    </ButtonSummary>
-                    {notificationInProgress ? (
-                      <div className="validation-item warn mt">
-                        <strong>Decision email is still sending</strong>
-                        <span>
-                          Reopening is blocked while the original notification
-                          operation is running. Wait until delivery completes or
-                          the send fails, then reopen. Messages already sent
-                          cannot be recalled.
-                        </span>
-                      </div>
-                    ) : (
-                      <Form method="post" className="stack mt">
-                        <input
-                          type="hidden"
-                          name="intent"
-                          value="reopen-decision"
-                        />
-                        <input
-                          type="hidden"
-                          name="submissionId"
-                          value={result.id}
-                        />
-                        <div className="validation-item warn">
-                          <strong>
-                            {laterProviderFailure
-                              ? `The original decision email was later reported as ${releasedDecision.deliveryStatus}`
-                              : originalOutcomeAlreadyAccepted
-                                ? "The original decision email was already accepted by the provider"
-                                : "Prior messages cannot be recalled"}
-                          </strong>
-                          <span>
-                            Reopening supersedes the released{" "}
-                            {humanise(releasedDecision.decision)} outcome and
-                            returns this proposal to decision-ready state. You
-                            must release the corrected outcome separately.
-                            {laterProviderFailure
-                              ? " The provider accepted the original send and later reported a terminal failure. That evidence is retained and cannot be recalled."
-                              : originalOutcomeAlreadyAccepted
-                                ? " The original outcome was already accepted by the provider and cannot be recalled."
-                                : pendingNotificationCancellable
-                                  ? " A pending notification will be cancelled; messages already sent cannot be recalled."
-                                  : " No pending notification remains to cancel; messages already sent cannot be recalled."}
-                          </span>
-                        </div>
-                        <label className="label">
-                          Correction reason
-                          <textarea
-                            className="textarea"
-                            name="reason"
-                            minLength={10}
-                            maxLength={2_000}
-                            required
-                          />
-                        </label>
-                        <label className="speaker-confirm">
-                          <input
-                            type="checkbox"
-                            name="confirmed"
-                            value="true"
-                            required
-                          />
-                          {laterProviderFailure
-                            ? `I understand the original decision email was later reported as ${releasedDecision.deliveryStatus} and cannot be recalled.`
-                            : originalOutcomeAlreadyAccepted
-                              ? "I understand the original decision email was already accepted by the provider and cannot be recalled."
-                              : pendingNotificationCancellable
-                                ? "I understand a pending notification will be cancelled and messages already sent cannot be recalled."
-                                : "I understand there is no pending notification to cancel and messages already sent cannot be recalled."}
-                        </label>
-                        <Button type="submit" variant="danger" size="small">
-                          Confirm reopen
-                        </Button>
-                      </Form>
-                    )}
-                  </details>
-                );
-              })()}
             </div>
           </div>
         </details>

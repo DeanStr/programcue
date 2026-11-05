@@ -1,15 +1,16 @@
 import { requireValue } from "~/lib/required-value";
 
+/** Every round's decisions for the event, newest revision first per
+ *  submission. Results filters them to its round. */
 export async function loadEvaluationDecisionHistory(input: {
   env: CloudflareEnvironment;
   organisationId: string;
   eventId: string;
-  resultsRoundId: string | null;
 }) {
-  const { env, organisationId, eventId, resultsRoundId } = input;
-  const rawDecisionHistoryRows = resultsRoundId
-    ? await env.DB.prepare(
-        `SELECT decision.id, decision.submission_id AS submissionId,
+  const { env, organisationId, eventId } = input;
+  const rawDecisionHistoryRows = await env.DB.prepare(
+    `SELECT decision.id, decision.submission_id AS submissionId,
+                decision.round_id AS roundId,
                 decision.revision_number AS revisionNumber,
                 decision.status, decision.decision, decision.rationale,
                 decision.decided_at AS decidedAt,
@@ -80,50 +81,49 @@ export async function loadEvaluationDecisionHistory(input: {
              ON delivery.communication_id = communication.id
             AND delivery.event_id = decision.event_id
           WHERE decision.event_id = ?
-            AND (decision.round_id = ? OR decision.round_id IS NULL)
           ORDER BY decision.submission_id, decision.revision_number DESC`,
-      )
-        .bind(organisationId, eventId, resultsRoundId)
-        .all<{
-          id: string;
-          submissionId: string;
-          revisionNumber: number;
-          status: string;
-          decision: string;
-          rationale: string | null;
-          decidedAt: number;
-          publishedAt: number | null;
-          decidedByName: string;
-          notificationOperationId: string | null;
-          hasLegacyUnlinkedMarker: number;
-          notificationOperationRecordId: string | null;
-          notificationOperationStatus: string | null;
-          notificationOperationError: string | null;
-          communicationId: string | null;
-          communicationStatus: string | null;
-          deliveryId: string | null;
-          deliveryStatus: string | null;
-          recipientAddress: string | null;
-          recipientName: string | null;
-          deliveryProvider: string | null;
-          renderedSubject: string | null;
-          renderedBodySha256: string | null;
-          providerMessageId: string | null;
-          failureCode: string | null;
-          failureMessage: string | null;
-          deliveryUpdatedAt: number | null;
-          audienceDecisionId: string | null;
-          audienceSubmissionId: string | null;
-          deliverySourceId: string | null;
-          templateVersionId: string | null;
-          templateName: string | null;
-          templateVersionNumber: number | null;
-          senderProfileId: string | null;
-          senderFromName: string | null;
-          senderFromEmail: string | null;
-          participantRetentionCompletedAt: number | null;
-        }>()
-    : { results: [] };
+  )
+    .bind(organisationId, eventId)
+    .all<{
+      id: string;
+      submissionId: string;
+      roundId: string | null;
+      revisionNumber: number;
+      status: string;
+      decision: string;
+      rationale: string | null;
+      decidedAt: number;
+      publishedAt: number | null;
+      decidedByName: string;
+      notificationOperationId: string | null;
+      hasLegacyUnlinkedMarker: number;
+      notificationOperationRecordId: string | null;
+      notificationOperationStatus: string | null;
+      notificationOperationError: string | null;
+      communicationId: string | null;
+      communicationStatus: string | null;
+      deliveryId: string | null;
+      deliveryStatus: string | null;
+      recipientAddress: string | null;
+      recipientName: string | null;
+      deliveryProvider: string | null;
+      renderedSubject: string | null;
+      renderedBodySha256: string | null;
+      providerMessageId: string | null;
+      failureCode: string | null;
+      failureMessage: string | null;
+      deliveryUpdatedAt: number | null;
+      audienceDecisionId: string | null;
+      audienceSubmissionId: string | null;
+      deliverySourceId: string | null;
+      templateVersionId: string | null;
+      templateName: string | null;
+      templateVersionNumber: number | null;
+      senderProfileId: string | null;
+      senderFromName: string | null;
+      senderFromEmail: string | null;
+      participantRetentionCompletedAt: number | null;
+    }>();
   const releasedDecisionRowCounts = new Map<string, number>();
   for (const row of rawDecisionHistoryRows.results) {
     if (

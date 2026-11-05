@@ -749,7 +749,7 @@ test("a released decision keeps inspectable recipient delivery evidence after re
     .getByLabel("Rationale")
     .fill("The programme already covers this material in greater depth.");
   const evidenceOverride = decision.getByRole("checkbox", {
-    name: /Confirm review-evidence override/u,
+    name: /Release without a completed review/u,
   });
   if (await evidenceOverride.isVisible()) await evidenceOverride.check();
 
@@ -815,12 +815,44 @@ test("a released decision keeps inspectable recipient delivery evidence after re
     await expect(result).toContainText(
       "Queue acceptance is not proof of delivery",
     );
+    await expect(
+      result.getByRole("button", { name: "Change decision" }),
+    ).toBeVisible();
   }
 
   await expectDeliveryEvidence();
   await page.reload();
   await page.locator("body[data-hydrated='true']").waitFor();
   await expectDeliveryEvidence();
+
+  // The queue leads a released rejection into the reopen workflow, so the
+  // organiser can accept the proposal instead.
+  await openEvaluationView(page, "Assignments");
+  await proposal.getByRole("button", { name: "Change decision" }).click();
+  const change = page.getByRole("dialog", { name: /Change decision ·/u });
+  await expect(change).toContainText("The released outcome is rejected.");
+  await change
+    .getByLabel("Correction reason")
+    .fill("The committee revisited this proposal and accepted it.");
+  await change.getByRole("checkbox").check();
+  await change.getByRole("button", { name: "Confirm reopen" }).click();
+  await expect(change).toBeHidden();
+  const decideAgain = proposal.getByRole("button", { name: "Decide" });
+  await expect(decideAgain).toBeFocused();
+  await decideAgain.click();
+  const acceptance = page.getByRole("dialog", { name: /Decision ·/u });
+  await acceptance.locator('select[name="decision"]').selectOption("accepted");
+  const acceptanceOverride = acceptance.getByRole("checkbox", {
+    name: /Release without a completed review/u,
+  });
+  if (await acceptanceOverride.isVisible()) await acceptanceOverride.check();
+  await acceptance.getByRole("button", { name: "Release decision" }).click();
+  await expect(acceptance).toBeHidden();
+  // A released acceptance owns programme records, so it stays final.
+  await expect(proposal.getByText("Final", { exact: true })).toBeVisible();
+  await expect(
+    proposal.getByRole("button", { name: "Change decision" }),
+  ).toHaveCount(0);
   await resetDemoEvent(request);
 });
 

@@ -649,13 +649,7 @@ test("re-adding a confirmed speaker preserves workflow status and profile", asyn
   await addSpeakerForm
     .locator('textarea[name="biography"]')
     .fill("Attempted replacement biography.");
-  await addSpeakerForm
-    .getByRole("button", { name: "Add speaker record" })
-    .click();
-  await expect(
-    page.getByRole("heading", { name: "Likely existing person" }),
-  ).toBeVisible();
-  await addSpeakerForm.getByLabel(/I reviewed these identities/u).check();
+  // An exact name and email is that person, so there is no identity review.
   await addSpeakerForm
     .getByRole("button", { name: "Add speaker record" })
     .click();

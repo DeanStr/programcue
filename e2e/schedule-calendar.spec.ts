@@ -754,13 +754,8 @@ test.describe("mutable schedule authoring", () => {
       await expect(directSession.getByLabel("Speaker 1 name")).toHaveValue(
         "Priya Shah",
       );
-      await directSession.getByRole("button", { name: "Add session" }).click();
-      const duplicateConfirmation = directSession.getByLabel(
-        "I reviewed these identities and confirm the entered names and email addresses.",
-      );
-      await expect(duplicateConfirmation).toBeVisible();
-      await duplicateConfirmation.check();
-      await expect(duplicateConfirmation).toBeChecked();
+      // A speaker picked from the directory is that identity, so the
+      // session is created without an identity review.
       await directSession.getByRole("button", { name: "Add session" }).click();
       await expect(page).toHaveURL(
         /\/admin\/schedule\?session=[^&]+&created=1/u,
@@ -1107,14 +1102,6 @@ test("longer tablet tracks expose every placement with keyboard scrolling", asyn
     await form
       .getByRole("button", { name: /Priya Shah.*Already on this event roster/ })
       .click();
-    await form
-      .getByRole("button", { name: "Add session", exact: true })
-      .click();
-    await form
-      .getByLabel(
-        "I reviewed these identities and confirm the entered names and email addresses.",
-      )
-      .check();
     await form
       .getByRole("button", { name: "Add session", exact: true })
       .click();

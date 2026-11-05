@@ -1211,7 +1211,7 @@ describe("explicit evaluation review cycles", () => {
       release: true,
     };
     await expect(service.decide(admin, decisionInput)).rejects.toThrow(
-      /confirm the review-evidence override/i,
+      /releasing this decision without a completed review/i,
     );
     const decision = await service.decide(admin, {
       ...decisionInput,

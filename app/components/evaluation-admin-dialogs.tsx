@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Form, useRevalidator } from "react-router";
 
 import { Dialog } from "~/components/dialog";
@@ -474,19 +474,26 @@ export function ModerationDialog() {
 }
 
 export function ReviewReopenDialog() {
-  const { navigation, setReopenAssignmentId, reopenAssignment } =
-    useEvaluationAdminModel();
+  const { setReopenAssignmentId, reopenAssignment } = useEvaluationAdminModel();
+  const close = useCallback(
+    () => setReopenAssignmentId(null),
+    [setReopenAssignmentId],
+  );
+  // A refused reopen keeps the dialog and the typed reason.
+  const reopen = useDialogSubmission(
+    "reopen-review",
+    reopenAssignment?.id ?? null,
+    close,
+  );
   return reopenAssignment ? (
     <Dialog
       title={`Reopen ${reopenAssignment.evaluatorName}'s review`}
-      onClose={() => setReopenAssignmentId(null)}
+      onClose={close}
+      dismissible={!reopen.submitting}
       footer={null}
     >
-      <Form
-        method="post"
-        className="stack"
-        onSubmit={() => setReopenAssignmentId(null)}
-      >
+      <Form method="post" className="stack">
+        <DialogSubmissionError submission={reopen} />
         <input type="hidden" name="intent" value="reopen-review" />
         <input type="hidden" name="assignmentId" value={reopenAssignment.id} />
         <input type="hidden" name="confirmed" value="true" />
@@ -508,11 +515,7 @@ export function ReviewReopenDialog() {
               : ". The frozen session source remains unchanged."}
           </span>
         </div>
-        <Button
-          type="submit"
-          variant="danger"
-          disabled={navigation.state !== "idle"}
-        >
+        <Button type="submit" variant="danger" disabled={reopen.busy}>
           Reopen review
         </Button>
       </Form>
@@ -584,11 +587,134 @@ function DecisionEmailSummary({
   );
 }
 
+/** The id of a proposal's decision action (Decide, Change decision or Final)
+ *  in the queue and in Results. Only one of those views renders at a time. */
+export function decisionActionId(submissionId: string) {
+  return `decision-action-${submissionId}`;
+}
+
+/** Whether a proposal's decision is released, from any round: its status is
+ *  the released outcome until the decision is reopened, as the server
+ *  checks before deciding or reopening. */
+export function hasReleasedDecision(status: string) {
+  return ["accepted", "waitlisted", "rejected"].includes(status);
+}
+
+/** A released decision's action. Owners and administrators can change a
+ *  released rejection or waitlisting through the reopen workflow; a released
+ *  acceptance owns programme records, so it stays final. */
+export function ReleasedDecisionAction({
+  submissionId,
+  finalClassName,
+}: {
+  submissionId: string;
+  finalClassName: string;
+}) {
+  const { loaderData, setReopenDecisionId } = useEvaluationAdminModel();
+  const reopenable =
+    loaderData.canManageEvaluationAccess &&
+    loaderData.submissions.some(
+      (submission) =>
+        submission.id === submissionId && submission.reopenableDecision,
+    );
+  return reopenable ? (
+    <Button
+      id={decisionActionId(submissionId)}
+      type="button"
+      size="small"
+      onClick={() => setReopenDecisionId(submissionId)}
+    >
+      Change decision
+    </Button>
+  ) : (
+    <span
+      id={decisionActionId(submissionId)}
+      tabIndex={-1}
+      className={finalClassName}
+    >
+      Final
+    </span>
+  );
+}
+
+/** Focuses a proposal's decision action once a dialog that changed it has
+ *  closed: the button that opened the dialog is replaced. */
+function focusDecisionAction(submissionId: string) {
+  window.requestAnimationFrame(() =>
+    document.getElementById(decisionActionId(submissionId))?.focus(),
+  );
+}
+
+/** Keeps a dialog open until the server accepts what it submitted, so a
+ *  refusal keeps what the organiser entered. React Router does not reload
+ *  loader data after a 4xx action, so a refusal reloads it here to show what
+ *  changed. `targetId` identifies what the dialog is open for; opening it for
+ *  another target clears the previous refusal. */
+function useDialogSubmission(
+  intent: string,
+  targetId: string | null,
+  onSuccess: () => void,
+) {
+  const { actionData, navigation } = useEvaluationAdminModel();
+  const revalidator = useRevalidator();
+  const [error, setError] = useState<string | null>(null);
+  const errorRef = useRef<HTMLDivElement>(null);
+  const submitted = useRef(false);
+  const submitting =
+    navigation.state !== "idle" &&
+    navigation.formData?.get("intent") === intent;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Opening the dialog for another target clears the previous refusal.
+  useEffect(() => {
+    setError(null);
+  }, [targetId]);
+  useEffect(() => {
+    if (submitting) {
+      submitted.current = true;
+      setError(null);
+      return;
+    }
+    if (!submitted.current || navigation.state !== "idle") return;
+    submitted.current = false;
+    if (actionData?.ok === true || actionData?.committed === true) {
+      onSuccess();
+      return;
+    }
+    const message = actionData?.error ?? actionData?.message;
+    if (!message) return;
+    setError(message);
+    revalidator.revalidate();
+  }, [actionData, navigation.state, onSuccess, revalidator, submitting]);
+  useEffect(() => {
+    if (error) errorRef.current?.focus();
+  }, [error]);
+  return {
+    submitting,
+    busy: navigation.state !== "idle" || revalidator.state !== "idle",
+    error,
+    errorRef,
+  };
+}
+
+function DialogSubmissionError({
+  submission,
+}: {
+  submission: ReturnType<typeof useDialogSubmission>;
+}) {
+  return submission.error ? (
+    <div
+      ref={submission.errorRef}
+      tabIndex={-1}
+      className="validation-item error"
+      role="alert"
+    >
+      {submission.error}
+    </div>
+  ) : null;
+}
+
 export function DecisionDialog() {
   const {
-    actionData,
     loaderData,
-    navigation,
     setDecisionId,
     noReviewOverrideConfirmed,
     setNoReviewOverrideConfirmed,
@@ -618,50 +744,19 @@ export function DecisionDialog() {
   const selectedSessionFormat = loaderData.sessionFormats.find(
     (format) => format.key === sessionFormatKey,
   );
-  const revalidator = useRevalidator();
-  const [decisionError, setDecisionError] = useState<string | null>(null);
-  const decisionErrorRef = useRef<HTMLDivElement>(null);
-  const decisionSubmitted = useRef(false);
-  const submittingDecision =
-    navigation.state !== "idle" &&
-    navigation.formData?.get("intent") === "decide";
-  const closeDecision = () => {
+  const closeDecision = useCallback(() => {
     setDecisionId(null);
     setNoReviewOverrideConfirmed(false);
-    setDecisionError(null);
-  };
-  // The dialog closes only once the server accepts the decision, so a refusal
-  // keeps what the organiser entered. React Router does not reload loader
-  // data after a 4xx action, so reload it here: the email summary and the
-  // version the next release expects then show what changed.
-  useEffect(() => {
-    if (submittingDecision) {
-      decisionSubmitted.current = true;
-      setDecisionError(null);
-      return;
-    }
-    if (!decisionSubmitted.current || navigation.state !== "idle") return;
-    decisionSubmitted.current = false;
-    if (actionData?.ok === true || actionData?.committed === true) {
-      setDecisionId(null);
-      setNoReviewOverrideConfirmed(false);
-      return;
-    }
-    const message = actionData?.error ?? actionData?.message;
-    if (!message) return;
-    setDecisionError(message);
-    revalidator.revalidate();
-  }, [
-    actionData,
-    navigation.state,
-    revalidator,
-    setDecisionId,
-    setNoReviewOverrideConfirmed,
-    submittingDecision,
-  ]);
-  useEffect(() => {
-    if (decisionError) decisionErrorRef.current?.focus();
-  }, [decisionError]);
+  }, [setDecisionId, setNoReviewOverrideConfirmed]);
+  const selectedId = selected?.id ?? null;
+  const decided = useCallback(() => {
+    closeDecision();
+    if (selectedId) focusDecisionAction(selectedId);
+  }, [closeDecision, selectedId]);
+  // A refused release keeps the dialog open and reloads the page data, so
+  // the email summary and the version the next release expects show what
+  // changed.
+  const submission = useDialogSubmission("decide", selectedId, decided);
   // biome-ignore lint/correctness/useExhaustiveDependencies: Selection identity and saved-draft revision deliberately reset the dialog even when the next values happen to match. A reloaded format list does not, so reloading after a refused release keeps the chosen outcome.
   useEffect(() => {
     const draft = selected?.decisionDraft;
@@ -695,7 +790,7 @@ export function DecisionDialog() {
     <Dialog
       title={`Decision · ${selected.title}`}
       onClose={closeDecision}
-      dismissible={!submittingDecision}
+      dismissible={!submission.submitting}
       size="lg"
       footer={
         <>
@@ -704,9 +799,7 @@ export function DecisionDialog() {
             form="evaluation-decision-form"
             name="release"
             value="false"
-            disabled={
-              navigation.state !== "idle" || revalidator.state !== "idle"
-            }
+            disabled={submission.busy}
           >
             Save draft
           </Button>
@@ -718,8 +811,7 @@ export function DecisionDialog() {
               name="release"
               value="true"
               disabled={
-                navigation.state !== "idle" ||
-                revalidator.state !== "idle" ||
+                submission.busy ||
                 (!selectedHasCompletedReview && !noReviewOverrideConfirmed)
               }
             >
@@ -735,16 +827,7 @@ export function DecisionDialog() {
         method="post"
         className="stack"
       >
-        {decisionError ? (
-          <div
-            ref={decisionErrorRef}
-            tabIndex={-1}
-            className="validation-item error"
-            role="alert"
-          >
-            {decisionError}
-          </div>
-        ) : null}
+        <DialogSubmissionError submission={submission} />
         <input type="hidden" name="intent" value="decide" />
         <input type="hidden" name="submissionId" value={selected.id} />
         <input
@@ -921,7 +1004,7 @@ export function DecisionDialog() {
             <li>
               {selectedHasCompletedReview
                 ? "A released decision is linked to the latest completed review round; reviewer scores and moderation remain unchanged."
-                : "A released decision is recorded as an audited administrator override without round-level review evidence."}
+                : "No review of this proposal is complete, so the audit history records the release as decided without review."}
             </li>
             <li>
               Releasing an acceptance creates a linked unscheduled session,
@@ -967,10 +1050,10 @@ export function DecisionDialog() {
               }
             />
             <span className="pc-validation-item-copy">
-              <strong>Confirm review-evidence override</strong>
+              <strong>Release without a completed review</strong>
               <span>
-                No completed review is linked. Releasing now will be audited
-                without round-level review evidence.
+                No review of this proposal is complete. The audit history
+                records that you released this decision without one.
               </span>
             </span>
           </label>
@@ -998,4 +1081,128 @@ export function DecisionDialog() {
       </Form>
     </Dialog>
   ) : null;
+}
+
+/** Reopening a released decision, opened from the queue or Results with
+ *  "Change decision". Reopening returns the proposal to Decide, where the
+ *  organiser releases the new outcome. */
+export function ReopenDecisionDialog() {
+  const { loaderData, reopenDecisionId, setReopenDecisionId } =
+    useEvaluationAdminModel();
+  const submission = loaderData.submissions.find(
+    (candidate) => candidate.id === reopenDecisionId,
+  );
+  const close = useCallback(
+    () => setReopenDecisionId(null),
+    [setReopenDecisionId],
+  );
+  const submissionId = submission?.id ?? null;
+  const reopened = useCallback(() => {
+    close();
+    if (submissionId) focusDecisionAction(submissionId);
+  }, [close, submissionId]);
+  const reopen = useDialogSubmission("reopen-decision", submissionId, reopened);
+  const released = submission?.reopenableDecision;
+  if (!submission || !released) return null;
+  const outcome = released.decision.replaceAll("_", " ");
+  const hasLinkedNotification =
+    released.notificationEvidenceState === "available" ||
+    released.notificationEvidenceState === "retained";
+  const originalOutcomeAlreadyAccepted =
+    hasLinkedNotification &&
+    released.notificationOperationStatus === "completed";
+  const laterProviderFailure =
+    originalOutcomeAlreadyAccepted &&
+    ["failed", "bounced", "suppressed"].includes(released.deliveryStatus ?? "");
+  const pendingNotificationCancellable =
+    hasLinkedNotification &&
+    [
+      "queued",
+      "queue_failed",
+      "received",
+      "retrying",
+      "failed",
+      "partially_failed",
+    ].includes(released.notificationOperationStatus ?? "");
+  const notificationInProgress =
+    hasLinkedNotification && released.notificationOperationStatus === "running";
+  return (
+    <Dialog
+      title={`Change decision · ${submission.title}`}
+      description={`The released outcome is ${outcome}. Reopen it here, then decide and release the new outcome.`}
+      onClose={close}
+      dismissible={!reopen.submitting}
+      footer={null}
+    >
+      <DialogSubmissionError submission={reopen} />
+      {notificationInProgress ? (
+        <div className="validation-item warn">
+          <span className="pc-validation-item-copy">
+            <strong>Decision email is still sending</strong>
+            <span>
+              Reopening is blocked while the original notification operation is
+              running. Wait until delivery completes or the send fails, then
+              reopen. Messages already sent cannot be recalled.
+            </span>
+          </span>
+        </div>
+      ) : (
+        <Form method="post" className="stack">
+          <input type="hidden" name="intent" value="reopen-decision" />
+          <input type="hidden" name="submissionId" value={submission.id} />
+          <div className="validation-item warn">
+            <span className="pc-validation-item-copy">
+              <strong>
+                {laterProviderFailure
+                  ? `The original decision email was later reported as ${released.deliveryStatus}`
+                  : originalOutcomeAlreadyAccepted
+                    ? "The original decision email was already accepted by the provider"
+                    : "Prior messages cannot be recalled"}
+              </strong>
+              <span>
+                Reopening supersedes the released {outcome} outcome and returns
+                this proposal to decision-ready state. You must release the
+                corrected outcome separately.
+                {laterProviderFailure
+                  ? " The provider accepted the original send and later reported a terminal failure. That evidence is retained and cannot be recalled."
+                  : originalOutcomeAlreadyAccepted
+                    ? " The original outcome was already accepted by the provider and cannot be recalled."
+                    : pendingNotificationCancellable
+                      ? " A pending notification will be cancelled; messages already sent cannot be recalled."
+                      : " No pending notification remains to cancel; messages already sent cannot be recalled."}
+              </span>
+            </span>
+          </div>
+          <label className="label">
+            Correction reason
+            <textarea
+              className="textarea"
+              name="reason"
+              minLength={10}
+              maxLength={2_000}
+              required
+            />
+          </label>
+          <label className="speaker-confirm">
+            <input type="checkbox" name="confirmed" value="true" required />
+            {laterProviderFailure
+              ? `I understand the original decision email was later reported as ${released.deliveryStatus} and cannot be recalled.`
+              : originalOutcomeAlreadyAccepted
+                ? "I understand the original decision email was already accepted by the provider and cannot be recalled."
+                : pendingNotificationCancellable
+                  ? "I understand a pending notification will be cancelled and messages already sent cannot be recalled."
+                  : "I understand there is no pending notification to cancel and messages already sent cannot be recalled."}
+          </label>
+          <Button
+            type="submit"
+            variant="danger"
+            size="small"
+            disabled={reopen.busy}
+          >
+            Confirm reopen
+          </Button>
+        </Form>
+      )}
+    </Dialog>
+  );
 }

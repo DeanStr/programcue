@@ -588,10 +588,7 @@ test("a manual application with a long event track opens after creation and relo
       name: "Create manual application",
       exact: true,
     });
-    await create.click();
-    await page
-      .getByRole("checkbox", { name: /I reviewed these identities/ })
-      .check();
+    // Her exact name and email are her identity: no review step.
     await create.click();
     await expect(page).toHaveURL(/\/admin\/submissions\/[^/?]+\?created=1$/);
     await expect(
